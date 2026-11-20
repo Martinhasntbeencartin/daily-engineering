@@ -89,10 +89,46 @@ for (const t of TOPICS) for (const l of run('CURATED_LEVELS')) {
 }
 
 /* ---- the answer parser ---- */
-for (const [src, want] of [['pi/4', Math.PI / 4], ['ln2', Math.LN2], ['(sqrt(5)-1)/2', (Math.sqrt(5) - 1) / 2], ['2^(2/5)', 2 ** .4], ['e^-pi', Math.exp(-Math.PI)], ['25ln10', 25 * Math.log(10)], ['2e-3', .002], ['3sqrt2', 3 * Math.SQRT2], ['√3/2', Math.sqrt(3) / 2], ['−1/6', -1 / 6], ['1/(2pi)', 1 / (2 * Math.PI)], ['5-2sqrt6', 5 - 2 * Math.sqrt(6)], ['-2^2', -4], ['0,5', .5], ['2·π', 2 * Math.PI], ['atan(1)*4', Math.PI]])
+for (const [src, want] of [['pi/4', Math.PI / 4], ['ln2', Math.LN2], ['(sqrt(5)-1)/2', (Math.sqrt(5) - 1) / 2], ['2^(2/5)', 2 ** .4], ['e^-pi', Math.exp(-Math.PI)], ['25ln10', 25 * Math.log(10)], ['2e-3', .002], ['3sqrt2', 3 * Math.SQRT2], ['√3/2', Math.sqrt(3) / 2], ['−1/6', -1 / 6], ['1/(2pi)', 1 / (2 * Math.PI)], ['5-2sqrt6', 5 - 2 * Math.sqrt(6)], ['-2^2', -4], ['0,5', .5], ['2·π', 2 * Math.PI], ['atan(1)*4', Math.PI], ['ln2/2', Math.LN2 / 2], ['log100', 2], ['log10(1000)', 3], ['log100/2', 1], ['sqrt2/2', Math.SQRT1_2], ['sqrt(2)/2', Math.SQRT1_2], ['3sqrt2/2', 3 * Math.SQRT1_2], ['√2/2', Math.SQRT1_2]])
     close(MathInput.read(src).value, want, 1e-12, `parser "${src}"`);
+/* LaTeX exactly as the MathLive editor emits it (captured from real keystrokes) → value */
+for (const [latex, want] of [[T('\\frac34'), .75], [T('\\frac{\\pi}{4}'), Math.PI / 4], [T('\\frac{1}{\\sqrt2}'), Math.SQRT1_2], [T('e^{-\\pi}'), Math.exp(-Math.PI)], [T('\\frac{(1+\\sqrt5)}{2}'), (1 + Math.sqrt(5)) / 2], [T('\\sqrt{(2)}'), Math.SQRT2], [T('25\\ln10'), 25 * Math.log(10)], [T('-\\frac16'), -1 / 6], [T('2\\cdot\\pi'), 2 * Math.PI], [T('2^{(\\frac25)}'), 2 ** .4], [T('100e^{-\\pi}'), 100 * Math.exp(-Math.PI)], [T('a\\tan\\left(1\\right)'), Math.PI / 4], [T('\\arctan\\left(1\\right)'), Math.PI / 4], [T('\\frac{1}{(2\\pi)}'), 1 / (2 * Math.PI)], [T('5-2\\sqrt6'), 5 - 2 * Math.sqrt(6)], [T('\\frac{8\\sqrt2}{\\pi^2}'), 8 * Math.SQRT2 / Math.PI ** 2], [T('2^{10}-1'), 1023], [T('\\ln(\\frac{49}{48})'), Math.log(49 / 48)], [T('(\\frac56)^{(\\frac72)}'), (5 / 6) ** 3.5], [T('1{,}5'), 1.5], [T('\\sqrt[3]{8}'), 2], [T('\\left|-3\\right|'), 3], [T('2e-3'), .002], [T('3\\times4'), 12], [T('\\frac{\\ln2}{2}'), Math.LN2 / 2], [T('\\frac{\\log100}{2}'), 1], [T('\\frac{\\arctan(1)}{\\pi}'), .25], [T('\\frac{\\sqrt{(2)}}{2}'), Math.SQRT1_2], [T('\\frac{3\\sqrt2}{2}'), 3 * Math.SQRT1_2], [T('\\frac{\\surd2}{2}'), Math.SQRT1_2], [T('3\\surd(2)'), 3 * Math.SQRT2]])
+    close(MathInput.readLatex(latex).value, want, 1e-12, `editor LaTeX "${latex}"`);
+for (const bad of [T('\\frac{4}{\\placeholder{}}'), T('\\sqrt{'), T('\\alpha')])
+    try { MathInput.readLatex(bad); fail(`editor LaTeX accepted "${bad}"`); } catch { checks++; }
+function T(s) { return s; }
 for (const bad of ['', 'pi/', '2**', 'foo', '(1+2'])
     try { MathInput.read(bad); fail(`parser accepted "${bad}"`); } catch { checks++; }
+
+/* ---- every common way of writing maths, in plain text ---- */
+const PHIV = (1 + Math.sqrt(5)) / 2;
+for (const [src, want] of [['.5', .5], ['1.5e-3', .0015], ['1.5E3', 1500], ['1.2E+2', 120], ['1.5×10^-3', .0015], ['1.5x10^3', 1500], ['1.5X10^3', 1500], ['1.5·10³', 1500], ['1.5*10⁻³', .0015], ['10⁻³', .001], ['2⁻¹', .5],
+    ['1 1/2', 1.5], ['2+1 1/2', 3.5], ['1½', 1.5], ['½', .5], ['¾+¼', 1], ['1⁄4', .25], ['6÷3', 2], ['2∙3', 6], ['2•3', 6], ['–1/6', -1 / 6], ['3 4', 12],
+    ['2**3', 8], ['2^3!', 64], ['3!^2', 36], ['5!', 120], ['0.5!', Math.sqrt(Math.PI) / 2], ['50%', .5], ['10%·50', 5], ['5‰', .005],
+    ['|-3|', 3], ['2|-3|', 6], ['abs(-3)', 3], ['[1+2]*{3}', 9],
+    ['∛8', 2], ['∜16', 2], ['cbrt(27)', 3], ['nthroot(32,5)', 2], ['root(32, 5)', 2], ['nthroot(-8,3)', -2], ['8^(1/3)', 2],
+    ['tau', 2 * Math.PI], ['τ/2', Math.PI], ['phi', PHIV], ['φ^2-φ', 1], ['e^2', Math.E ** 2], ['ln e', 1], ['2e', 2 * Math.E], ['2e3', 2000],
+    ['lg1000', 3], ['log10(10)', 1], ['log2(8)', 3], ['lb 16', 4], ['log_2(8)', 3], ['log_2 8', 3], ['log₂(8)', 3], ['log_3(81)', 4],
+    ['sin(30°)', .5], ['sin 30 deg', .5], ['cos(60degrees)', .5], ['tan(45°)', 1], ['60°', 60], ['pi rad', Math.PI], ['pi/2 radians', Math.PI / 2],
+    ['sec(0)', 1], ['csc(pi/2)', 1], ['cosec(pi/2)', 1], ['cot(pi/4)', 1], ['cotan(pi/4)', 1],
+    ['asin(1)', Math.PI / 2], ['sin^-1(1)', Math.PI / 2], ['sin⁻¹(1)', Math.PI / 2], ['tan^(-1)(1)', Math.PI / 4], ['arctg(1)', Math.PI / 4], ['arccot(1)', Math.PI / 4], ['acot(1)', Math.PI / 4],
+    ['sin^2(pi/4)+cos^2(pi/4)', 1], ['sin²(30°)', .25], ['cosh0', 1], ['sech(0)', 1], ['arsinh(0)', 0], ['asinh(0)', 0], ['arcosh(1)', 0], ['acosh(1)', 0], ['artanh(0)', 0],
+    ['(1+√5)/2', PHIV], ['√(3)/2', Math.sqrt(3) / 2], ['(2)(3)', 6]])
+    close(MathInput.read(src).value, want, 1e-9, `notation "${src}"`);
+/* ---- the same notations as the editor emits them in LaTeX ---- */
+for (const [latex, want] of [['\\sqrt[3]{8}', 2], ['∛8', 2], ['∜16', 2], ['2^{2}', 4], ['½', .5], ['¾', .75], ['1\\frac12', 1.5], ['2\\frac{3}{4}', 2.75], ['2\\frac{\\pi}{4}', Math.PI / 2], ['2\\cdot\\frac12', 1], ['\\frac{21}{2}', 10.5],
+    ['2x3', 6], ['30\\degree', 30], ['\\sin(30\\degree)', .5], ['30^{\\circ}', 30], ['50\\%', .5], ['5!', 120], ['|-3|', 3], ['[1+2]', 3], ['\\lbrack1+2\\rbrack', 3], ['\\{1+2\\}', 3],
+    ['\\log_{2}(8)', 3], ['\\log_2(8)', 3], ['\\log2(8)', 3], ['\\lg100', 2], ['\\sin^{-1}(1)', Math.PI / 2], ['a\\sinh(0)', 0], ['\\operatorname{\\mathrm{arcosh}}(1)', 0], ['a\\cosh(1)', 0], ['arc\\cot(1)', Math.PI / 4],
+    ['\\sec(0)', 1], ['\\csc(\\frac{\\pi}{2})', 1], ['\\cot(\\frac{\\pi}{4})', 1], ['\\varphi', PHIV], ['\\phi', PHIV], ['φ', PHIV], ['\\tau', 2 * Math.PI], ['τ', 2 * Math.PI],
+    ['1E-3', .001], ['1.5\\times10^{-3}', .0015], ['1.5\\cdot10^3', 1500], ['1.5x10^3', 1500], ['10^{-}^{3}', .001], ['2^{-}^{1}', .5], ['2\\div4', .5], ['1\\,\\frac12', 1.5], ['0,5', .5], ['1‰', .001], ['\\exp(1)', Math.E], ['\\ln e', 1]])
+    close(MathInput.readLatex(latex).value, want, 1e-9, `editor LaTeX "${latex}"`);
+/* ---- units typed after the answer ---- */
+for (const [text, unit, want] of [['2.5 mA', 'mA', '2.5'], ['2.5mA', 'mA', '2.5'], ['60 degrees', '°', '60'], ['37.5%', '%', '37.5'], ['37.5 percent', '%', '37.5'], ['4.7 kohm', 'kΩ', '4.7'], ['4.7kΩ', 'kΩ', '4.7'], ['12 ohms', 'Ω', '12'],
+    ['3 µs', 'µs', '3'], ['3 us', 'µs', '3'], ['3 μs', 'µs', '3'], ['9 kN·m', 'kN·m', '9'], ['9 kN m', 'kN·m', '9'], ['5 V/V', 'V/V', '5'], ['2 1/s', '1/s', '2'], ['pi/2 rad/s', 'rad/s', 'pi/2'], ['5', 'V', '5'], ['mA', 'mA', 'mA'], ['4.7 kohm', 'Ω', '4.7 kohm']]) {
+    checks++;
+    const got = MathInput.stripUnit(text, unit);
+    if (got !== want) fail(`stripUnit("${text}", "${unit}") = "${got}", expected "${want}"`);
+}
 
 /* ---- cross-checks on generated Levels 4–7 ---- */
 const dates = ['2026-03-01', '2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06'];

@@ -7,7 +7,23 @@ A static web app with a new engineering problem every day, in the spirit of dail
   - **Levels 1–3 (Foundations, Applied, Intermediate)** are a hand-curated bank of 132 problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
   - **Levels 4–7 (Advanced, Challenge, Expert, Mastery)** are generated multi-part problems whose values change daily, up to research-grade work that needs numerical methods.
 - **LaTeX everywhere.** All problem text, hints and solutions are typeset with KaTeX, which is bundled in `vendor/katex/` (MIT licence), so the site needs no CDN.
-- **Exact answers.** You can type `pi/4`, `ln(2)`, `sqrt(3)/2`, `(1+sqrt5)/2` or `e^-1`. A live LaTeX preview shows how the answer is read. Each problem allows 5 attempts.
+- **A real maths editor for answers.** The answer box is a MathLive field (bundled in `vendor/mathlive/`, MIT licence; it shares KaTeX's fonts), so maths becomes typeset as you type:
+  - `3/4` becomes a stacked fraction, `sqrt` a root, `pi` gives π, and `^` starts an exponent.
+  - Typing follows plain-text reading: `(1+sqrt5)/2`, `sqrt(5)-1`, `3/4+1`, `2^10-1` and `ln2/2` mean what they would on paper. After a function (`ln`, `log`, `exp`, trig, hyperbolic) or a root, `/` makes the whole term the numerator, so `ln2/2` is (ln 2)/2 and `sqrt(2)/2` is √2/2. `log` is base 10. The `√` character, whether typed (Option+V) or pasted, becomes a real root. `→` steps out of a fraction, root or exponent; `Enter` checks the answer.
+  - Every common way of writing maths is understood, in the editor and in the plain-text fallback:
+    - roots: `√` `∛` `∜` `cbrt` `nthroot`/`root` `x^(1/n)`;
+    - powers: `^` `**` `²` `⁻¹`;
+    - fractions: `½`, mixed numbers `1 1/2` and `1½`;
+    - scientific notation: `1.5e-3` `1.5E-3` `1.5x10^-3` `1.5·10⁻³`, and a decimal comma `0,5`;
+    - `°`, `deg`, `%`, `‰`, `!`, `|x|` and `abs`, brackets `[ ]` `{ }`;
+    - constants: `pi` `π` `tau` `τ` `phi` `φ` `e`;
+    - logs: `ln`, `log`/`lg` (base 10), `log2`, `log_2(8)`, `log₂8`;
+    - trig: `sec` `csc` `cot` and their inverses as `asin`, `arcsin` or `sin^-1`; hyperbolic and inverse-hyperbolic functions; `sin^2(x)`.
+    - A "How to type answers" guide sits under every answer box.
+  - A unit typed after the number is accepted (`2.5 mA`, `60 degrees`, `4.7 kohm`). A different unit gets a hint to use the expected one.
+  - On phones a virtual maths keyboard appears.
+  - The value of what you typed is shown underneath, and each problem allows 5 attempts.
+  - If the editor fails to load, a plain text box that accepts `pi/4`, `ln(2)` or `sqrt(3)/2` is used instead.
 - **Open educational material.** Several problems adapt figures from MIT OpenCourseWare 6.002 and James M. Fiore's open textbooks on Engineering LibreTexts (CC BY-NC-SA 4.0). Each one carries its source credit and licence. See `assets/open-materials/`.
 
 ## Run locally
@@ -23,6 +39,12 @@ Then open http://localhost:8000.
 ```bash
 node tests/exercises.test.js
 ```
+
+```bash
+node tests/editor.test.js
+```
+
+`editor.test.js` needs Playwright with Chromium. It types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces.
 
 The suite checks:
 - Every topic × level for 120 days: each exercise is complete and every answer is finite.
@@ -50,7 +72,7 @@ Add an object to the relevant `bank(topic, level, [...])` list in `js/bank.js` (
 | File | Contents |
 | --- | --- |
 | `js/core.js` | Topics, levels, router `makeExercise` |
-| `js/mathtext.js` | LaTeX helpers (`T`, `tf`, `tc`) and the symbolic answer parser |
+| `js/mathtext.js` | LaTeX helpers (`T`, `tf`, `tc`), the answer parser and the editor-LaTeX converter |
 | `js/bank.js`, `js/bank-mech.js` | Curated Levels 1–3 |
 | `js/hard.js` | Electrical Levels 4–5, open-source credits, complex-number helpers |
 | `js/expert.js` | Electrical Levels 6–7 |
