@@ -10,6 +10,17 @@ A static web app with a new engineering problem every day, in the spirit of dail
 - **A real maths editor for answers.** The answer box is a MathLive field (bundled in `vendor/mathlive/`, MIT licence; it shares KaTeX's fonts), so maths becomes typeset as you type:
   - `3/4` becomes a stacked fraction, `sqrt` a root, `pi` gives π, and `^` starts an exponent.
   - Typing follows plain-text reading: `(1+sqrt5)/2`, `sqrt(5)-1`, `3/4+1`, `2^10-1` and `ln2/2` mean what they would on paper. After a function (`ln`, `log`, `exp`, trig, hyperbolic) or a root, `/` makes the whole term the numerator, so `ln2/2` is (ln 2)/2 and `sqrt(2)/2` is √2/2. `log` is base 10. The `√` character, whether typed (Option+V) or pasted, becomes a real root. `→` steps out of a fraction, root or exponent; `Enter` checks the answer.
+  - Every common way of writing maths is understood, in the editor and in the plain-text fallback:
+    - roots: `√` `∛` `∜` `cbrt` `nthroot`/`root` `x^(1/n)`;
+    - powers: `^` `**` `²` `⁻¹`;
+    - fractions: `½`, mixed numbers `1 1/2` and `1½`;
+    - scientific notation: `1.5e-3` `1.5E-3` `1.5x10^-3` `1.5·10⁻³`, and a decimal comma `0,5`;
+    - `°`, `deg`, `%`, `‰`, `!`, `|x|` and `abs`, brackets `[ ]` `{ }`;
+    - constants: `pi` `π` `tau` `τ` `phi` `φ` `e`;
+    - logs: `ln`, `log`/`lg` (base 10), `log2`, `log_2(8)`, `log₂8`;
+    - trig: `sec` `csc` `cot` and their inverses as `asin`, `arcsin` or `sin^-1`; hyperbolic and inverse-hyperbolic functions; `sin^2(x)`.
+    - A "How to type answers" guide sits under every answer box.
+  - A unit typed after the number is accepted (`2.5 mA`, `60 degrees`, `4.7 kohm`). A different unit gets a hint to use the expected one.
   - On phones a virtual maths keyboard appears.
   - The value of what you typed is shown underneath, and each problem allows 5 attempts.
   - If the editor fails to load, a plain text box that accepts `pi/4`, `ln(2)` or `sqrt(3)/2` is used instead.
@@ -33,7 +44,7 @@ node tests/exercises.test.js
 node tests/editor.test.js
 ```
 
-`editor.test.js` needs Playwright with Chromium. It types 48 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces.
+`editor.test.js` needs Playwright with Chromium. It types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces.
 
 The suite checks:
 - Every topic × level for 120 days: each exercise is complete and every answer is finite.

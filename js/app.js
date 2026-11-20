@@ -20,7 +20,35 @@ function fieldHTML(p, i) {
         ? `<math-field id="answer-${i}" class="math-input" math-virtual-keyboard-policy="auto" smart-fence ${aria} aria-label="Answer ${i + 1}"></math-field>`
         : `<input id="answer-${i}" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="${p.exact ? 'e.g. pi/4 or ln(2)' : 'Enter a value'}" ${aria} required>`;
 }
+/* A compact cheat sheet of everything the answer box understands (shown under each answer form). */
+const TYPING_GUIDE = [
+    ['Fractions', '<code>3/4</code> → $\\frac34$ · mixed <code>1 1/2</code> or <code>1½</code>'],
+    ['Powers', '<code>2^3</code> <code>2**3</code> <code>2²</code> <code>10^-3</code> <code>2⁻¹</code>'],
+    ['Roots', '<code>sqrt2</code> <code>√2</code> → $\\sqrt2$ · <code>cbrt8</code> <code>∛8</code> → $\\sqrt[3]8$ · <code>root</code> (any index) · <code>8^(1/3)</code>'],
+    ['Constants', '<code>pi</code> $\\pi$ · <code>e</code> · <code>tau</code> $\\tau$ · <code>phi</code> $\\varphi$'],
+    ['Logs', '<code>ln</code> · <code>log</code> or <code>lg</code> (base 10) · <code>log2(8)</code> <code>log_2(8)</code> → $\\log_2 8$ · <code>exp</code>'],
+    ['Trig', '<code>sin cos tan sec csc cot</code> · <code>asin</code> <code>arcsin</code> <code>sin^-1</code> · <code>sinh</code> <code>arsinh</code>'],
+    ['Degrees, %', '<code>sin(30°)</code> <code>30deg</code> · <code>50%</code> · <code>5‰</code>'],
+    ['Other', '<code>5!</code> · <code>|-3|</code> or <code>abs</code> · brackets <code>( ) [ ]</code> · <code>×</code> <code>÷</code> <code>·</code>'],
+    ['Big & small', '<code>1.5e-3</code> <code>1.5E-3</code> <code>1.5x10^-3</code> <code>1.5*10^-3</code> · decimal comma <code>0,5</code>'],
+    ['Units', 'optional: <code>2.5 mA</code> <code>60 degrees</code> <code>4.7 kohm</code>'],
+    ['Moving', '<kbd>→</kbd> leaves a fraction, root or exponent · a space or an operator after a single number does too · <kbd>Enter</kbd> checks']
+];
+const typingGuideHTML = () => `<details class="typing-guide"><summary>How to type answers</summary><dl>${TYPING_GUIDE.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></details>`;
 const isMath = el => el && el.tagName === 'MATH-FIELD';
+/* Extra spellings for the editor, on top of MathLive's own (sqrt, cbrt, nthroot, pi, deg, sin, …).
+   log is base 10 (not a log with an empty base slot); inverse functions get one symbol, not a·tan. */
+const op = name => `\\operatorname{${name}}`;
+const EDITOR_SHORTCUTS = {
+    log: '\\log', lg: '\\lg', ln: '\\ln', root: '\\sqrt[#?]{#?}', nthroot: '\\sqrt[#?]{#?}', cbrt: '\\sqrt[3]{#?}', cuberoot: '\\sqrt[3]{#?}', squareroot: '\\sqrt{#?}',
+    abs: '\\left|#?\\right|', phi: '\\varphi', tau: '\\tau', pi: '\\pi',
+    asin: '\\arcsin', acos: '\\arccos', atan: '\\arctan', arcsin: '\\arcsin', arccos: '\\arccos', arctan: '\\arctan', arctg: '\\arctan', tg: '\\tan',
+    asec: op('arcsec'), arcsec: op('arcsec'), acsc: op('arccsc'), arccsc: op('arccsc'), acot: op('arccot'), arccot: op('arccot'), arcctg: op('arccot'),
+    sec: '\\sec', csc: '\\csc', cosec: op('cosec'), cot: '\\cot', cotan: '\\cot', ctg: '\\cot',
+    sinh: '\\sinh', cosh: '\\cosh', tanh: '\\tanh', sech: op('sech'), csch: op('csch'), coth: '\\coth',
+    asinh: op('arsinh'), arsinh: op('arsinh'), arcsinh: op('arsinh'), acosh: op('arcosh'), arcosh: op('arcosh'), arccosh: op('arcosh'), atanh: op('artanh'), artanh: op('artanh'), arctanh: op('artanh'),
+    deg: '\\degree', degrees: '\\degree', percent: '\\%'
+};
 /* Typing “)” inside a root, exponent or denominator steps out first when the matching “(” lies
    outside it, so (1+sqrt5)/2 and (3/4) can be typed naturally. Runs before MathLive sees the key. */
 const unmatchedParens = s => (s.match(/\(/g) || []).length - (s.match(/\)/g) || []).length;
@@ -50,7 +78,7 @@ function caretGroup(mf) {
 function leaveAtomGroup(mf) {
     try {
         const g = caretGroup(mf);
-        if (g.start > 0 && /^-?(\d+\.?\d*|\.\d+|\\pi|e)$/.test(g.text)) mf.executeCommand('moveAfterParent');
+        if (g.start > 0 && /^-?(\d+\.?\d*|\.\d+|\\pi|\\tau|\\varphi|\\phi|e)$/.test(g.text)) mf.executeCommand('moveAfterParent');
     } catch {}
 }
 /* ln2/2 means (ln 2)/2: when “/” follows a function and its argument, the whole function term becomes
@@ -80,17 +108,26 @@ function functionNumerator(mf) {
 }
 /* A √ that arrives as text (paste, mobile text entry, some keyboards) becomes a real root:
    a trailing √ opens an empty root at the caret, and √2 or √{…} is rewritten as \sqrt{…}. */
-function fixSurd(mf) {
-    const original = mf.value, v = original.replace(/√/g, '\\surd ');
-    if (!v.includes('\\surd')) return;
-    if (/\\surd\s*$/.test(v) && mf.position === mf.lastOffset) {
-        mf.value = v.replace(/\\surd\s*$/, '');
+const UNICODE_TEX = {'½': '\\frac{1}{2}', '⅓': '\\frac{1}{3}', '⅔': '\\frac{2}{3}', '¼': '\\frac{1}{4}', '¾': '\\frac{3}{4}', '⅕': '\\frac{1}{5}', '⅖': '\\frac{2}{5}', '⅗': '\\frac{3}{5}', '⅘': '\\frac{4}{5}', '⅙': '\\frac{1}{6}', '⅚': '\\frac{5}{6}', '⅛': '\\frac{1}{8}', '⅜': '\\frac{3}{8}', '⅝': '\\frac{5}{8}', '⅞': '\\frac{7}{8}', 'φ': '\\varphi', 'ϕ': '\\varphi', 'τ': '\\tau', 'π': '\\pi', '∞': '\\infty'};
+const ROOT_CHARS = {'√': '\\sqrt{#0}', '∛': '\\sqrt[3]{#0}', '∜': '\\sqrt[4]{#0}'};
+/* Symbols that arrive as text (paste, phone keyboards, Option-key characters) become proper editor
+   structures: a trailing √ ∛ ∜ opens a root at the caret, √2 becomes \sqrt{2}, ½ a fraction, φ τ π symbols. */
+function fixUnicode(mf) {
+    const original = mf.value;
+    if (!/[√∛∜½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞φϕτπ∞]|\\surd/.test(original)) return;
+    const atEnd = mf.position === mf.lastOffset;
+    let v = original.replace(/\\surd\s*/g, '√');
+    const trailing = v.match(/([√∛∜])\s*$/);
+    if (trailing && atEnd) {
+        mf.value = v.slice(0, trailing.index);
         mf.position = mf.lastOffset;
-        mf.insert('\\sqrt{#0}', {selectionMode: 'placeholder'});
+        mf.insert(ROOT_CHARS[trailing[1]], {selectionMode: 'placeholder'});
         return;
     }
-    const fixed = v.replace(/\\surd\s*(\d+(?:\.\d+)?|\\pi|[a-z]|\{[^{}]*\}|\([^()]*\))/g, (m, a) => `\\sqrt{${a[0] === '{' ? a.slice(1, -1) : a}}`);
-    if (fixed !== original) { mf.value = fixed; mf.position = mf.lastOffset; }
+    v = v.replace(/([√∛∜])\s*(\d+(?:\.\d+)?|\\pi|[a-z]|\{[^{}]*\}|\([^()]*\))/g, (m, r, a) => ROOT_CHARS[r].replace('#0', a[0] === '{' ? a.slice(1, -1) : a));
+    v = v.replace(/(\d)\s*([½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])/g, (m, d, c) => `${d}\\,${UNICODE_TEX[c]} `); // 1½ stays a mixed number
+    v = v.replace(/[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞φϕτπ∞]/g, c => UNICODE_TEX[c] + ' ');
+    if (v !== original) { mf.value = v; if (atEnd) mf.position = mf.lastOffset; }
 }
 /* sqrt(5) and e^(-1) behave like function calls: a closing bracket that wraps the whole argument ends it. */
 function closeWrappedGroup(mf) {
@@ -107,10 +144,11 @@ function closeWrappedGroup(mf) {
 }
 /* Read an answer box: LaTeX from the math editor, plain text from the fallback input. */
 function readField(i) {
-    const el = $(`#answer-${i}`), raw = (el.value || '').trim();
+    const el = $(`#answer-${i}`), raw = (el.value || '').trim(), unit = exercise?.parts[i]?.unit || '';
     if (!raw) return {empty: true, value: NaN};
     try {
-        const r = isMath(el) ? MathInput.readLatex(raw) : MathInput.read(raw);
+        // A unit typed after the number ("2.5 mA", "60 degrees", "4.7 kohm") is accepted and ignored.
+        const plain = MathInput.stripUnit(isMath(el) ? MathInput.fromLatex(raw) : raw, unit), r = MathInput.read(plain);
         return {value: r.value, latex: r.latex, raw};
     } catch (err) {
         return {value: NaN, error: err.message, raw};
@@ -210,7 +248,7 @@ function renderChallenge() {
     renderTopics();
     renderLevels();
     const exactParts = e.parts.some(p => p.exact);
-    $('#challenge').innerHTML = `<div class="challenge-top"><div class="challenge-tags"><span class="tag">${t.name}</span><span class="tag level">${e.level}</span></div><span class="challenge-date">${date === today ? 'TODAY’S CHALLENGE' : 'FROM THE ARCHIVE'}</span></div><div class="challenge-body ${curated ? 'curated' : ''}"><div class="problem-meta"><span id="status-line">${record?.status === 'solved' ? '✓ COMPLETED' : record?.status === 'reviewed' ? 'SOLUTION REVIEWED' : e.parts.length > 1 ? `${e.parts.length} CONNECTED PARTS` : 'ONE KEY INSIGHT'}</span><span>${e.minutes}</span></div><h3>${e.title}</h3><div class="problem-text">${e.text}</div>${e.diagram ? `<div class="diagram-toolbar"><span>DIAGRAM</span><button type="button" id="enlarge-diagram" class="text-button" aria-haspopup="dialog">Enlarge</button></div><div class="diagram">${e.diagram}</div>` : ''}${e.givens?.length ? `<div class="givens">${e.givens.map(g => `<span class="given">${g}</span>`).join('')}</div>` : ''}<details class="prerequisites"><summary>What you’ll need</summary><p>${e.prerequisites}</p></details><form id="answer-form" novalidate><div class="answers">${e.parts.map((p, i) => `<div class="answer-part"><label class="answer-label" for="answer-${i}">${e.parts.length > 1 ? String.fromCharCode(65 + i) + '. ' : ''}${p.label}</label><div class="input-wrap">${fieldHTML(p, i)}${p.unit ? `<span>${p.unit}</span>` : ''}</div><div class="preview" id="preview-${i}" aria-hidden="true"></div><div id="part-feedback-${i}" class="part-feedback" role="status"></div></div>`).join('')}</div><p class="input-help" id="answer-help">${MATH_EDITOR ? 'Type maths naturally: <code>3/4</code> becomes a fraction, <code>sqrt</code> a root, <code>pi</code> π and <code>^</code> an exponent. Press <kbd>→</kbd> to leave a fraction, root or exponent, and <kbd>Enter</kbd> to check. ' : 'Type expressions such as <code>pi/4</code>, <code>ln(2)</code> or <code>sqrt(3)/2</code>. '}${exactParts ? 'Exact answers are best; decimals need 4 significant figures.' : 'Decimals and scientific notation (<code>2e-3</code>) work too. Tolerance: 1% unless stated; counts must be exact.'}</p><div class="submit-row"><button class="primary" type="submit" id="check">${e.parts.length > 1 ? 'Check all answers' : 'Check answer'}</button><span id="attempts">${attemptsLabel()}</span></div><div class="feedback ${record?.status === 'solved' ? 'success' : ''}" id="feedback" role="status">${record?.status === 'solved' ? 'You’ve solved this challenge. You can revisit your reasoning below.' : ''}</div></form></div><div class="challenge-actions"><button id="hint" class="text-button">☼ &nbsp; Get a hint <span id="hint-count">(0/${e.hints.length})</span></button><button id="solution" class="text-button" aria-expanded="${solutionShown}">${solutionShown ? 'Hide solution' : 'Reveal solution'}</button></div><div id="hints" class="hint-content" hidden></div><div id="solution-content" class="solution" ${solutionShown ? '' : 'hidden'}>${solutionHTML()}</div>${sourceHTML(e.source)}`;
+    $('#challenge').innerHTML = `<div class="challenge-top"><div class="challenge-tags"><span class="tag">${t.name}</span><span class="tag level">${e.level}</span></div><span class="challenge-date">${date === today ? 'TODAY’S CHALLENGE' : 'FROM THE ARCHIVE'}</span></div><div class="challenge-body ${curated ? 'curated' : ''}"><div class="problem-meta"><span id="status-line">${record?.status === 'solved' ? '✓ COMPLETED' : record?.status === 'reviewed' ? 'SOLUTION REVIEWED' : e.parts.length > 1 ? `${e.parts.length} CONNECTED PARTS` : 'ONE KEY INSIGHT'}</span><span>${e.minutes}</span></div><h3>${e.title}</h3><div class="problem-text">${e.text}</div>${e.diagram ? `<div class="diagram-toolbar"><span>DIAGRAM</span><button type="button" id="enlarge-diagram" class="text-button" aria-haspopup="dialog">Enlarge</button></div><div class="diagram">${e.diagram}</div>` : ''}${e.givens?.length ? `<div class="givens">${e.givens.map(g => `<span class="given">${g}</span>`).join('')}</div>` : ''}<details class="prerequisites"><summary>What you’ll need</summary><p>${e.prerequisites}</p></details><form id="answer-form" novalidate><div class="answers">${e.parts.map((p, i) => `<div class="answer-part"><label class="answer-label" for="answer-${i}">${e.parts.length > 1 ? String.fromCharCode(65 + i) + '. ' : ''}${p.label}</label><div class="input-wrap">${fieldHTML(p, i)}${p.unit ? `<span>${p.unit}</span>` : ''}</div><div class="preview" id="preview-${i}" aria-hidden="true"></div><div id="part-feedback-${i}" class="part-feedback" role="status"></div></div>`).join('')}</div><p class="input-help" id="answer-help">${MATH_EDITOR ? 'Type maths naturally: <code>3/4</code> becomes a fraction, <code>sqrt</code> a root, <code>pi</code> π and <code>^</code> an exponent. Press <kbd>→</kbd> to leave a fraction, root or exponent, and <kbd>Enter</kbd> to check. ' : 'Type expressions such as <code>pi/4</code>, <code>ln(2)</code> or <code>sqrt(3)/2</code>. '}${exactParts ? 'Exact answers are best; decimals need 4 significant figures.' : 'Decimals and scientific notation (<code>2e-3</code>) work too. Tolerance: 1% unless stated; counts must be exact.'}</p>${typingGuideHTML()}<div class="submit-row"><button class="primary" type="submit" id="check">${e.parts.length > 1 ? 'Check all answers' : 'Check answer'}</button><span id="attempts">${attemptsLabel()}</span></div><div class="feedback ${record?.status === 'solved' ? 'success' : ''}" id="feedback" role="status">${record?.status === 'solved' ? 'You’ve solved this challenge. You can revisit your reasoning below.' : ''}</div></form></div><div class="challenge-actions"><button id="hint" class="text-button">☼ &nbsp; Get a hint <span id="hint-count">(0/${e.hints.length})</span></button><button id="solution" class="text-button" aria-expanded="${solutionShown}">${solutionShown ? 'Hide solution' : 'Reveal solution'}</button></div><div id="hints" class="hint-content" hidden></div><div id="solution-content" class="solution" ${solutionShown ? '' : 'hidden'}>${solutionHTML()}</div>${sourceHTML(e.source)}`;
     renderMath($('#challenge'));
     if (e.diagram)
         $('#enlarge-diagram').onclick = () => {
@@ -220,20 +258,35 @@ function renderChallenge() {
         };
     e.parts.forEach((p, i) => {
         const el = $(`#answer-${i}`);
-        el.addEventListener('input', () => { if (isMath(el)) fixSurd(el); preview(i); });
+        el.addEventListener('input', () => { if (isMath(el)) fixUnicode(el); preview(i); });
         if (isMath(el)) {
             el.smartSuperscript = false; // 2^10 stays one exponent; operators step out instead.
             // log is base 10 (not a log with an empty base slot); atan/asin/acos are inverse trig functions.
-            el.inlineShortcuts = {...el.inlineShortcuts, log: '\\log', atan: '\\arctan', asin: '\\arcsin', acos: '\\arccos', arctan: '\\arctan', arcsin: '\\arcsin', arccos: '\\arccos'};
+            el.inlineShortcuts = {...el.inlineShortcuts, ...EDITOR_SHORTCUTS};
         }
         if (isMath(el)) el.addEventListener('keydown', ev => {
             if (ev.key === 'Enter') { ev.preventDefault(); $('#answer-form').requestSubmit(); }
             else if (ev.key === ')') { smartClose(el); setTimeout(() => closeWrappedGroup(el)); }
-            else if (ev.key === '√') { // Option+V etc.: a real root with a bar, not a bare surd symbol (pasted √ is still read correctly)
+            else if (ROOT_CHARS[ev.key]) { // √ ∛ ∜ keys (Option+V etc.): a real root with a bar, not a bare symbol
                 ev.preventDefault();
                 ev.stopImmediatePropagation();
-                el.insert('\\sqrt{#0}', {selectionMode: 'placeholder'});
+                el.insert(ROOT_CHARS[ev.key], {selectionMode: 'placeholder'});
             }
+            else if (ev.key === '*' && el.getValue(el.position - 1, el.position, 'latex') === '\\cdot') { // ** means power
+                ev.preventDefault();
+                ev.stopImmediatePropagation();
+                el.executeCommand('deleteBackward');
+                el.executeCommand('moveToSuperscript');
+            }
+            else if (ev.key === ' ') {
+                leaveAtomGroup(el); // "…/2 Ω": a space after a lone number ends the denominator, exponent or root
+                if (/\d$/.test(el.getValue(el.position - 1, el.position, 'latex'))) { // 1 1/2: keep the space so a mixed number reads as 1½
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                    el.insert('\\,');
+                }
+            }
+            else if (ev.key === '(') leaveAtomGroup(el); // log_2(8), 2^3(4): a lone base or exponent ends at a bracket
             else if ('+-*/'.includes(ev.key)) {
                 leaveAtomGroup(el);
                 if (ev.key === '/' && functionNumerator(el)) { ev.preventDefault(); ev.stopImmediatePropagation(); }
@@ -292,6 +345,14 @@ function answerLine(p) {
 function solutionHTML() {
     return `<strong>The reasoning</strong><ol>${exercise.steps.map(s => `<li>${s}</li>`).join('')}</ol><strong>Answer</strong><ul class="answer-list">${exercise.parts.map(answerLine).join('')}</ul><strong>Take this with you</strong><p>${exercise.idea}</p>`;
 }
+/* Explain why an answer could not be read: an unfinished box, a different unit, or unknown notation. */
+function unreadableHint(i, p) {
+    const r = readField(i);
+    if (r.empty) return 'Enter an answer.';
+    if (r.error && /empty box|Incomplete/.test(r.error)) return 'Finish the expression: there is still an empty box.';
+    if (p.unit && /\d[\s\\,]*[a-zA-ZµΩ°%]/.test(r.raw)) return `Give the value in ${p.unit}, or leave the unit out.`;
+    return 'Could not read this. Try forms like −2.5, 1/3, 2e-3, pi/4 or sqrt(2).';
+}
 function parseAnswer(text) {
     try {
         return MathInput.read(text).value;
@@ -313,7 +374,7 @@ function checkAnswer(event) {
         if (!Number.isFinite(value)) unreadable = true;
         field.setAttribute('aria-invalid', String(!ok));
         out.className = 'part-feedback ' + (ok ? 'correct' : 'incorrect');
-        out.textContent = ok ? '✓ Correct' : !Number.isFinite(value) ? 'Could not read this. Try forms like −2.5, 1/3, 2e-3, pi/4 or sqrt(2).' : 'Not quite. Check the sign, units and relationships in this part.';
+        out.textContent = ok ? '✓ Correct' : !Number.isFinite(value) ? unreadableHint(i, p) : 'Not quite. Check the sign, units and relationships in this part.';
     });
     const f = $('#feedback'), previous = progress[key()] || {};
     if (correct === exercise.parts.length) {

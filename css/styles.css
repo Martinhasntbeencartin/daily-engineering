@@ -225,3 +225,11 @@ math-field.math-input::part(virtual-keyboard-toggle) { color: var(--muted); }
 math-field.math-input[readonly] { opacity: .6; }
 .input-wrap:has(math-field) { align-items: stretch; }
 kbd { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .8em; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 .3rem; background: var(--surface); }
+.typing-guide { margin: -.3rem 0 1rem; font-size: .84rem; color: var(--muted); }
+.typing-guide summary { cursor: pointer; font-weight: 600; color: var(--accent); width: max-content; }
+.typing-guide dl { display: grid; grid-template-columns: max-content 1fr; gap: .35rem .9rem; margin: .7rem 0 0; padding: .8rem 1rem; background: var(--surface-2); border-radius: 10px; }
+.typing-guide dt { font-weight: 600; color: var(--ink); }
+.typing-guide dd { margin: 0; line-height: 1.7; }
+.typing-guide code { background: var(--surface); }
+@media (max-width: 520px) { .typing-guide dl { grid-template-columns: 1fr; } .typing-guide dt { margin-top: .3rem; } }
+code, kbd, .given, .input-wrap input { font-variant-ligatures: none; }
