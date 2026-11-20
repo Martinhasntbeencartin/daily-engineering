@@ -117,11 +117,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .prerequisites summary { cursor: pointer; font-weight: 600; font-size: .9rem; }
 .prerequisites p { margin: .4rem 0 0; color: var(--muted); font-size: .9rem; }
 .diagram-toolbar { display: flex; justify-content: space-between; align-items: center; font-size: .72rem; letter-spacing: .14em; font-weight: 600; color: var(--muted); margin-top: 1.2rem; }
-.diagram { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: .8rem; margin: .5rem 0 1rem; color: #1f2a22; display: grid; place-items: center; overflow: hidden; }
-.diagram svg { width: 100%; height: auto; max-height: 340px; font: 15px Inter, system-ui, sans-serif; fill: #1f2a22; }
-.diagram svg text { fill: #1f2a22; }
-.diagram.large svg { max-height: 70vh; }
-.source-figure { max-width: min(100%, 400px); width: 100%; height: auto; image-rendering: auto; background: #fff; border-radius: 6px; }
+.diagram { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: clamp(.35rem, 1vw, 1rem); margin: .5rem 0 1rem; }
+.diagram svg, .source-art svg { display: block; width: 100%; height: auto; font: 17px system-ui, sans-serif; }
+.diagram svg { max-height: 380px; }
+.diagram svg text, .source-art svg text { fill: #20382c; }
+.diagram.large { overflow-x: auto; }
+.diagram.large svg { min-width: 640px; max-height: none; }
+@media (max-width: 560px) {
+  .diagram-dialog .dialog-body { padding: .85rem; }
+}
 .givens { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1.4rem; }
 .given { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .82rem; background: var(--surface-2); border-radius: 8px; padding: .25rem .6rem; }
 .answers { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
@@ -166,9 +170,11 @@ input[aria-invalid="true"] { color: var(--bad); }
 .collection { padding: 3.5rem 0 2rem; }
 .source-cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); margin-top: 1.4rem; }
 .source-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
-.source-card img, .source-math { width: 100%; height: 160px; object-fit: contain; background: #fff; padding: .7rem; border-bottom: 1px solid var(--line); }
+.source-art, .source-math { width: 100%; height: 160px; background: var(--paper); padding: .7rem; border-bottom: 1px solid var(--line); }
 .source-math { display: grid; place-items: center; font-family: "JetBrains Mono", ui-monospace, monospace; color: #315740; font-size: 1.1rem; }
-.source-card > div { padding: .9rem 1rem 1.1rem; font-size: .88rem; }
+.source-art { display: grid; place-items: center; }
+.source-art svg { height: 100%; }
+.source-card > div:last-child { padding: .9rem 1rem 1.1rem; font-size: .88rem; }
 .source-card h3 { font-size: 1.1rem; margin: .3rem 0; }
 .source-card p { color: var(--muted); margin: 0 0 .6rem; }
 
@@ -195,7 +201,6 @@ dialog::backdrop { background: rgba(20, 26, 22, .55); }
 .challenge-body.curated .problem-text { font-size: 1.12rem; }
 .challenge-body.curated .problem-text .katex-display { font-size: 1.22em; margin: 1.4rem 0; }
 .challenge-body.curated h3 { font-size: 1.7rem; }
-.diagram svg { font-family: KaTeX_Main, "Times New Roman", serif; font-size: 17px; }
 .given .katex { font-size: 1em; }
 .preview { min-height: 1.9em; margin-top: .3rem; padding: .15rem .1rem; color: var(--muted); font-size: .98rem; overflow-x: auto; overflow-y: hidden; }
 .preview.invalid { color: var(--bad); font-family: "JetBrains Mono", ui-monospace, monospace; }
