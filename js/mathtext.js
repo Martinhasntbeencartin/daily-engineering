@@ -167,6 +167,7 @@ const MathInput = (() => {
             if (name === 'cdot' || name === 'times' || name === 'ast') return '*';
             if (name === 'div') return '/';
             if (name === 'pi') return 'pi';
+            if (name === 'surd') return 'sqrt '; // a bare √ symbol applies to the atom that follows it
             if (LATEX_FN[name]) return LATEX_FN[name];
             if (name === 'operatorname' || name === 'mathrm' || name === 'text') { const g = group(); return LATEX_FN[g] || g; }
             if ([',', ';', '!', ' ', ':', 'quad', 'qquad'].includes(name)) return '';

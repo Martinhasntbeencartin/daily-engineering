@@ -78,6 +78,20 @@ function functionNumerator(mf) {
     } catch {}
     return false;
 }
+/* A √ that arrives as text (paste, mobile text entry, some keyboards) becomes a real root:
+   a trailing √ opens an empty root at the caret, and √2 or √{…} is rewritten as \sqrt{…}. */
+function fixSurd(mf) {
+    const original = mf.value, v = original.replace(/√/g, '\\surd ');
+    if (!v.includes('\\surd')) return;
+    if (/\\surd\s*$/.test(v) && mf.position === mf.lastOffset) {
+        mf.value = v.replace(/\\surd\s*$/, '');
+        mf.position = mf.lastOffset;
+        mf.insert('\\sqrt{#0}', {selectionMode: 'placeholder'});
+        return;
+    }
+    const fixed = v.replace(/\\surd\s*(\d+(?:\.\d+)?|\\pi|[a-z]|\{[^{}]*\}|\([^()]*\))/g, (m, a) => `\\sqrt{${a[0] === '{' ? a.slice(1, -1) : a}}`);
+    if (fixed !== original) { mf.value = fixed; mf.position = mf.lastOffset; }
+}
 /* sqrt(5) and e^(-1) behave like function calls: a closing bracket that wraps the whole argument ends it. */
 function closeWrappedGroup(mf) {
     try {
@@ -206,7 +220,7 @@ function renderChallenge() {
         };
     e.parts.forEach((p, i) => {
         const el = $(`#answer-${i}`);
-        el.addEventListener('input', () => preview(i));
+        el.addEventListener('input', () => { if (isMath(el)) fixSurd(el); preview(i); });
         if (isMath(el)) {
             el.smartSuperscript = false; // 2^10 stays one exponent; operators step out instead.
             // log is base 10 (not a log with an empty base slot); atan/asin/acos are inverse trig functions.
@@ -215,6 +229,11 @@ function renderChallenge() {
         if (isMath(el)) el.addEventListener('keydown', ev => {
             if (ev.key === 'Enter') { ev.preventDefault(); $('#answer-form').requestSubmit(); }
             else if (ev.key === ')') { smartClose(el); setTimeout(() => closeWrappedGroup(el)); }
+            else if (ev.key === '√') { // Option+V etc.: a real root with a bar, not a bare surd symbol (pasted √ is still read correctly)
+                ev.preventDefault();
+                ev.stopImmediatePropagation();
+                el.insert('\\sqrt{#0}', {selectionMode: 'placeholder'});
+            }
             else if ('+-*/'.includes(ev.key)) {
                 leaveAtomGroup(el);
                 if (ev.key === '/' && functionNumerator(el)) { ev.preventDefault(); ev.stopImmediatePropagation(); }
