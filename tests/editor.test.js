@@ -46,7 +46,15 @@ server.listen(0, async () => {
     page.on('response', r => r.status() >= 400 && errors.push(`${r.status()} ${r.url()}`));
     let failures = 0;
     try {
+        // The Level 3 circuit on this local date asks for resistance in ohms.
+        await page.clock.setFixedTime(new Date(2026, 1, 1, 12));
+        await page.addInitScript(() => localStorage.setItem('daily-engineer-level', 'foundations'));
         await page.goto(url);
+        const levels = await page.locator('[data-level]').evaluateAll(buttons => buttons.map(b => b.dataset.level));
+        if (levels.join(',') !== 'advanced,university,challenge,expert' ||
+            await page.locator('[data-level][aria-pressed="true"]').getAttribute('data-level') !== 'advanced') {
+            failures++; console.log('FAIL four-level picker or retired-level fallback');
+        }
         await page.waitForSelector('math-field');
         for (const [keys, want] of cases) {
             await page.evaluate(() => { const m = document.getElementById('answer-0'); m.value = ''; m.focus(); });
@@ -75,7 +83,6 @@ server.listen(0, async () => {
         }
         // A unit typed after the answer is accepted; a different unit gets a clear hint.
         await page.evaluate(() => localStorage.clear());
-        await page.click('[data-group="electrical"]'); await page.click('[data-topic="circuits"]'); await page.click('[data-level="foundations"]');
         await page.waitForSelector('math-field');
         for (const [keys, want] of [['1.618 ohm', 1.618], ['(1+sqrt5)/2 Ω', (1 + Math.sqrt(5)) / 2], ['1.618 kohm', NaN]]) {
             await page.evaluate(() => { const m = document.getElementById('answer-0'); m.value = ''; m.focus(); });

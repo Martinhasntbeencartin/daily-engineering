@@ -154,7 +154,7 @@ function readField(i) {
         return {value: NaN, error: err.message, raw};
     }
 }
-let today = localDate(), date = today, topic = 'circuits', level = 'foundations', group = 'electrical', view = 'today', hintCount = 0, solutionShown = false, exercise;
+let today = localDate(), date = today, topic = 'circuits', level = PRACTICE_LEVELS[0].id, group = 'electrical', view = 'today', hintCount = 0, solutionShown = false, exercise;
 let progress = {}, attempts = {}, storageAvailable = true;
 try {
     const saved = JSON.parse(localStorage.getItem('daily-engineer-v1') || '{}');
@@ -169,7 +169,7 @@ try {
     const a = JSON.parse(localStorage.getItem('daily-engineer-attempts') || '{}');
     if (a && typeof a === 'object' && !Array.isArray(a)) attempts = a;
     const preference = localStorage.getItem('daily-engineer-level');
-    if (LEVELS.some(l => l.id === preference))
+    if (PRACTICE_LEVELS.some(l => l.id === preference))
         level = preference;
     const g = localStorage.getItem('daily-engineer-group');
     if (GROUPS.some(x => x.id === g)) {
@@ -209,7 +209,16 @@ function streak() {
     return n;
 }
 function renderLevels() {
-    $('#level-picker').innerHTML = `<div class="levels-heading"><span class="eyebrow">CHOOSE YOUR CHALLENGE</span><span>Levels 1–3: hand-picked problems with exact answers. Levels 4–7: multi-part problems that change daily.</span></div><div class="level-options">${LEVELS.map((l, i) => `<button class="level-option ${level === l.id ? 'selected' : ''} ${i >= 5 ? 'elite' : ''}" data-level="${l.id}" aria-pressed="${level === l.id}"><span class="level-top"><span>${l.tag}</span><span>${l.time}</span></span><strong>${l.name}</strong><span class="level-description">${l.description}</span><span class="level-completion">${progress[key(topic, l.id)]?.status === 'solved' ? '✓ Solved for this date' : progress[key(topic, l.id)]?.status === 'reviewed' ? 'Solution reviewed' : 'Ready to explore'}</span></button>`).join('')}</div>`;
+    const buttons = PRACTICE_LEVELS.map(l => {
+        const status = progress[key(topic, l.id)]?.status;
+        const completion = status === 'solved' ? '✓ Solved' : status === 'reviewed' ? 'Solution reviewed' : '';
+        return `<button class="level-option ${level === l.id ? 'selected' : ''}" data-level="${l.id}" aria-pressed="${level === l.id}">
+            <span class="level-top"><span>${l.tag}</span><span>${l.time}</span></span>
+            <strong>${l.name}</strong><span class="level-description">${l.description}</span>
+            ${completion ? `<span class="level-completion">${completion}</span>` : ''}
+        </button>`;
+    });
+    $('#level-picker').innerHTML = `<h2 class="picker-heading">Difficulty</h2><div class="level-options">${buttons.join('')}</div>`;
     document.querySelectorAll('[data-level]').forEach(b => b.onclick = () => {
         level = b.dataset.level;
         remember('daily-engineer-level', level);
@@ -219,7 +228,6 @@ function renderLevels() {
 function renderTopics() {
     $('#groups').innerHTML = GROUPS.map(g => `<button role="tab" class="group-tab ${group === g.id ? 'selected' : ''}" data-group="${g.id}" aria-selected="${group === g.id}">${g.name}</button>`).join('');
     $('#topics').innerHTML = TOPICS.filter(t => t.group === group).map(t => `<button class="topic ${topic === t.id ? 'selected' : ''}" data-topic="${t.id}" aria-pressed="${topic === t.id}"><span class="topic-icon" aria-hidden="true">${t.icon}</span><span><strong>${t.name}</strong><small>${t.sub}</small></span><span class="topic-done" aria-label="${progress[key(t.id)]?.status === 'solved' ? 'Solved' : ''}">${progress[key(t.id)]?.status === 'solved' ? '✓' : ''}</span></button>`).join('');
-    $('#streak').textContent = streak();
     updateStorageNote();
     document.querySelectorAll('[data-topic]').forEach(b => b.onclick = () => {
         topic = b.dataset.topic;
@@ -330,19 +338,7 @@ function preview(i) {
 function sourceHTML(s) {
     if (s?.reading)
         return `<div class="source-credit"><span>ORIGINAL DAILY ENGINEER EXERCISE</span><p>Further reading (open textbook): <a href="${s.reading.url}" target="_blank" rel="noopener">${s.reading.title}</a>.</p></div>`;
-    return s ? `<div class="source-credit"><span>ADAPTED OPEN EDUCATIONAL MATERIAL</span><p>Based on <a href="${s.url}" target="_blank" rel="noopener">${s.title}</a> by ${s.author || 'Tony R. Kuphaldt, All About Circuits'} · <a href="${s.licenseUrl || 'https://creativecommons.org/licenses/by/1.0/'}" target="_blank" rel="noopener">${s.license || 'CC BY 1.0'}</a>. ${s.changes || 'Wording and values changed; diagrams redrawn; guided steps added.'} Adapted exercise content uses the same license.</p></div>` : '<div class="source-credit"><span>ORIGINAL DAILY ENGINEER EXERCISE</span></div>';
-}
-function renderSourceCollection() {
-    const entries = [['thevenin', 'circuits', 'university', 'Dependent-source Thévenin'], ['nodal', 'circuits', 'challenge', 'Complex nodal analysis'], ['threeSource', 'circuits', 'expert', 'Three sources, conjugate match'], ['jfet', 'electronics', 'university', 'Nonlinear JFET bias'], ['nonlinear', 'electronics', 'challenge', 'Piecewise amplifier cascade'], ['convolution', 'signals', 'university', 'Repeated-pole convolution'], ['crossover', 'signals', 'challenge', 'Third-order crossover'], ['rcLadder', 'signals', 'expert', 'Wien-bridge transmission zero']];
-    $('#source-cards').innerHTML = entries.map(([id, t, l, title]) => `<article class="source-card">${sourceDrawings[id] ? `<div class="source-art">${sourceDrawings[id]()}</div>` : '<div class="source-math">$x[n] * h_1[n] * h_2[n]$</div>'}<div><span class="eyebrow">${LEVELS.find(x => x.id === l).name}</span><h3>${title}</h3><p>${OPEN_SOURCES[id].title}</p><button class="text-button" data-practice-topic="${t}" data-practice-level="${l}">Practice this problem</button> · <a href="${OPEN_SOURCES[id].url}" target="_blank" rel="noopener">Original source</a></div></article>`).join('');
-    renderMath($('#source-cards'));
-    document.querySelectorAll('[data-practice-topic]').forEach(b => b.onclick = () => {
-        topic = b.dataset.practiceTopic;
-        level = b.dataset.practiceLevel;
-        remember('daily-engineer-level', level);
-        setView('today');
-        $('#challenge').scrollIntoView({behavior: 'smooth', block: 'start'});
-    });
+    return s ? `<div class="source-credit"><span>ADAPTED OPEN EDUCATIONAL MATERIAL</span><p>Based on <a href="${s.url}" target="_blank" rel="noopener">${s.title}</a> by ${s.author || 'Tony R. Kuphaldt, All About Circuits'} · <a href="${s.licenseUrl || 'https://creativecommons.org/licenses/by/1.0/'}" target="_blank" rel="noopener">${s.license || 'CC BY 1.0'}</a>. ${s.changes || 'Wording and values changed; diagrams redrawn; guided steps added.'} Adapted exercise content uses the same license.</p></div>` : '';
 }
 function answerLine(p) {
     const val = p.exact ? p.exact : tf(p.answer);
@@ -432,7 +428,8 @@ function showSolution() {
 }
 function renderProgress() {
     const entries = activeRecords(), solved = entries.filter(([k, v]) => v.status === 'solved').length, reviewed = entries.filter(([k, v]) => v.status === 'reviewed').length;
-    $('#progress-view').innerHTML = `<div class="stats"><div class="stat"><b>${solved}</b><span>Challenges solved</span></div><div class="stat"><b>${streak()}</b><span>Day streak</span></div><div class="stat"><b>${reviewed}</b><span>Solutions reviewed</span></div></div><div class="progress-topics"><h2>Your learning, by level.</h2><div class="progress-table-wrap"><table class="progress-table"><thead><tr><th>Discipline</th>${LEVELS.map(l => `<th>${l.name}</th>`).join('')}</tr></thead><tbody>${GROUPS.map(g => `<tr class="group-row"><th colspan="${LEVELS.length + 1}">${g.name}</th></tr>` + TOPICS.filter(t => t.group === g.id).map(t => `<tr><th>${t.name}</th>${LEVELS.map(l => `<td>${entries.filter(([k, v]) => k.split(':')[1] === t.id && k.split(':')[2] === l.id && v.status === 'solved').length} solved</td>`).join('')}</tr>`).join('')).join('')}</tbody></table></div></div><p class="progress-note">Solve at least one of today’s challenges at any level to build your streak. Archive practice adds to your totals. Progress is stored in this browser; clearing browser data removes it.</p>`;
+    const includesRetired = entries.some(([k]) => LEVELS.some(l => l.retired && l.id === k.split(':')[2]));
+    $('#progress-view').innerHTML = `<div class="stats"><div class="stat"><b>${solved}</b><span>Challenges solved</span></div><div class="stat"><b>${streak()}</b><span>Day streak</span></div><div class="stat"><b>${reviewed}</b><span>Solutions reviewed</span></div></div><div class="progress-topics"><h2>Solved by topic and difficulty</h2><div class="progress-table-wrap"><table class="progress-table"><thead><tr><th>Discipline</th>${PRACTICE_LEVELS.map(l => `<th>${l.name}</th>`).join('')}</tr></thead><tbody>${GROUPS.map(g => `<tr class="group-row"><th colspan="${PRACTICE_LEVELS.length + 1}">${g.name}</th></tr>` + TOPICS.filter(t => t.group === g.id).map(t => `<tr><th>${t.name}</th>${PRACTICE_LEVELS.map(l => `<td>${entries.filter(([k, v]) => k.split(':')[1] === t.id && k.split(':')[2] === l.id && v.status === 'solved').length} solved</td>`).join('')}</tr>`).join('')).join('')}</tbody></table></div></div><p class="progress-note">${includesRetired ? 'Totals and streaks include your earlier work on retired levels. ' : ''}Solve at least one of today’s challenges at any level to build your streak. Archive practice adds to your totals. Progress is stored in this browser; clearing browser data removes it.</p>`;
 }
 function setView(v) {
     view = v;
@@ -441,9 +438,8 @@ function setView(v) {
     $('#practice').hidden = v === 'progress';
     $('#level-picker').hidden = v === 'progress';
     $('#progress-view').hidden = v !== 'progress';
-    $('#view-label').textContent = v === 'progress' ? 'YOUR LEARNING LOG' : v === 'archive' ? 'KEEP EXPLORING' : 'YOUR DAILY PRACTICE';
-    $('#view-title').textContent = v === 'progress' ? 'Small steps add up.' : v === 'archive' ? 'A good idea is worth revisiting.' : 'Find your frequency.';
-    $('#open-collection').hidden = v === 'progress';
+    $('#view-title').textContent = v === 'progress' ? 'Your progress' : v === 'archive' ? 'Exercise archive' : 'Daily exercises';
+    $('#date-label').hidden = v === 'progress';
     if (v === 'today')
         date = today;
     if (v === 'archive') {
@@ -457,6 +453,7 @@ function setView(v) {
     renderDate();
 }
 function renderDate() {
+    $('#date-label').dateTime = date;
     $('#date-label').textContent = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric', month: 'long', year: 'numeric'});
 }
 document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => setView(b.dataset.view));
@@ -471,10 +468,8 @@ $('#archive-date').onchange = e => {
     } else
         e.target.value = date;
 };
-for (const id of ['#about', '#about-footer'])
-    $(id).onclick = () => $('#about-dialog').showModal();
+$('#about').onclick = () => $('#about-dialog').showModal();
 $('#close-dialog').onclick = () => $('#about-dialog').close();
-$('#start-practice').onclick = () => $('#about-dialog').close();
 $('#about-dialog').onclick = e => {
     if (e.target === $('#about-dialog')) {
         const r = e.target.getBoundingClientRect();
@@ -504,8 +499,6 @@ function tick() {
     }
 }
 $('#close-diagram').onclick = () => $('#diagram-dialog').close();
-renderSourceCollection();
-renderMath($('#about-dialog'));
 setView('today');
 tick();
 setInterval(tick, 1000);
