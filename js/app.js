@@ -53,6 +53,31 @@ function leaveAtomGroup(mf) {
         if (g.start > 0 && /^-?(\d+\.?\d*|\.\d+|\\pi|e)$/.test(g.text)) mf.executeCommand('moveAfterParent');
     } catch {}
 }
+/* ln2/2 means (ln 2)/2: when “/” follows a function and its argument, the whole function term becomes
+   the numerator (MathLive alone would take only the argument). Covers ln, log, exp, trig and hyperbolic functions. */
+const FUNCTION_TERM = /^a?\\(ln|log|exp|sin|cos|tan|arcsin|arccos|arctan|sinh|cosh|tanh)\s*(\d+\.?\d*|\.\d+|\\pi|e|[a-z]|\(.*\))$/;
+function functionNumerator(mf) {
+    try {
+        const pos = mf.position, g = caretGroup(mf);
+        for (let s = pos - 1; s >= g.start && s >= pos - 80; s--) {
+            const text = mf.getValue(s, pos, 'latex').replace(/\\left\(/g, '(').replace(/\\right\)/g, ')');
+            const m = text.match(FUNCTION_TERM);
+            if (!m) continue;
+            if (m[2][0] === '(') { // the bracket must enclose the whole argument
+                let depth = 0;
+                for (let i = 0; i < m[2].length; i++) {
+                    depth += m[2][i] === '(' ? 1 : m[2][i] === ')' ? -1 : 0;
+                    if (depth === 0 && i < m[2].length - 1) return false;
+                }
+                if (depth !== 0) return false;
+            }
+            mf.selection = {ranges: [[s, pos]], direction: 'forward'};
+            mf.insert('\\frac{#0}{#?}', {selectionMode: 'placeholder'});
+            return true;
+        }
+    } catch {}
+    return false;
+}
 /* sqrt(5) and e^(-1) behave like function calls: a closing bracket that wraps the whole argument ends it. */
 function closeWrappedGroup(mf) {
     try {
@@ -182,11 +207,18 @@ function renderChallenge() {
     e.parts.forEach((p, i) => {
         const el = $(`#answer-${i}`);
         el.addEventListener('input', () => preview(i));
-        if (isMath(el)) el.smartSuperscript = false; // 2^10 stays one exponent; operators step out instead.
+        if (isMath(el)) {
+            el.smartSuperscript = false; // 2^10 stays one exponent; operators step out instead.
+            // log is base 10 (not a log with an empty base slot); atan/asin/acos are inverse trig functions.
+            el.inlineShortcuts = {...el.inlineShortcuts, log: '\\log', atan: '\\arctan', asin: '\\arcsin', acos: '\\arccos', arctan: '\\arctan', arcsin: '\\arcsin', arccos: '\\arccos'};
+        }
         if (isMath(el)) el.addEventListener('keydown', ev => {
             if (ev.key === 'Enter') { ev.preventDefault(); $('#answer-form').requestSubmit(); }
             else if (ev.key === ')') { smartClose(el); setTimeout(() => closeWrappedGroup(el)); }
-            else if ('+-*/'.includes(ev.key)) leaveAtomGroup(el);
+            else if ('+-*/'.includes(ev.key)) {
+                leaveAtomGroup(el);
+                if (ev.key === '/' && functionNumerator(el)) { ev.preventDefault(); ev.stopImmediatePropagation(); }
+            }
         }, {capture: true});
     });
     $('#answer-form').onsubmit = checkAnswer;

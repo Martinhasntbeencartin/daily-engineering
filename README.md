@@ -9,7 +9,7 @@ A static web app with a new engineering problem every day, in the spirit of dail
 - **LaTeX everywhere.** All problem text, hints and solutions are typeset with KaTeX, which is bundled in `vendor/katex/` (MIT licence), so the site needs no CDN.
 - **A real maths editor for answers.** The answer box is a MathLive field (bundled in `vendor/mathlive/`, MIT licence; it shares KaTeX's fonts), so maths becomes typeset as you type:
   - `3/4` becomes a stacked fraction, `sqrt` a root, `pi` gives π, and `^` starts an exponent.
-  - Typing follows plain-text reading: `(1+sqrt5)/2`, `sqrt(5)-1`, `3/4+1` and `2^10-1` mean what they would on paper. `→` steps out of a fraction, root or exponent; `Enter` checks the answer.
+  - Typing follows plain-text reading: `(1+sqrt5)/2`, `sqrt(5)-1`, `3/4+1`, `2^10-1` and `ln2/2` mean what they would on paper. After a function (`ln`, `log`, `exp`, trig, hyperbolic), `/` makes the whole function term the numerator, so `ln2/2` is (ln 2)/2. `log` is base 10. `→` steps out of a fraction, root or exponent; `Enter` checks the answer.
   - On phones a virtual maths keyboard appears.
   - The value of what you typed is shown underneath, and each problem allows 5 attempts.
   - If the editor fails to load, a plain text box that accepts `pi/4`, `ln(2)` or `sqrt(3)/2` is used instead.
@@ -33,7 +33,7 @@ node tests/exercises.test.js
 node tests/editor.test.js
 ```
 
-`editor.test.js` needs Playwright with Chromium. It types 27 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces.
+`editor.test.js` needs Playwright with Chromium. It types 37 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces.
 
 The suite checks:
 - Every topic × level for 120 days: each exercise is complete and every answer is finite.

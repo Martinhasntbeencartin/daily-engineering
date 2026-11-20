@@ -35,7 +35,8 @@ const MathInput = (() => {
             if (num) { out.push({t: 'num', v: Number(num[0])}); i += num[0].length; continue; }
             if ('+-*/^()'.includes(c)) { out.push({t: c}); i++; continue; }
             if (/[a-zA-Z]/.test(c)) {
-                const rest = s.slice(i).toLowerCase(), name = NAMES.find(n => rest.startsWith(n));
+                // A name ending in a digit (log10) only matches when no further digit follows: log100 is log(100).
+                const rest = s.slice(i).toLowerCase(), name = NAMES.find(n => rest.startsWith(n) && !(/\d$/.test(n) && /\d/.test(rest[n.length] || '')));
                 if (name) { out.push(name === 'pi' ? {t: 'const', v: Math.PI, tex: '\\pi'} : {t: 'fn', v: ALIAS[name] || name}); i += name.length; continue; }
                 if (rest[0] === 'e') { out.push({t: 'const', v: Math.E, tex: 'e'}); i++; continue; }
             }
