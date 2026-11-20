@@ -187,3 +187,26 @@ dialog::backdrop { background: rgba(20, 26, 22, .55); }
   .topic { scroll-snap-align: start; }
 }
 .practice > * { min-width: 0; }
+
+/* ---------- LaTeX typesetting and the answer box ---------- */
+.katex { font-size: 1.08em; }
+.problem-text { font-size: 1.04rem; max-width: 75ch; margin: .2rem 0 1rem; }
+.problem-text .katex-display { margin: 1.1rem 0; overflow-x: auto; overflow-y: hidden; padding: .2rem 0; }
+.challenge-body.curated .problem-text { font-size: 1.12rem; }
+.challenge-body.curated .problem-text .katex-display { font-size: 1.22em; margin: 1.4rem 0; }
+.challenge-body.curated h3 { font-size: 1.7rem; }
+.diagram svg { font-family: KaTeX_Main, "Times New Roman", serif; font-size: 17px; }
+.given .katex { font-size: 1em; }
+.preview { min-height: 1.9em; margin-top: .3rem; padding: .15rem .1rem; color: var(--muted); font-size: .98rem; overflow-x: auto; overflow-y: hidden; }
+.preview.invalid { color: var(--bad); font-family: "JetBrains Mono", ui-monospace, monospace; }
+code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .86em; background: var(--surface-2); padding: .05rem .35rem; border-radius: 5px; }
+.answer-list { padding-left: 1.2rem; margin: .4rem 0 1rem; }
+.answer-list li { margin: .25rem 0; }
+.approx { color: var(--muted); font-size: .9em; }
+.solution .katex-display, .hint-content .katex-display { margin: .5rem 0; overflow-x: auto; overflow-y: hidden; }
+.solution li .katex, .hint-content p .katex { max-width: 100%; }
+.solution li .katex-display, .hint-content p .katex-display { overflow-x: auto; }
+.given { font-family: Inter, system-ui, sans-serif; font-size: .86rem; }
+#check:disabled { opacity: .5; cursor: not-allowed; }
+.input-wrap input:disabled { opacity: .6; }
+#attempts { font-variant-numeric: tabular-nums; }
