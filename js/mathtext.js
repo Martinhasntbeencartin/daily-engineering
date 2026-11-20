@@ -123,10 +123,67 @@ const MathInput = (() => {
             case 'fn': return FUN[n.f][1](tex(strip(n.a)));
         }
     }
+    /* LaTeX produced by the MathLive editor → the plain syntax above.
+       Handles \frac, \sqrt[n]{}, ^{}, \left(…\right), \cdot, \times, \pi, function names and spacing. */
+    const LATEX_FN = {ln: 'ln', log: 'log', exp: 'exp', sin: 'sin', cos: 'cos', tan: 'tan', arcsin: 'asin', arccos: 'acos', arctan: 'atan', sinh: 'sinh', cosh: 'cosh', tanh: 'tanh'};
+    function fromLatex(latex) {
+        const src = latex.replace(/\{,\}/g, '.').replace(/\\mathrm\{e\}|\\exponentialE/g, 'e').replace(/(^|[^\\a-zA-Z])a\\(sin|cos|tan)/g, '$1\\arc$2').replace(/(^|[^\\a-zA-Z])arc\\(sin|cos|tan)/g, '$1\\arc$2');
+        const tk = src.match(/\\[a-zA-Z]+|\\.|[^\s]/g) || [];
+        let p = 0;
+        const group = () => {
+            if (p >= tk.length) throw Error('Incomplete expression');
+            if (tk[p] === '{') {
+                p++;
+                let out = '';
+                while (p < tk.length && tk[p] !== '}') out += item();
+                if (tk[p++] !== '}') throw Error('Unbalanced braces');
+                return out;
+            }
+            return item();
+        };
+        function item() {
+            const t = tk[p++];
+            if (t === '{') { p--; return '(' + group() + ')'; }
+            if (t === '}') throw Error('Unbalanced braces');
+            if (t === '^') return '^(' + group() + ')';
+            if (t[0] !== '\\') return t;
+            const name = t.slice(1);
+            if (name === 'frac' || name === 'dfrac' || name === 'tfrac') { const a = group(), b = group(); return `((${a})/(${b}))`; }
+            if (name === 'sqrt') {
+                if (tk[p] === '[') {
+                    p++;
+                    let n = '';
+                    while (p < tk.length && tk[p] !== ']') n += item();
+                    p++;
+                    return `((${group()})^(1/(${n})))`;
+                }
+                return `sqrt(${group()})`;
+            }
+            if (name === 'left' || name === 'right' || name === 'bigl' || name === 'bigr') {
+                const d = tk[p++];
+                return d === '|' ? (name === 'left' ? 'abs(' : ')') : d === '.' ? '' : d === '\\{' ? '(' : d === '\\}' ? ')' : d;
+            }
+            if (name === 'cdot' || name === 'times' || name === 'ast') return '*';
+            if (name === 'div') return '/';
+            if (name === 'pi') return 'pi';
+            if (LATEX_FN[name]) return LATEX_FN[name];
+            if (name === 'operatorname' || name === 'mathrm' || name === 'text') { const g = group(); return LATEX_FN[g] || g; }
+            if ([',', ';', '!', ' ', ':', 'quad', 'qquad'].includes(name)) return '';
+            if (name === 'placeholder') { group(); throw Error('Fill in the empty box'); }
+            throw Error('Unsupported symbol ' + t);
+        }
+        let out = '';
+        while (p < tk.length) out += item();
+        return out;
+    }
     return {
         read(src) {
             const tree = parse(src), v = value(tree);
             return {value: v, latex: tex(tree)};
+        },
+        fromLatex,
+        readLatex(latex) {
+            return this.read(fromLatex(latex));
         }
     };
 })();

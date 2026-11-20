@@ -7,6 +7,76 @@ const shifted = (date, days) => {
 };
 const GROUPS = [{id: 'electrical', name: 'Electrical'}, {id: 'mechanical', name: 'Mechanical & civil'}];
 const MAX_ATTEMPTS = 5;
+/* MathLive turns each answer box into a WYSIWYG math editor (typing 3/4 makes a stacked fraction).
+   It shares KaTeX's fonts; if it fails to load, plain text inputs are used instead. */
+const MATH_EDITOR = typeof window.MathfieldElement === 'function'; // <math-field> registers a moment later; elements upgrade automatically.
+if (MATH_EDITOR) {
+    MathfieldElement.fontsDirectory = new URL('vendor/katex/fonts/', location.href).href;
+    MathfieldElement.soundsDirectory = null;
+}
+function fieldHTML(p, i) {
+    const aria = `aria-describedby="answer-help part-feedback-${i}"`;
+    return MATH_EDITOR
+        ? `<math-field id="answer-${i}" class="math-input" math-virtual-keyboard-policy="auto" smart-fence ${aria} aria-label="Answer ${i + 1}"></math-field>`
+        : `<input id="answer-${i}" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="${p.exact ? 'e.g. pi/4 or ln(2)' : 'Enter a value'}" ${aria} required>`;
+}
+const isMath = el => el && el.tagName === 'MATH-FIELD';
+/* Typing “)” inside a root, exponent or denominator steps out first when the matching “(” lies
+   outside it, so (1+sqrt5)/2 and (3/4) can be typed naturally. Runs before MathLive sees the key. */
+const unmatchedParens = s => (s.match(/\(/g) || []).length - (s.match(/\)/g) || []).length;
+function smartClose(mf) {
+    try {
+        for (let k = 0; k < 8; k++) {
+            const pos = mf.position;
+            if (unmatchedParens(mf.getValue(0, pos, 'latex')) <= 0) return;
+            mf.executeCommand('extendToGroupStart');
+            const start = mf.selection.ranges[0][0], group = mf.getValue(mf.selection, 'latex');
+            mf.position = pos;
+            if (start === 0 || unmatchedParens(group) > 0) return;
+            mf.executeCommand('moveAfterParent');
+        }
+    } catch {}
+}
+/* Content of the group holding the caret, from the group’s start up to the caret. */
+function caretGroup(mf) {
+    const pos = mf.position;
+    mf.executeCommand('extendToGroupStart');
+    const start = mf.selection.ranges[0][0], text = mf.getValue(mf.selection, 'latex');
+    mf.position = pos;
+    return {start, text};
+}
+/* Plain-text reading: sqrt5-1 is √5 − 1 and 3/4+1 is ¾ + 1, so an operator typed right after a
+   lone number or constant in a root, exponent or denominator steps out of it first. */
+function leaveAtomGroup(mf) {
+    try {
+        const g = caretGroup(mf);
+        if (g.start > 0 && /^-?(\d+\.?\d*|\.\d+|\\pi|e)$/.test(g.text)) mf.executeCommand('moveAfterParent');
+    } catch {}
+}
+/* sqrt(5) and e^(-1) behave like function calls: a closing bracket that wraps the whole argument ends it. */
+function closeWrappedGroup(mf) {
+    try {
+        const g = caretGroup(mf), s = g.text;
+        if (g.start === 0 || s[0] !== '(' || s[s.length - 1] !== ')') return;
+        let depth = 0;
+        for (let i = 0; i < s.length; i++) {
+            depth += s[i] === '(' ? 1 : s[i] === ')' ? -1 : 0;
+            if (depth === 0 && i < s.length - 1) return; // the first bracket closes early: (a)+(b)
+        }
+        mf.executeCommand('moveAfterParent');
+    } catch {}
+}
+/* Read an answer box: LaTeX from the math editor, plain text from the fallback input. */
+function readField(i) {
+    const el = $(`#answer-${i}`), raw = (el.value || '').trim();
+    if (!raw) return {empty: true, value: NaN};
+    try {
+        const r = isMath(el) ? MathInput.readLatex(raw) : MathInput.read(raw);
+        return {value: r.value, latex: r.latex, raw};
+    } catch (err) {
+        return {value: NaN, error: err.message, raw};
+    }
+}
 let today = localDate(), date = today, topic = 'circuits', level = 'foundations', group = 'electrical', view = 'today', hintCount = 0, solutionShown = false, exercise;
 let progress = {}, attempts = {}, storageAvailable = true;
 try {
@@ -101,7 +171,7 @@ function renderChallenge() {
     renderTopics();
     renderLevels();
     const exactParts = e.parts.some(p => p.exact);
-    $('#challenge').innerHTML = `<div class="challenge-top"><div class="challenge-tags"><span class="tag">${t.name}</span><span class="tag level">${e.level}</span></div><span class="challenge-date">${date === today ? 'TODAY’S CHALLENGE' : 'FROM THE ARCHIVE'}</span></div><div class="challenge-body ${curated ? 'curated' : ''}"><div class="problem-meta"><span id="status-line">${record?.status === 'solved' ? '✓ COMPLETED' : record?.status === 'reviewed' ? 'SOLUTION REVIEWED' : e.parts.length > 1 ? `${e.parts.length} CONNECTED PARTS` : 'ONE KEY INSIGHT'}</span><span>${e.minutes}</span></div><h3>${e.title}</h3><div class="problem-text">${e.text}</div>${e.diagram ? `<div class="diagram-toolbar"><span>DIAGRAM</span><button type="button" id="enlarge-diagram" class="text-button" aria-haspopup="dialog">Enlarge</button></div><div class="diagram">${e.diagram}</div>` : ''}${e.givens?.length ? `<div class="givens">${e.givens.map(g => `<span class="given">${g}</span>`).join('')}</div>` : ''}<details class="prerequisites"><summary>What you’ll need</summary><p>${e.prerequisites}</p></details><form id="answer-form" novalidate><div class="answers">${e.parts.map((p, i) => `<div class="answer-part"><label class="answer-label" for="answer-${i}">${e.parts.length > 1 ? String.fromCharCode(65 + i) + '. ' : ''}${p.label}</label><div class="input-wrap"><input id="answer-${i}" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="${p.exact ? 'e.g. pi/4 or ln(2)' : 'Enter a value'}" aria-describedby="answer-help part-feedback-${i}" required>${p.unit ? `<span>${p.unit}</span>` : ''}</div><div class="preview" id="preview-${i}" aria-hidden="true"></div><div id="part-feedback-${i}" class="part-feedback" role="status"></div></div>`).join('')}</div><p class="input-help" id="answer-help">${exactParts ? 'Exact forms welcome: <code>pi/4</code>, <code>ln(2)</code>, <code>sqrt(3)/2</code>, <code>(1+sqrt5)/2</code>, <code>e^-1</code>. Decimals need 4 significant figures.' : 'Numbers, fractions and expressions such as <code>2e-3</code> or <code>sqrt(2)*10</code> are accepted. Tolerance: 1% unless stated; counts must be exact.'}</p><div class="submit-row"><button class="primary" type="submit" id="check">${e.parts.length > 1 ? 'Check all answers' : 'Check answer'}</button><span id="attempts">${attemptsLabel()}</span></div><div class="feedback ${record?.status === 'solved' ? 'success' : ''}" id="feedback" role="status">${record?.status === 'solved' ? 'You’ve solved this challenge. You can revisit your reasoning below.' : ''}</div></form></div><div class="challenge-actions"><button id="hint" class="text-button">☼ &nbsp; Get a hint <span id="hint-count">(0/${e.hints.length})</span></button><button id="solution" class="text-button" aria-expanded="${solutionShown}">${solutionShown ? 'Hide solution' : 'Reveal solution'}</button></div><div id="hints" class="hint-content" hidden></div><div id="solution-content" class="solution" ${solutionShown ? '' : 'hidden'}>${solutionHTML()}</div>${sourceHTML(e.source)}`;
+    $('#challenge').innerHTML = `<div class="challenge-top"><div class="challenge-tags"><span class="tag">${t.name}</span><span class="tag level">${e.level}</span></div><span class="challenge-date">${date === today ? 'TODAY’S CHALLENGE' : 'FROM THE ARCHIVE'}</span></div><div class="challenge-body ${curated ? 'curated' : ''}"><div class="problem-meta"><span id="status-line">${record?.status === 'solved' ? '✓ COMPLETED' : record?.status === 'reviewed' ? 'SOLUTION REVIEWED' : e.parts.length > 1 ? `${e.parts.length} CONNECTED PARTS` : 'ONE KEY INSIGHT'}</span><span>${e.minutes}</span></div><h3>${e.title}</h3><div class="problem-text">${e.text}</div>${e.diagram ? `<div class="diagram-toolbar"><span>DIAGRAM</span><button type="button" id="enlarge-diagram" class="text-button" aria-haspopup="dialog">Enlarge</button></div><div class="diagram">${e.diagram}</div>` : ''}${e.givens?.length ? `<div class="givens">${e.givens.map(g => `<span class="given">${g}</span>`).join('')}</div>` : ''}<details class="prerequisites"><summary>What you’ll need</summary><p>${e.prerequisites}</p></details><form id="answer-form" novalidate><div class="answers">${e.parts.map((p, i) => `<div class="answer-part"><label class="answer-label" for="answer-${i}">${e.parts.length > 1 ? String.fromCharCode(65 + i) + '. ' : ''}${p.label}</label><div class="input-wrap">${fieldHTML(p, i)}${p.unit ? `<span>${p.unit}</span>` : ''}</div><div class="preview" id="preview-${i}" aria-hidden="true"></div><div id="part-feedback-${i}" class="part-feedback" role="status"></div></div>`).join('')}</div><p class="input-help" id="answer-help">${MATH_EDITOR ? 'Type maths naturally: <code>3/4</code> becomes a fraction, <code>sqrt</code> a root, <code>pi</code> π and <code>^</code> an exponent. Press <kbd>→</kbd> to leave a fraction, root or exponent, and <kbd>Enter</kbd> to check. ' : 'Type expressions such as <code>pi/4</code>, <code>ln(2)</code> or <code>sqrt(3)/2</code>. '}${exactParts ? 'Exact answers are best; decimals need 4 significant figures.' : 'Decimals and scientific notation (<code>2e-3</code>) work too. Tolerance: 1% unless stated; counts must be exact.'}</p><div class="submit-row"><button class="primary" type="submit" id="check">${e.parts.length > 1 ? 'Check all answers' : 'Check answer'}</button><span id="attempts">${attemptsLabel()}</span></div><div class="feedback ${record?.status === 'solved' ? 'success' : ''}" id="feedback" role="status">${record?.status === 'solved' ? 'You’ve solved this challenge. You can revisit your reasoning below.' : ''}</div></form></div><div class="challenge-actions"><button id="hint" class="text-button">☼ &nbsp; Get a hint <span id="hint-count">(0/${e.hints.length})</span></button><button id="solution" class="text-button" aria-expanded="${solutionShown}">${solutionShown ? 'Hide solution' : 'Reveal solution'}</button></div><div id="hints" class="hint-content" hidden></div><div id="solution-content" class="solution" ${solutionShown ? '' : 'hidden'}>${solutionHTML()}</div>${sourceHTML(e.source)}`;
     renderMath($('#challenge'));
     if (e.diagram)
         $('#enlarge-diagram').onclick = () => {
@@ -109,7 +179,16 @@ function renderChallenge() {
             $('#large-diagram').innerHTML = e.diagram;
             $('#diagram-dialog').showModal();
         };
-    e.parts.forEach((p, i) => $(`#answer-${i}`).addEventListener('input', () => preview(i)));
+    e.parts.forEach((p, i) => {
+        const el = $(`#answer-${i}`);
+        el.addEventListener('input', () => preview(i));
+        if (isMath(el)) el.smartSuperscript = false; // 2^10 stays one exponent; operators step out instead.
+        if (isMath(el)) el.addEventListener('keydown', ev => {
+            if (ev.key === 'Enter') { ev.preventDefault(); $('#answer-form').requestSubmit(); }
+            else if (ev.key === ')') { smartClose(el); setTimeout(() => closeWrappedGroup(el)); }
+            else if ('+-*/'.includes(ev.key)) leaveAtomGroup(el);
+        }, {capture: true});
+    });
     $('#answer-form').onsubmit = checkAnswer;
     $('#hint').onclick = showHint;
     $('#solution').onclick = showSolution;
@@ -117,7 +196,7 @@ function renderChallenge() {
 }
 function applyLock() {
     const on = locked();
-    exercise.parts.forEach((p, i) => { $(`#answer-${i}`).disabled = on; });
+    exercise.parts.forEach((p, i) => { const el = $(`#answer-${i}`); el.disabled = on; if (isMath(el)) el.readOnly = on; });
     $('#check').disabled = on;
     if (on && !$('#feedback').textContent) {
         $('#feedback').className = 'feedback error';
@@ -125,18 +204,18 @@ function applyLock() {
     }
 }
 function preview(i) {
-    const out = $(`#preview-${i}`), src = $(`#answer-${i}`).value.trim();
-    if (!src) { out.innerHTML = ''; return; }
-    try {
-        const r = MathInput.read(src);
-        if (!Number.isFinite(r.value)) throw Error();
-        const tex = '\\displaystyle ' + (/^-?[\d.]+$/.test(src) ? r.latex : `${r.latex} \\approx ${tf(r.value, 6)}`);
-        if (window.katex) katex.render(tex, out, {throwOnError: false}); else out.textContent = tex;
-        out.classList.remove('invalid');
-    } catch {
-        out.textContent = '…';
+    const out = $(`#preview-${i}`), r = readField(i);
+    out.classList.remove('invalid');
+    if (r.empty) { out.innerHTML = ''; return; }
+    if (!Number.isFinite(r.value)) {
+        out.textContent = r.error && /empty box|Incomplete/.test(r.error) ? 'Keep going…' : 'Not a number yet';
         out.classList.add('invalid');
+        return;
     }
+    const plainNumber = /^-?[\d.]+$/.test(r.raw);
+    // The math editor already shows the typeset expression, so only add its value; the fallback shows both.
+    const tex = '\\displaystyle ' + (isMath($(`#answer-${i}`)) ? (plainNumber ? '' : `\\approx ${tf(r.value, 6)}`) : (plainNumber ? r.latex : `${r.latex} \\approx ${tf(r.value, 6)}`));
+    if (window.katex) katex.render(tex, out, {throwOnError: false}); else out.textContent = tex;
 }
 function sourceHTML(s) {
     if (s?.reading)
@@ -177,7 +256,7 @@ function checkAnswer(event) {
     if (locked()) return applyLock();
     let correct = 0, unreadable = false;
     exercise.parts.forEach((p, i) => {
-        const field = $(`#answer-${i}`), out = $(`#part-feedback-${i}`), value = parseAnswer(field.value), ok = answerMatches(value, p);
+        const field = $(`#answer-${i}`), out = $(`#part-feedback-${i}`), value = readField(i).value, ok = answerMatches(value, p);
         if (ok)
             correct++;
         if (!Number.isFinite(value)) unreadable = true;

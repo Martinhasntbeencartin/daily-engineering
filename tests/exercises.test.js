@@ -91,6 +91,12 @@ for (const t of TOPICS) for (const l of run('CURATED_LEVELS')) {
 /* ---- the answer parser ---- */
 for (const [src, want] of [['pi/4', Math.PI / 4], ['ln2', Math.LN2], ['(sqrt(5)-1)/2', (Math.sqrt(5) - 1) / 2], ['2^(2/5)', 2 ** .4], ['e^-pi', Math.exp(-Math.PI)], ['25ln10', 25 * Math.log(10)], ['2e-3', .002], ['3sqrt2', 3 * Math.SQRT2], ['√3/2', Math.sqrt(3) / 2], ['−1/6', -1 / 6], ['1/(2pi)', 1 / (2 * Math.PI)], ['5-2sqrt6', 5 - 2 * Math.sqrt(6)], ['-2^2', -4], ['0,5', .5], ['2·π', 2 * Math.PI], ['atan(1)*4', Math.PI]])
     close(MathInput.read(src).value, want, 1e-12, `parser "${src}"`);
+/* LaTeX exactly as the MathLive editor emits it (captured from real keystrokes) → value */
+for (const [latex, want] of [[T('\\frac34'), .75], [T('\\frac{\\pi}{4}'), Math.PI / 4], [T('\\frac{1}{\\sqrt2}'), Math.SQRT1_2], [T('e^{-\\pi}'), Math.exp(-Math.PI)], [T('\\frac{(1+\\sqrt5)}{2}'), (1 + Math.sqrt(5)) / 2], [T('\\sqrt{(2)}'), Math.SQRT2], [T('25\\ln10'), 25 * Math.log(10)], [T('-\\frac16'), -1 / 6], [T('2\\cdot\\pi'), 2 * Math.PI], [T('2^{(\\frac25)}'), 2 ** .4], [T('100e^{-\\pi}'), 100 * Math.exp(-Math.PI)], [T('a\\tan\\left(1\\right)'), Math.PI / 4], [T('\\arctan\\left(1\\right)'), Math.PI / 4], [T('\\frac{1}{(2\\pi)}'), 1 / (2 * Math.PI)], [T('5-2\\sqrt6'), 5 - 2 * Math.sqrt(6)], [T('\\frac{8\\sqrt2}{\\pi^2}'), 8 * Math.SQRT2 / Math.PI ** 2], [T('2^{10}-1'), 1023], [T('\\ln(\\frac{49}{48})'), Math.log(49 / 48)], [T('(\\frac56)^{(\\frac72)}'), (5 / 6) ** 3.5], [T('1{,}5'), 1.5], [T('\\sqrt[3]{8}'), 2], [T('\\left|-3\\right|'), 3], [T('2e-3'), .002], [T('3\\times4'), 12]])
+    close(MathInput.readLatex(latex).value, want, 1e-12, `editor LaTeX "${latex}"`);
+for (const bad of [T('\\frac{4}{\\placeholder{}}'), T('\\sqrt{'), T('\\alpha')])
+    try { MathInput.readLatex(bad); fail(`editor LaTeX accepted "${bad}"`); } catch { checks++; }
+function T(s) { return s; }
 for (const bad of ['', 'pi/', '2**', 'foo', '(1+2'])
     try { MathInput.read(bad); fail(`parser accepted "${bad}"`); } catch { checks++; }
 
