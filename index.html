@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Engineer</title>
+<meta name="description" content="A new engineering exercise every day, from foundations to research-grade problems, across electrical, mechanical and civil engineering.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23315740'/%3E%3Cpath d='M5 18h5l3-8 6 14 3-6h5' fill='none' stroke='%23f4efe3' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="site-header">
+  <a href="#" class="brand" aria-label="Daily Engineer home"><span class="brand-mark" aria-hidden="true">⌁</span><span>Daily Engineer</span></a>
+  <nav class="views" aria-label="Views">
+    <button data-view="today" class="active">Today</button>
+    <button data-view="archive">Archive</button>
+    <button data-view="progress">Progress</button>
+  </nav>
+  <button id="about" class="text-button about-button">About</button>
+</header>
+
+<main>
+  <section class="hero">
+    <div>
+      <span class="eyebrow" id="view-label">YOUR DAILY PRACTICE</span>
+      <h1 id="view-title">Find your frequency.</h1>
+      <p class="lede">One engineering problem per discipline, every day. Seven levels, from Ohm’s law to graduate-level problems that need numerical methods.</p>
+    </div>
+    <div class="hero-meta">
+      <div class="meta-card"><span class="eyebrow">DATE</span><b id="date-label"></b></div>
+      <div class="meta-card"><span class="eyebrow">NEXT SET IN</span><b id="countdown" class="mono">00:00:00</b></div>
+      <div class="meta-card"><span class="eyebrow">STREAK</span><b><span id="streak">0</span> days</b></div>
+      <a id="open-collection" class="text-button" href="#collection">Browse the open-source problem collection →</a>
+    </div>
+  </section>
+
+  <div id="archive-bar" class="archive-bar" hidden>
+    <label for="archive-date">Pick a date from the last 30 days</label>
+    <input type="date" id="archive-date">
+    <button id="back-today" class="text-button">Back to today</button>
+  </div>
+
+  <section id="level-picker" class="level-picker" aria-label="Difficulty level"></section>
+
+  <section id="practice" class="practice">
+    <aside class="sidebar">
+      <div id="groups" class="group-tabs" role="tablist" aria-label="Discipline group"></div>
+      <div id="topics" class="topics"></div>
+      <p class="local-note"></p>
+    </aside>
+    <article id="challenge" class="challenge" aria-live="polite"></article>
+  </section>
+
+  <section id="progress-view" class="progress-view" hidden></section>
+
+  <section id="collection" class="collection">
+    <span class="eyebrow">OPEN EDUCATIONAL MATERIAL</span>
+    <h2>From the open-source problem collection</h2>
+    <p class="lede">These problems are adapted from MIT OpenCourseWare and James M. Fiore’s open textbooks on Engineering LibreTexts. Each keeps its original figure and licence credit, with new values, extensions and worked solutions.</p>
+    <div id="source-cards" class="source-cards"></div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <span>Daily Engineer · new problems at local midnight</span>
+  <button id="about-footer" class="text-button">How it works</button>
+</footer>
+
+<dialog id="about-dialog" aria-labelledby="about-title">
+  <div class="dialog-body">
+    <h2 id="about-title">How Daily Engineer works</h2>
+    <p>Every day each discipline gets a new problem at each of seven levels. Everyone sees the same problem on the same date, and you can revisit any of the last 30 days from the Archive.</p>
+    <ul>
+      <li><b>Levels 1–3</b>: core laws, multi-step problems and first-year design.</li>
+      <li><b>Levels 4–5</b>: derivations, coupled equations and nonlinear constraints.</li>
+      <li><b>Level 6, Expert</b>: graduate qualifying-exam depth. Expect 60–90 minutes.</li>
+      <li><b>Level 7, Mastery</b>: research-grade problems. Bring a calculator or a short script.</li>
+    </ul>
+    <p>Answers are checked to 1%. Use hints if you are stuck. Revealing the solution marks the problem as reviewed rather than solved. Your progress is stored only in this browser.</p>
+    <div class="dialog-actions"><button id="close-dialog" class="text-button">Close</button><button id="start-practice" class="primary">Start practising</button></div>
+  </div>
+</dialog>
+
+<dialog id="diagram-dialog" class="diagram-dialog" aria-labelledby="diagram-title">
+  <div class="dialog-body">
+    <div class="dialog-head"><h2 id="diagram-title"></h2><button id="close-diagram" class="text-button">Close</button></div>
+    <div id="large-diagram" class="diagram large"></div>
+  </div>
+</dialog>
+
+<script src="js/diagrams.js"></script>
+<script src="js/foundations.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/extra.js"></script>
+<script src="js/hard.js"></script>
+<script src="js/numerics.js"></script>
+<script src="js/expert.js"></script>
+<script src="js/mechanical.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
