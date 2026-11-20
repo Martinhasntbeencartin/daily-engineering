@@ -3,9 +3,7 @@
 A static web app with a new engineering problem every day, in the spirit of dailyintegral.com.
 
 - **11 topics in two groups.** Electrical: circuits, electronics, signals, control, digital, electromagnetism, power, measurement. Mechanical & civil: statics/structures, dynamics/vibrations, thermo-fluids.
-- **7 levels.**
-  - **Levels 1–3 (Foundations, Applied, Intermediate)** are a hand-curated bank of 132 problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
-  - **Levels 4–7 (Advanced, Challenge, Expert, Mastery)** are generated multi-part problems whose values change daily, up to research-grade work that needs numerical methods.
+- **Four difficulty choices.** Level 3 (Intermediate) starts with a rotation of 44 hand-picked problems. Levels 4, 5 and 6 (Advanced, Challenge and Expert) offer multi-part problems with daily parameter changes.
 - **LaTeX everywhere.** All problem text, hints and solutions are typeset with KaTeX, which is bundled in `vendor/katex/` (MIT licence), so the site needs no CDN.
 - **A real maths editor for answers.** The answer box is a MathLive field (bundled in `vendor/mathlive/`, MIT licence; it shares KaTeX's fonts), so maths becomes typeset as you type:
   - `3/4` becomes a stacked fraction, `sqrt` a root, `pi` gives π, and `^` starts an exponent.
@@ -55,7 +53,7 @@ The suite checks:
 
 ## Adding a curated problem
 
-Add an object to the relevant `bank(topic, level, [...])` list in `js/bank.js` (electrical) or `js/bank-mech.js` (mechanical & civil):
+Add an object to the topic’s Level 3 list, `bank(topic, 'advanced', [...])`, in `js/bank.js` (electrical) or `js/bank-mech.js` (mechanical & civil):
 
 ```js
 {

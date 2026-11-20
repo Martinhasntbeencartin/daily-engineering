@@ -13,20 +13,22 @@ const TOPICS = [
     {id: 'thermo', name: 'Thermo & fluids', sub: 'Cycles, flow & heat transfer', icon: '♨', group: 'mechanical'}
 ];
 const LEVELS = [
-    {id: 'foundations', name: 'Foundations', tag: 'Level 1', description: 'One key insight, an exact answer.', time: '10–20 min'},
-    {id: 'applied', name: 'Applied', tag: 'Level 2', description: 'A classic result you derive yourself.', time: '15–25 min'},
-    {id: 'advanced', name: 'Intermediate', tag: 'Level 3', description: 'Optimisation, transforms and elegant tricks.', time: '20–40 min'},
-    {id: 'university', name: 'Advanced', tag: 'Level 4', description: 'Derive models. Solve coupled equations.', time: '30–50 min'},
+    {id: 'foundations', retired: true, name: 'Foundations', tag: 'Level 1', description: 'One key insight, an exact answer.', time: '10–20 min'},
+    {id: 'applied', retired: true, name: 'Applied', tag: 'Level 2', description: 'A classic result you derive yourself.', time: '15–25 min'},
+    {id: 'advanced', name: 'Intermediate', tag: 'Level 3', description: 'Exact answers using optimisation and transforms.', time: '20–40 min'},
+    {id: 'university', name: 'Advanced', tag: 'Level 4', description: 'Model systems and solve coupled equations.', time: '30–50 min'},
     {id: 'challenge', name: 'Challenge', tag: 'Level 5', description: 'Nonlinear systems and design constraints.', time: '45–75 min'},
-    {id: 'expert', name: 'Expert', tag: 'Level 6', description: 'Graduate qualifying-exam depth.', time: '60–90 min'},
-    {id: 'mastery', name: 'Mastery', tag: 'Level 7', description: 'Research grade, with numerical methods.', time: '90–150 min'}
+    {id: 'expert', name: 'Expert', tag: 'Level 6', description: 'Graduate-level analysis and design.', time: '60–90 min'},
+    {id: 'mastery', retired: true, name: 'Mastery', tag: 'Level 7', description: 'Research grade, with numerical methods.', time: '90–150 min'}
 ];
+// Retain the full catalogue for historical records and reproducible exercises.
+const PRACTICE_LEVELS = LEVELS.filter(level => !level.retired);
 const CURATED_LEVELS = ['foundations', 'applied', 'advanced'];
 const fmt = n => Number(n.toPrecision(5)).toString();
 /* tolerance is relative; abs is an optional absolute floor for answers that can be close to zero. */
 const part = (label, answer, unit, tolerance=.01, abs=0) => ({label, answer, unit, tolerance, abs});
 
-function makeExercise(topic, date, level='foundations') {
+function makeExercise(topic, date, level=PRACTICE_LEVELS[0].id) {
     if (!TOPICS.some(t => t.id === topic) || !LEVELS.some(l => l.id === level))
         throw Error('Unknown challenge selection');
     if (CURATED_LEVELS.includes(level))
