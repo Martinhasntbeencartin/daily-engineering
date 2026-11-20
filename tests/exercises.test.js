@@ -5,7 +5,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..');
 const katex = require(path.join(root, 'vendor/katex/katex.min.js'));
-const files = ['diagrams', 'mathtext', 'core', 'hard', 'numerics', 'expert', 'mechanical', 'bank', 'bank-mech'];
+const files = ['diagrams', 'figures', 'network-figures', 'source-figures', 'mathtext', 'core', 'hard', 'numerics', 'expert', 'mechanical', 'bank-figures', 'bank', 'bank-mech'];
 const ctx = vm.createContext({console, Math, Number, Date, Object, Array, String, JSON, Error});
 for (const f of files)
     vm.runInContext(fs.readFileSync(path.join(root, 'js', f + '.js'), 'utf8'), ctx, {filename: f + '.js'});
@@ -51,8 +51,11 @@ for (let d = 0; d < 120; d++) {
         try { e = makeExercise(t.id, date, l.id); } catch (err) { fail(`${t.id}/${l.id}/${date} threw ${err.stack}`); continue; }
         checks++;
         const where = `${t.id}/${l.id}/${date}`;
-        for (const k of ['title', 'text', 'idea', 'prerequisites', 'level', 'minutes'])
+        for (const k of ['title', 'text', 'idea', 'prerequisites', 'level', 'minutes', 'diagram'])
             if (!e[k]) fail(`${where} missing ${k}`);
+        if (!/<svg\b[^>]*aria-label="[^"]+"/.test(e.diagram) ||
+            (!/<(?:path|circle|line|polyline|polygon)\b/.test(e.diagram) && (e.diagram.match(/<rect\b/g) || []).length < 2))
+            fail(`${where} missing labelled diagram geometry: ${e.title}`);
         if (!e.parts?.length || !e.hints?.length || !e.steps?.length) fail(`${where} missing parts/hints/steps`);
         if (e.level !== l.name) fail(`${where} level label ${e.level} ≠ ${l.name}`);
         for (const p of e.parts) {

@@ -60,7 +60,7 @@
   <section id="collection" class="collection">
     <span class="eyebrow">OPEN EDUCATIONAL MATERIAL</span>
     <h2>From the open-source problem collection</h2>
-    <p class="lede">These problems are adapted from MIT OpenCourseWare and James M. Fiore’s open textbooks on Engineering LibreTexts. Each keeps its original figure and licence credit, with new values, extensions and worked solutions.</p>
+    <p class="lede">These problems are adapted from MIT OpenCourseWare and James M. Fiore’s open textbooks on Engineering LibreTexts. The diagrams are redrawn for these exercises. Each problem includes its source, licence and worked solution.</p>
     <div id="source-cards" class="source-cards"></div>
   </section>
 </main>
@@ -88,7 +88,7 @@
 <dialog id="diagram-dialog" class="diagram-dialog" aria-labelledby="diagram-title">
   <div class="dialog-body">
     <div class="dialog-head"><h2 id="diagram-title"></h2><button id="close-diagram" class="text-button">Close</button></div>
-    <div id="large-diagram" class="diagram large"></div>
+    <div id="large-diagram" class="diagram large" tabindex="0" role="region" aria-labelledby="diagram-title"></div>
   </div>
 </dialog>
 
@@ -96,12 +96,16 @@
 <script src="vendor/katex/auto-render.min.js"></script>
 <script src="vendor/mathlive/mathlive.min.js"></script>
 <script src="js/diagrams.js"></script>
+<script src="js/figures.js"></script>
+<script src="js/network-figures.js"></script>
+<script src="js/source-figures.js"></script>
 <script src="js/mathtext.js"></script>
 <script src="js/core.js"></script>
 <script src="js/hard.js"></script>
 <script src="js/numerics.js"></script>
 <script src="js/expert.js"></script>
 <script src="js/mechanical.js"></script>
+<script src="js/bank-figures.js"></script>
 <script src="js/bank.js"></script>
 <script src="js/bank-mech.js"></script>
 <script src="js/app.js"></script>
