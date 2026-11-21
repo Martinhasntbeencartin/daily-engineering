@@ -3,9 +3,10 @@
 A static web app with a new engineering problem every day, in the spirit of dailyintegral.com.
 
 - **11 topics in two groups.** Electrical: circuits, electronics, signals, control, digital, electromagnetism, power, measurement. Mechanical & civil: statics/structures, dynamics/vibrations, thermo-fluids.
-- **7 levels.**
-  - **Levels 1–3 (Foundations, Applied, Intermediate)** are a hand-curated bank of 132 problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
-  - **Levels 4–7 (Advanced, Challenge, Expert, Mastery)** are generated multi-part problems whose values change daily, up to research-grade work that needs numerical methods.
+- **4 levels.**
+  - **Level 1 (Insight)** is a hand-curated bank of 44 problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
+  - **Levels 2–4 (Advanced, Challenge, Expert)** are generated multi-part problems whose values change daily. Level 4 alternates between qualifying-exam problems and research-grade work that needs numerical methods.
+  - Internally the generators work on five difficulty *tiers* (`TIERS` in `js/core.js`); each public level maps to one or more tiers, so the levels can be regrouped without changing any problem.
 - **LaTeX everywhere.** All problem text, hints and solutions are typeset with KaTeX, which is bundled in `vendor/katex/` (MIT licence), so the site needs no CDN.
 - **A real maths editor for answers.** The answer box is a MathLive field (bundled in `vendor/mathlive/`, MIT licence; it shares KaTeX's fonts), so maths becomes typeset as you type:
   - `3/4` becomes a stacked fraction, `sqrt` a root, `pi` gives π, and `^` starts an exponent.
@@ -47,15 +48,15 @@ node tests/editor.test.js
 `editor.test.js` needs Playwright with Chromium. It types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces.
 
 The suite checks:
-- Every topic × level for 120 days: each exercise is complete and every answer is finite.
+- Every topic × level, and every topic × tier, for 120 days: each exercise is complete and every answer is finite.
 - Every LaTeX fragment compiles with KaTeX in strict mode.
 - Every curated exact form evaluates to its stored answer, and each problem's `verify()` function independently reproduces that answer numerically.
 - The answer parser has unit tests.
-- Generated Expert and Mastery answers are cross-checked: KCL residuals, the Riccati equation, the Kalata closed form, CRC long division, load-flow balance, truss equilibrium and the bridge zero.
+- Generated Level 4 answers (Expert and Mastery tiers) are cross-checked: KCL residuals, the Riccati equation, the Kalata closed form, CRC long division, load-flow balance, truss equilibrium and the bridge zero.
 
 ## Adding a curated problem
 
-Add an object to the relevant `bank(topic, level, [...])` list in `js/bank.js` (electrical) or `js/bank-mech.js` (mechanical & civil):
+Add an object to the relevant `bank(topic, 'advanced', [...])` list in `js/bank.js` (electrical) or `js/bank-mech.js` (mechanical & civil):
 
 ```js
 {
@@ -71,12 +72,12 @@ Add an object to the relevant `bank(topic, level, [...])` list in `js/bank.js` (
 
 | File | Contents |
 | --- | --- |
-| `js/core.js` | Topics, levels, router `makeExercise` |
+| `js/core.js` | Topics, tiers, levels, router `makeExercise` / `makeTierExercise` |
 | `js/mathtext.js` | LaTeX helpers (`T`, `tf`, `tc`), the answer parser and the editor-LaTeX converter |
-| `js/bank.js`, `js/bank-mech.js` | Curated Levels 1–3 |
-| `js/hard.js` | Electrical Levels 4–5, open-source credits, complex-number helpers |
-| `js/expert.js` | Electrical Levels 6–7 |
-| `js/mechanical.js` | Mechanical & civil Levels 4–7 |
+| `js/bank.js`, `js/bank-mech.js` | Curated Level 1 |
+| `js/hard.js` | Electrical Levels 2–3, open-source credits, complex-number helpers |
+| `js/expert.js` | Electrical Level 4 |
+| `js/mechanical.js` | Mechanical & civil Levels 2–4 |
 | `js/numerics.js` | Linear solve, matrix exponential, Jacobi eigenvalues, polynomial roots, bisection, Simpson |
 | `js/diagrams.js` | SVG drawing helpers |
 | `js/app.js` | UI, progress and attempts (localStorage), archive |

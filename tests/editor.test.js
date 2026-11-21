@@ -75,8 +75,17 @@ server.listen(0, async () => {
         }
         // A unit typed after the answer is accepted; a different unit gets a clear hint.
         await page.evaluate(() => localStorage.clear());
-        await page.click('[data-group="electrical"]'); await page.click('[data-topic="circuits"]'); await page.click('[data-level="foundations"]');
+        await page.click('[data-group="electrical"]'); await page.click('[data-topic="circuits"]'); await page.click('[data-level="level-1"]');
         await page.waitForSelector('math-field');
+        // Use a date whose first answer is in Ω (from the archive if today's isn't).
+        if (await page.evaluate(() => exercise.parts[0].unit !== 'Ω')) {
+            await page.click('[data-view="archive"]');
+            await page.evaluate(() => {
+                const input = document.getElementById('archive-date');
+                for (let back = 1; back <= 30 && exercise.parts[0].unit !== 'Ω'; back++) { input.value = shifted(today, -back); input.dispatchEvent(new Event('change')); }
+            });
+            await page.waitForSelector('math-field');
+        }
         for (const [keys, want] of [['1.618 ohm', 1.618], ['(1+sqrt5)/2 Ω', (1 + Math.sqrt(5)) / 2], ['1.618 kohm', NaN]]) {
             await page.evaluate(() => { const m = document.getElementById('answer-0'); m.value = ''; m.focus(); });
             await page.waitForTimeout(200);
@@ -97,6 +106,21 @@ server.listen(0, async () => {
         await page.keyboard.press('Enter');
         await page.waitForTimeout(100);
         if (!/correct|attempt/i.test(await page.textContent('#feedback'))) { failures++; console.log('FAIL Enter did not submit'); }
+        // Progress saved by the seven-level version moves to the level that now serves its tier.
+        await page.evaluate(() => {
+            localStorage.clear();
+            localStorage.setItem('daily-engineer-v1', JSON.stringify({[`${today}:circuits:mastery`]: {status: 'solved', daily: true}, [`${today}:circuits:foundations`]: {status: 'solved', daily: true}}));
+            localStorage.setItem('daily-engineer-attempts', JSON.stringify({[`${today}:circuits:challenge`]: 3}));
+            localStorage.setItem('daily-engineer-level', 'challenge');
+            localStorage.setItem('daily-engineer-group', 'electrical');
+        });
+        await page.reload();
+        await page.waitForSelector('math-field');
+        const moved = await page.evaluate(() => ({level, attempts: attempts[`${today}:circuits:level-3`], cards: [...document.querySelectorAll('.level-option')].map(b => b.querySelector('.level-top span').textContent + ':' + b.querySelector('.level-completion').textContent)}));
+        const movedOk = moved.level === 'level-3' && moved.attempts === 3 && moved.cards.length === 4 && /Level 4:✓ Solved/.test(moved.cards.join('|')) && !/Level [123]:✓/.test(moved.cards.join('|'));
+        if (!movedOk) failures++;
+        console.log(`${movedOk ? 'ok  ' : 'FAIL'} saved progress moved to new levels:`, JSON.stringify(moved));
+        await page.evaluate(() => localStorage.clear());
         if (errors.length) { failures++; console.log('FAIL page errors', errors); }
     } finally {
         await browser.close();

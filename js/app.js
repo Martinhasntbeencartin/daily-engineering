@@ -154,23 +154,27 @@ function readField(i) {
         return {value: NaN, error: err.message, raw};
     }
 }
-let today = localDate(), date = today, topic = 'circuits', level = 'foundations', group = 'electrical', view = 'today', hintCount = 0, solutionShown = false, exercise;
+let today = localDate(), date = today, topic = 'circuits', level = 'level-1', group = 'electrical', view = 'today', hintCount = 0, solutionShown = false, exercise;
 let progress = {}, attempts = {}, storageAvailable = true;
+/* date:topic:tier → date:topic:level-N. Keys already on a level, or on a retired tier, are left as they are. */
+const migrateKey = k => { const [d, t, l] = k.split(':'), to = l && levelOfTier(l); return to ? `${d}:${t}:${to.id}` : k; };
 try {
     const saved = JSON.parse(localStorage.getItem('daily-engineer-v1') || '{}');
     if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
         for (const [k, v] of Object.entries(saved)) {
             if (!v || !['solved', 'reviewed'].includes(v.status))
                 continue;
-            // Preserve the original records; old keys belong to Foundations.
-            progress[k.split(':').length === 2 ? k + ':foundations' : k] = v;
+            // Records saved before the levels were regrouped carry a tier id: file them under its level.
+            const k2 = migrateKey(k);
+            if (!progress[k2] || v.status === 'solved') progress[k2] = v;
         }
     }
     const a = JSON.parse(localStorage.getItem('daily-engineer-attempts') || '{}');
-    if (a && typeof a === 'object' && !Array.isArray(a)) attempts = a;
-    const preference = localStorage.getItem('daily-engineer-level');
-    if (LEVELS.some(l => l.id === preference))
-        level = preference;
+    if (a && typeof a === 'object' && !Array.isArray(a))
+        for (const [k, n] of Object.entries(a)) attempts[migrateKey(k)] = Math.max(attempts[migrateKey(k)] || 0, n);
+    const preference = localStorage.getItem('daily-engineer-level'), chosen = LEVELS.find(l => l.id === preference) || levelOfTier(preference);
+    if (chosen)
+        level = chosen.id;
     const g = localStorage.getItem('daily-engineer-group');
     if (GROUPS.some(x => x.id === g)) {
         group = g;
@@ -209,7 +213,7 @@ function streak() {
     return n;
 }
 function renderLevels() {
-    $('#level-picker').innerHTML = `<div class="levels-heading"><span class="eyebrow">CHOOSE YOUR CHALLENGE</span><span>Levels 1–3: hand-picked problems with exact answers. Levels 4–7: multi-part problems that change daily.</span></div><div class="level-options">${LEVELS.map((l, i) => `<button class="level-option ${level === l.id ? 'selected' : ''} ${i >= 5 ? 'elite' : ''}" data-level="${l.id}" aria-pressed="${level === l.id}"><span class="level-top"><span>${l.tag}</span><span>${l.time}</span></span><strong>${l.name}</strong><span class="level-description">${l.description}</span><span class="level-completion">${progress[key(topic, l.id)]?.status === 'solved' ? '✓ Solved for this date' : progress[key(topic, l.id)]?.status === 'reviewed' ? 'Solution reviewed' : 'Ready to explore'}</span></button>`).join('')}</div>`;
+    $('#level-picker').innerHTML = `<div class="levels-heading"><span class="eyebrow">CHOOSE YOUR CHALLENGE</span><span>Level 1: hand-picked problems with exact answers. Levels 2–4: multi-part problems that change daily.</span></div><div class="level-options">${LEVELS.map(l => `<button class="level-option ${level === l.id ? 'selected' : ''} ${l.elite ? 'elite' : ''}" data-level="${l.id}" aria-pressed="${level === l.id}"><span class="level-top"><span>${l.tag}</span><span>${l.time}</span></span><strong>${l.name}</strong><span class="level-description">${l.description}</span><span class="level-completion">${progress[key(topic, l.id)]?.status === 'solved' ? '✓ Solved for this date' : progress[key(topic, l.id)]?.status === 'reviewed' ? 'Solution reviewed' : 'Ready to explore'}</span></button>`).join('')}</div>`;
     document.querySelectorAll('[data-level]').forEach(b => b.onclick = () => {
         level = b.dataset.level;
         remember('daily-engineer-level', level);
@@ -243,7 +247,7 @@ function renderChallenge() {
     hintCount = 0;
     solutionShown = progress[key()]?.status === 'reviewed';
     exercise = makeExercise(topic, date, level);
-    const t = TOPICS.find(t => t.id === topic), e = exercise, record = progress[key()], curated = CURATED_LEVELS.includes(level);
+    const t = TOPICS.find(t => t.id === topic), e = exercise, record = progress[key()], curated = e.curated;
     group = t.group;
     renderTopics();
     renderLevels();
@@ -328,7 +332,7 @@ function sourceHTML(s) {
 }
 function renderSourceCollection() {
     const entries = [['thevenin', 'circuits', 'university', 'Dependent-source Thévenin', 'mit-dependent-source.png'], ['nodal', 'circuits', 'challenge', 'Complex nodal analysis', 'fiore-nodal.png'], ['threeSource', 'circuits', 'expert', 'Three sources, conjugate match', 'fiore-three-source.png'], ['jfet', 'electronics', 'university', 'Nonlinear JFET bias', 'fiore-jfet.png'], ['nonlinear', 'electronics', 'challenge', 'Piecewise amplifier cascade', 'mit-nonlinear-amplifier.png'], ['convolution', 'signals', 'university', 'Repeated-pole convolution', null], ['crossover', 'signals', 'challenge', 'Third-order crossover', 'fiore-woofer.png'], ['rcLadder', 'signals', 'expert', 'Wien-bridge transmission zero', 'fiore-rc-ladder.png']];
-    $('#source-cards').innerHTML = entries.map(([id, t, l, title, img]) => `<article class="source-card">${img ? `<img src="assets/open-materials/${img}" alt="Source diagram for ${title}" loading="lazy">` : '<div class="source-math">$x[n] * h_1[n] * h_2[n]$</div>'}<div><span class="eyebrow">${LEVELS.find(x => x.id === l).name}</span><h3>${title}</h3><p>${OPEN_SOURCES[id].title}</p><button class="text-button" data-practice-topic="${t}" data-practice-level="${l}">Practice this problem</button> · <a href="${OPEN_SOURCES[id].url}" target="_blank" rel="noopener">Original source</a></div></article>`).join('');
+    $('#source-cards').innerHTML = entries.map(([id, t, l, title, img]) => `<article class="source-card">${img ? `<img src="assets/open-materials/${img}" alt="Source diagram for ${title}" loading="lazy">` : '<div class="source-math">$x[n] * h_1[n] * h_2[n]$</div>'}<div><span class="eyebrow">${levelOfTier(l).tag} · ${levelOfTier(l).name}</span><h3>${title}</h3><p>${OPEN_SOURCES[id].title}</p><button class="text-button" data-practice-topic="${t}" data-practice-level="${levelOfTier(l).id}">Practice this problem</button> · <a href="${OPEN_SOURCES[id].url}" target="_blank" rel="noopener">Original source</a></div></article>`).join('');
     renderMath($('#source-cards'));
     document.querySelectorAll('[data-practice-topic]').forEach(b => b.onclick = () => {
         topic = b.dataset.practiceTopic;

@@ -150,12 +150,11 @@ function hardFeedbackDiagram(controller, plant) {
     return drawing(`<path d="M35 105h55m40 0h30m225 0h35m260 0h35M690 105v110H110v-85"/><circle cx="110" cy="105" r="20"/><rect x="160" y="70" width="225" height="70" rx="4"/><rect x="420" y="70" width="260" height="70" rx="4"/>${dt(60, 88, 'r')}${dt(103, 110, '+')}${dt(130, 155, '−')}${dt(272, 111, controller)}${dt(550, 111, plant)}${dt(360, 247, 'Unity negative feedback')}`, 'Controller and plant in a negative unity-feedback loop');
 }
 function makeHardExercise(topic, date, level) {
-    const meta = LEVELS.find(l => l.id === level);
-    if (!TOPICS.some(t => t.id === topic) || !meta)
+    if (!TOPICS.some(t => t.id === topic) || !['university', 'challenge'].includes(level))
         throw Error('Unknown challenge selection');
     const d = Math.floor(Date.parse(date + 'T00:00:00Z') / 86400000), variant = ((d % 3) + 3) % 3, hard = level === 'challenge';
     const p = part, q = (title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source) => ({
-        id: `${topic}-${level}-0`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source, level: meta.name, minutes: meta.time
+        id: `${topic}-${level}-0`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source
     });
     if (topic === 'circuits' && !hard) {
         const r1 = 1000, r2 = 2200, alpha = [500, 1500, 2500][variant], io = [.004, .006, .008][variant], k = 1 + alpha / r1, rth = 1 / (1 / r2 + 1 / (r1 + alpha)), vth = io * k / (1 / r1 + k / r2), isc = vth / rth;
