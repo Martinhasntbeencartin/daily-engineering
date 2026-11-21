@@ -753,13 +753,17 @@ function swoosh(orb, href) {
     const digit = (orb.querySelector('[aria-hidden="true"]') || orb).textContent.trim(); // the visible number, not the screen-reader label
     if (/^\d$/.test(digit)) { const label = document.createElement('span'); label.className = 'swoosh-label'; label.textContent = digit; veil.append(label); }
     document.body.append(veil);
-    const ease = 'cubic-bezier(.65, 0, .35, 1)';
-    const grow = veil.animate([{clipPath: `circle(${r.width / 2}px at ${cx}px ${cy}px)`}, {clipPath: `circle(${reach}px at ${cx}px ${cy}px)`}], {duration: 460, easing: ease, fill: 'forwards'});
-    veil.querySelector('.swoosh-label')?.animate([{transform: 'translate(-50%, -50%) scale(1)', opacity: 1}, {transform: 'translate(-50%, -50%) scale(7)', opacity: 0}], {duration: 520, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards'});
+    const ease = 'cubic-bezier(.7, 0, .3, 1)', main = $('#main'), m = main.getBoundingClientRect();
+    orb.classList.add('swoosh-source'); // the clicked orb lights up as the zoom starts
+    // The camera dives into the orb: the page scales up around it while the glowing circle spreads out of it.
+    const dive = main.animate([{transformOrigin: `${cx - m.left}px ${cy - m.top}px`, transform: 'scale(1)', opacity: 1}, {transformOrigin: `${cx - m.left}px ${cy - m.top}px`, transform: 'scale(3.2)', opacity: 0}], {duration: 620, easing: ease, fill: 'forwards'});
+    const grow = veil.animate([{clipPath: `circle(${r.width / 2}px at ${cx}px ${cy}px)`, offset: 0}, {clipPath: `circle(${r.width * 1.6}px at ${cx}px ${cy}px)`, offset: .25}, {clipPath: `circle(${reach}px at ${cx}px ${cy}px)`, offset: 1}], {duration: 620, easing: ease, fill: 'forwards'});
+    veil.querySelector('.swoosh-label')?.animate([{transform: 'translate(-50%, -50%) scale(1)', opacity: 1}, {transform: 'translate(-50%, -50%) scale(2.4)', opacity: 1, offset: .35}, {transform: 'translate(-50%, -50%) scale(9)', opacity: 0}], {duration: 680, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards'});
     grow.finished.then(() => { // switch pages only once the circle covers the screen
         window.addEventListener('hashchange', () => requestAnimationFrame(() => { // the new page is rendered by now
-            $('#main').animate([{opacity: 0, transform: 'scale(.97)'}, {opacity: 1, transform: 'none'}], {duration: 380, easing: 'cubic-bezier(.2, .7, .2, 1)'});
-            veil.animate([{opacity: 1}, {opacity: 0}], {duration: 380, easing: 'ease-out', fill: 'forwards'}).finished.then(() => { veil.remove(); swooshing = false; });
+            dive.cancel();
+            main.animate([{opacity: 0, transform: 'scale(.92)'}, {opacity: 1, transform: 'none'}], {duration: 460, easing: 'cubic-bezier(.2, .7, .2, 1)'});
+            veil.animate([{opacity: 1}, {opacity: 0}], {duration: 460, easing: 'ease-out', fill: 'forwards'}).finished.then(() => { veil.remove(); swooshing = false; });
         }), {once: true});
         location.hash = href;
     });

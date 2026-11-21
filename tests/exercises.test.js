@@ -208,5 +208,14 @@ for (const date of dates) { // Expert signals: the reported zero is a zero.
     checks++;
     if (H(wz, C) > 1e-12) fail('RC network zero is not a zero');
 }
+
+/* ---- cache-busting: every css/ and js/ link in index.html carries the current content fingerprint ---- */
+{
+    const {fingerprint, REF} = require(path.join(root, 'tools', 'stamp.js'));
+    const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8'), v = fingerprint(html);
+    const links = [...html.matchAll(/(?:href|src)="((?:css|js)\/[^"]+)"/g)].map(m => m[1]);
+    checks++;
+    if (!links.length || links.some(l => !l.endsWith(`?v=${v}`))) fail(`index.html asset stamps are stale (want ?v=${v}); run: node tools/stamp.js`);
+}
 console.log(`${checks} checks, ${failures} failures`);
 process.exit(failures ? 1 : 0);

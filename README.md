@@ -15,7 +15,7 @@ A static web app with a new engineering problem every day, in the spirit of dail
     - The problem, with the answer panel beside it ("Your answer", "4 attempts left"); it stays in view on wide screens.
     - Right under **Check answer**: **Show a hint**, which opens the hint in place, and **Reveal solution**.
     - Once you finish, the panel offers the next level and the next discipline not yet done today.
-  - **The swoosh:** opening a level from any level circle zooms into the orb you clicked. This covers the circles on the Today cards, the level tabs and the archive days; a whole card zooms from its level's circle. A circle grows from the orb to fill the screen with a red glow, the level number swells and fades, and the problem eases in. It is skipped when the system asks for reduced motion, and ctrl/⌘-click still opens a new tab.
+  - **The swoosh:** opening a level from any level circle zooms into the orb you clicked. This covers the circles on the Today cards, the level tabs and the archive days; a whole card zooms from its level's circle. The clicked orb lights up, the page dives into it while a red glow spreads out of it and the level number swells, and then the problem eases in. It is skipped when the system asks for reduced motion, and ctrl/⌘-click still opens a new tab.
   - **Archive** is its own tab: a coin summary, a discipline picker, then today and the last 30 days with unlock buttons.
   - **Shortcuts** (when not typing in an answer box; listed under Help):
     - <kbd>1</kbd>–<kbd>4</kbd> switch level.
@@ -61,6 +61,16 @@ python3 -m http.server 8000
 ```
 
 Then open http://localhost:8000.
+
+## Updating the live site
+
+GitHub Pages lets browsers reuse files for up to 10 minutes. To make sure visitors get new code straight after a deploy, every `css/` and `js/` link in `index.html` carries a fingerprint of the file contents (`?v=…`). After changing any of those files, run:
+
+```bash
+node tools/stamp.js
+```
+
+`tests/exercises.test.js` fails if the stamp is out of date.
 
 ## Test
 
