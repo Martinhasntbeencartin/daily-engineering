@@ -5,51 +5,63 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Daily Engineer</title>
 <meta name="description" content="A new engineering exercise every day, in electrical, mechanical and civil engineering. Choose a discipline and a level from 1 to 4.">
-<meta name="theme-color" content="#0a0f1a">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%230a0f1a' stroke='%236aa8ff' stroke-width='1.5'/%3E%3Cpath d='M6 17h5l3-7 5 13 3-6h4' fill='none' stroke='%236aa8ff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#050506">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23050506'/%3E%3Cpath d='M3 11h26' stroke='%23e8e8ea' stroke-width='1.5'/%3E%3Cpath d='M9 11v7M16 11v7M23 11v7' stroke='%23e8e8ea' stroke-width='1.5'/%3E%3Ccircle cx='9' cy='20' r='2.6' fill='none' stroke='%23e8e8ea' stroke-width='1.5'/%3E%3Ccircle cx='16' cy='20' r='2.6' fill='%23ff4d4d'/%3E%3Ccircle cx='23' cy='20' r='2.6' fill='none' stroke='%23e8e8ea' stroke-width='1.5'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,650;1,9..144,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/katex/katex.min.css">
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 <header class="chrome">
-  <a id="back-link" class="back-link" href="#/" hidden><span aria-hidden="true">←</span> <span id="back-label">All disciplines</span></a>
-  <nav class="corner-links" aria-label="Site">
-    <a href="#/progress" id="progress-link">Progress</a>
-    <button id="about" type="button">About</button>
+  <a id="brand" class="brand mono" href="#/">Daily Engineer</a>
+  <a id="back-link" class="back-link mono" href="#/" hidden><span aria-hidden="true">←</span> <span id="back-label">Home</span></a>
+  <span class="ruler" aria-hidden="true"></span>
+  <span class="chrome-date mono"><span id="chrome-date"></span> · Next set <span class="countdown">--:--:--</span></span>
+  <nav class="chrome-links mono" aria-label="Site">
+    <a id="archive-link" href="#/" hidden>Archive</a>
+    <a id="progress-link" href="#/progress">Progress</a>
+    <button id="about" type="button" aria-label="About and shortcuts">?</button>
   </nav>
 </header>
 
 <main>
   <section id="home" class="screen" aria-label="Choose a discipline" hidden></section>
-  <section id="levels" class="screen" aria-label="Choose a level" hidden></section>
-  <section id="problem" class="screen page" hidden>
+  <section id="problem" class="screen" hidden>
     <nav id="problem-bar" class="problem-bar" aria-label="Level"></nav>
     <article id="challenge" class="challenge" aria-live="polite"></article>
+    <footer class="legend mono"><span>1–4 level · H hint · Enter answer · Esc back</span><span class="local-note"></span></footer>
   </section>
-  <section id="archive" class="screen page" aria-label="Archive" hidden></section>
-  <section id="progress-view" class="screen page" aria-label="Progress" hidden></section>
+  <section id="archive" class="screen" aria-label="Archive" hidden></section>
+  <section id="progress-view" class="screen" aria-label="Progress" hidden></section>
 </main>
 
 <dialog id="about-dialog" aria-labelledby="about-title">
-  <div class="dialog-body">
+  <div class="dialog-body frame">
+    <p class="kicker mono">Manual</p>
     <h2 id="about-title">How it works</h2>
     <ol class="how">
-      <li><b>Pick a discipline</b>, then a level from 1 to 4. Every combination has a new problem each day, the same for everyone.</li>
+      <li><b>Pick a discipline</b> on the diagram. Its problem opens at the level you last used there; the track at the top switches between Levels 1–4. Every combination has a new problem each day, the same for everyone.</li>
       <li><b>Type your answer</b> as maths: <code>3/4</code> becomes a fraction, <code>sqrt</code> a root, <code>pi</code> π. Exact forms and decimals both work.</li>
       <li><b>You get five attempts.</b> Solve it, or use them all, and the full worked solution opens. Revealing it earlier marks the problem as reviewed.</li>
-      <li><b>Missed a day?</b> The archive holds the last 30 days.</li>
+      <li><b>Missed a day?</b> Each discipline’s archive holds the last 30 days.</li>
     </ol>
+    <dl class="keys mono">
+      <div><dt>1–4</dt><dd>Switch level</dd></div>
+      <div><dt>H</dt><dd>Show a hint</dd></div>
+      <div><dt>Enter</dt><dd>Jump to the answer, then check it</dd></div>
+      <div><dt>Esc</dt><dd>Back one screen</dd></div>
+      <div><dt>← →</dt><dd>Move along the diagram</dd></div>
+    </dl>
     <p class="muted">New problems arrive at local midnight, in <span class="countdown mono">--:--:--</span>. <span class="local-note"></span></p>
-    <button id="close-dialog" class="primary" type="button">Got it</button>
+    <button id="close-dialog" class="primary" type="button">Close</button>
   </div>
 </dialog>
 
 <dialog id="diagram-dialog" class="diagram-dialog" aria-labelledby="diagram-title">
   <div class="dialog-body">
-    <div class="dialog-head"><h2 id="diagram-title"></h2><button id="close-diagram" class="text-button" type="button">Close</button></div>
+    <div class="dialog-head"><h2 id="diagram-title"></h2><button id="close-diagram" class="text-button bracket" type="button">Close</button></div>
     <div id="large-diagram" class="diagram large" tabindex="0" role="region" aria-labelledby="diagram-title"></div>
   </div>
 </dialog>
