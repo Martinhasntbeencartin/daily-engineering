@@ -53,17 +53,25 @@ server.listen(0, async () => {
         const shown = id => page.evaluate(i => !document.getElementById(i).hidden, id);
         // Navigation: the wiring diagram, one click to a problem, the level track, shortcuts, and back again.
         await page.goto(url);
-        await page.waitForTimeout(1300); // let the nodes finish dropping onto the bus
-        step('home shows every discipline on the buses', await page.locator('#home .bus .node').count() === 11);
-        await page.hover('#home .node[data-topic="control"]'); await page.waitForTimeout(100);
-        step('pointing at a discipline previews it in the readout', /Control systems/.test(await page.textContent('#readout')) && /L4 Expert/.test(await page.textContent('#readout')));
-        await page.click('#home .node[data-topic="circuits"]');
+        await page.waitForTimeout(600);
+        step('Today shows every discipline as a card', await page.locator('#home .card').count() === 11);
+        step('the Today tab is marked as the current page', await page.getAttribute('.tabs a[data-tab="today"]', 'aria-current') === 'page');
+        const card = await page.evaluate(() => { const c = document.querySelector('#home .card[data-topic="control"]'); return {status: c.querySelector('.card-status').textContent, cta: c.querySelector('.card-cta').textContent, levels: c.querySelectorAll('.lvl').length}; });
+        step('each card says its status, offers four levels and what clicking does', card.status === 'Not done yet today' && /Start level 1/.test(card.cta) && card.levels === 4, JSON.stringify(card));
+        step('a first visit explains how it works', await page.locator('#home .intro').count() === 1);
+        await page.click('#dismiss-intro'); await page.reload(); await page.waitForTimeout(400);
+        step('“Got it” hides the explanation for good', await page.locator('#home .intro').count() === 0);
+        await page.click('#home .card[data-topic="electronics"] .lvl:nth-of-type(3)'); await page.waitForTimeout(150);
+        step('a level button on a card opens that level', await page.evaluate(() => location.hash) === '#/electronics/level-3');
+        await page.goBack(); await page.waitForTimeout(400);
+        await page.click('#home .card[data-topic="circuits"] .card-cta', {force: true});
         await page.waitForSelector('#problem math-field');
         step('one click opens the problem at Level 1', await page.evaluate(() => location.hash) === '#/circuits/level-1');
-        const trackIds = await page.locator('#problem-bar .track-node').evaluateAll(as => as.map(a => a.dataset.level));
-        step('the track offers levels 1–4', trackIds.join() === 'level-1,level-2,level-3,level-4', trackIds.join());
-        await page.click('#problem-bar .track-node[data-level="level-3"]'); await page.waitForTimeout(150);
-        step('the track switches level in place', await page.evaluate(() => location.hash === '#/circuits/level-3' && level === 'level-3'));
+        const trackIds = await page.locator('#problem-bar .level-tab').evaluateAll(as => as.map(a => a.dataset.level));
+        step('labelled tabs offer levels 1–4', trackIds.join() === 'level-1,level-2,level-3,level-4', trackIds.join());
+        step('a breadcrumb shows where you are', /Today\s*\/\s*Circuit analysis/.test(await page.textContent('#problem-bar .crumbs')));
+        await page.click('#problem-bar .level-tab[data-level="level-3"]'); await page.waitForTimeout(150);
+        step('the tabs switch level in place', await page.evaluate(() => location.hash === '#/circuits/level-3' && level === 'level-3'));
         await page.goBack(); await page.waitForTimeout(150);
         step('browser Back returns to the previous level', await page.evaluate(() => location.hash === '#/circuits/level-1' && level === 'level-1'));
         await page.click('.problem-title'); // focus out of the answer box, so keys are shortcuts
@@ -76,15 +84,19 @@ server.listen(0, async () => {
         step('Enter jumps to the first answer box', await page.evaluate(() => document.activeElement?.id) === 'answer-0');
         await page.click('.problem-title');
         await page.keyboard.press('Escape'); await page.waitForTimeout(150);
-        step('Escape goes back to the diagram', await shown('home'));
-        step('the diagram remembers the level used for a discipline', await page.getAttribute('#home .node[data-topic="circuits"]', 'href') === '#/circuits/level-2');
+        step('Escape goes back to Today', await shown('home'));
+        step('Today remembers the level used for a discipline', await page.getAttribute('#home .card[data-topic="circuits"] .card-link', 'href') === '#/circuits/level-2' && /Start level 2/.test(await page.textContent('#home .card[data-topic="circuits"] .card-cta')));
         step('home offers to continue the last problem', await page.getAttribute('#home .resume', 'href') === '#/circuits/level-2');
         await go('#/circuits');
         step('a bare discipline address opens its remembered level', await page.evaluate(() => location.hash) === '#/circuits/level-2');
         await page.click('#back-link'); await page.waitForTimeout(150);
-        step('the back link returns to the diagram', await page.evaluate(() => location.hash) === '#/' && await shown('home'));
+        step('the breadcrumb link returns to Today', await page.evaluate(() => location.hash) === '#/' && await shown('home'));
+        await page.click('.tabs a[data-tab="archive"]'); await page.waitForTimeout(200);
+        step('the Archive tab opens the archive of the last discipline', await page.evaluate(() => location.hash) === '#/circuits/archive' && await shown('archive') && await page.getAttribute('.tabs a[data-tab="archive"]', 'aria-current') === 'page');
+        await page.click('#archive .pick:has-text("Thermo")'); await page.waitForTimeout(150);
+        step('the archive switches discipline from its picker', await page.evaluate(() => location.hash) === '#/thermo/archive');
         await go('#/nowhere/at-all');
-        step('an unknown address falls back to the diagram', await shown('home'));
+        step('an unknown address falls back to Today', await shown('home'));
         await go('#/circuits/level-1');
         await page.waitForSelector('#problem math-field');
         for (const [keys, want] of cases) {
@@ -148,8 +160,8 @@ server.listen(0, async () => {
         });
         await go('#/circuits/level-3');
         await page.reload();
-        await page.waitForSelector('#problem-bar .track-node');
-        const moved = await page.evaluate(() => ({attempts: attempts[`${today}:circuits:level-3`], solved: [...document.querySelectorAll('#problem-bar .track-node')].map(o => `${o.dataset.level}:${o.classList.contains('solved')}`)}));
+        await page.waitForSelector('#problem-bar .level-tab');
+        const moved = await page.evaluate(() => ({attempts: attempts[`${today}:circuits:level-3`], solved: [...document.querySelectorAll('#problem-bar .level-tab')].map(o => `${o.dataset.level}:${o.classList.contains('solved')}`)}));
         const movedOk = moved.attempts === 3 && moved.solved.join() === 'level-1:false,level-2:false,level-3:false,level-4:true';
         if (!movedOk) failures++;
         console.log(`${movedOk ? 'ok  ' : 'FAIL'} saved progress moved to new levels:`, JSON.stringify(moved));
@@ -172,12 +184,12 @@ server.listen(0, async () => {
         await fill(false); await page.click('#check'); await page.waitForTimeout(150);
         st = await panelState();
         report('solving opens the worked solution', st.open && /Solved in 1 attempt/.test(st.verdict) && st.ok === st.parts && st.miss === 0 && st.steps === st.wantSteps && !st.katexErrors, st);
-        report('a solved problem points to the next level and discipline', /Next level · L3 Challenge/.test(st.next) && /Next discipline · Electronics/.test(st.next), st.next);
+        report('a solved problem points to the next level and discipline', /Next: Level 3 · Challenge/.test(st.next) && /Next discipline: Electronics/.test(st.next), st.next);
         await page.reload();
         await page.waitForSelector('math-field');
         st = await panelState();
         report('still open after reload, with your answers', st.open && st.ok === st.parts && st.prefilled !== '' && st.button === 'Hide solution', st);
-        await page.click('#problem-bar .track-node[data-level="level-3"]');
+        await page.click('#problem-bar .level-tab[data-level="level-3"]');
         await page.waitForTimeout(150);
         await page.waitForSelector('#problem math-field');
         for (let attempt = 1; attempt <= 5; attempt++) {
@@ -210,14 +222,14 @@ server.listen(0, async () => {
         step('a milestone pays only once', await page.textContent('#coin-count') === '10');
         await go('#/');
         await page.waitForTimeout(1300);
-        step('the diagram marks the discipline done today with its streak', await page.evaluate(() => { const n = document.querySelector('#home .node[data-topic="circuits"]'); return n.classList.contains('on') && n.querySelector('.node-streak')?.textContent.endsWith('3d'); }));
+        step('Today marks the discipline done with its streak', await page.evaluate(() => { const c = document.querySelector('#home .card[data-topic="circuits"]'); return c.classList.contains('done') && /Done today · 3-day streak/.test(c.querySelector('.card-status').textContent); }));
         await go('#/circuits/archive');
         await page.click(`#archive [data-unlock="${await page.evaluate(() => shifted(today, -5))}"]`); await page.waitForTimeout(150);
         const opened = await page.evaluate(() => ({coins: document.getElementById('coin-count').textContent, nodes: document.querySelectorAll('#archive .arch-list li:nth-child(6) .arch-node').length, disabled: [...document.querySelectorAll('#archive [data-unlock]')].every(b => b.disabled)}));
         step('10 coins unlock one past day, all four levels', opened.coins === '0' && opened.nodes === 4 && opened.disabled, JSON.stringify(opened));
         await page.click('#archive .arch-list li:nth-child(6) .arch-node:nth-child(2)');
         await page.waitForSelector('#problem math-field');
-        step('an unlocked day opens its problem', await page.evaluate(() => date === shifted(today, -5) && level === 'level-2' && /Archive/.test(document.querySelector('.bar-date').textContent)));
+        step('an unlocked day opens its problem', await page.evaluate(() => date === shifted(today, -5) && level === 'level-2' && /from the archive/i.test(document.querySelector('.bar-date').textContent)));
         await go('#/progress');
         step('progress lists streaks, the reward ladder and the coin log', await page.locator('.progress-table.streaks').count() === 1 && await page.locator('.ladder li').count() === 8 && await page.locator('.coin-log li').count() === 2);
         await page.evaluate(() => localStorage.clear());
