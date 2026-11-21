@@ -10,7 +10,15 @@ const TOPICS = [
     {id: 'measurement', name: 'Measurement', sub: 'Noise, uncertainty & estimation', icon: '⊙', group: 'electrical'},
     {id: 'statics', name: 'Statics & structures', sub: 'Equilibrium, beams & stress', icon: '△', group: 'mechanical'},
     {id: 'dynamics', name: 'Dynamics & vibrations', sub: 'Motion, oscillation & modes', icon: '≋', group: 'mechanical'},
-    {id: 'thermo', name: 'Thermo & fluids', sub: 'Cycles, flow & heat transfer', icon: '♨', group: 'mechanical'}
+    {id: 'thermo', name: 'Thermo & fluids', sub: 'Cycles, flow & heat transfer', icon: '♨', group: 'mechanical'},
+    {id: 'kinematics', name: 'Robot kinematics', sub: 'Poses, inverse kinematics & Jacobians', icon: '⟂', group: 'robotics'},
+    {id: 'robotcontrol', name: 'Robot dynamics & control', sub: 'Joint dynamics, PD & trajectories', icon: '↻', group: 'robotics'},
+    {id: 'motors', name: 'Motors & drives', sub: 'DC & brushless motors, gearing', icon: '⊛', group: 'robotics'},
+    {id: 'sensors', name: 'Sensors & estimation', sub: 'Encoders, IMUs, filtering & fusion', icon: '◎', group: 'robotics'},
+    {id: 'infotheory', name: 'Information theory', sub: 'Entropy, coding & capacity', icon: 'H', group: 'comms'},
+    {id: 'modulation', name: 'Modulation & coding', sub: 'QAM, error rates & channel codes', icon: '⁘', group: 'comms'},
+    {id: 'linkbudget', name: 'Antennas & link budgets', sub: 'Path loss, noise & arrays', icon: '⟟', group: 'comms'},
+    {id: 'rfcircuits', name: 'RF circuits & matching', sub: 'Transmission lines, matching & amplifiers', icon: 'Γ', group: 'comms'}
 ];
 /* Difficulty tiers, easiest first. The generators and the curated bank are keyed on these ids, and the
    ids seed each day's choice, so they never change even when the public levels below regroup them. */
@@ -35,8 +43,13 @@ function makeTierExercise(topic, date, tier) {
         throw Error('Unknown challenge selection');
     if (tier === CURATED_TIER)
         return makeBankExercise(topic, date, tier);
-    if (TOPICS.find(t => t.id === topic).group === 'mechanical')
+    const group = TOPICS.find(t => t.id === topic).group;
+    if (group === 'mechanical')
         return makeMechExercise(topic, date, tier);
+    if (group === 'robotics')
+        return makeRoboticsExercise(topic, date, tier);
+    if (group === 'comms')
+        return makeCommsExercise(topic, date, tier);
     if (tier === 'expert' || tier === 'mastery')
         return makeExpertExercise(topic, date, tier);
     return makeHardExercise(topic, date, tier);

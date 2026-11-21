@@ -55,9 +55,9 @@ server.listen(0, async () => {
         await page.goto(url);
         await page.waitForTimeout(600);
         const menu = await page.evaluate(() => [...document.querySelectorAll('#home [data-menu]')].map(a => a.dataset.menu));
-        step('the main menu offers both categories, the archive, progress and help', menu.join() === 'electrical,mechanical,archive,progress,help', menu.join());
+        step('the main menu offers all four categories, the archive, progress and help', menu.join() === 'electrical,mechanical,robotics,comms,archive,progress,help', menu.join());
         step('the Menu tab is marked as the current page', await page.getAttribute('.tabs a[data-tab="menu"]', 'aria-current') === 'page');
-        step('the menu shows today at a glance', /0\s*\/11/.test(await page.textContent('#home .menu-stats')) && /coins/.test(await page.textContent('#home .menu-stats')));
+        step('the menu shows today at a glance', /0\s*\/19/.test(await page.textContent('#home .menu-stats')) && /coins/.test(await page.textContent('#home .menu-stats')));
         step('a first visit explains how it works', await page.locator('#home .intro').count() === 1);
         await page.click('#dismiss-intro'); await page.reload(); await page.waitForTimeout(400);
         step('“Got it” hides the explanation for good', await page.locator('#home .intro').count() === 0);
