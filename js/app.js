@@ -160,6 +160,8 @@ let today = localDate(), date = today, topic = 'circuits', level = 'level-1', vi
 let progress = {}, attempts = {}, storageAvailable = true;
 /* key → the answers last checked for that problem, so a finished problem can show them beside the solution. */
 let submitted = {};
+/* Coins: rewards earned at streak milestones, and the archive days bought with them. */
+let wallet = {earned: {}, unlocked: {}};
 /* Levels removed in the regrouping. Their solves stay in storage and still count in totals and streaks. */
 const RETIRED_LEVELS = ['foundations', 'applied'];
 /* date:topic:tier → date:topic:level-N; the oldest date:topic keys were Foundations. Keys already on a level stay. */
@@ -181,6 +183,9 @@ try {
     const sub = JSON.parse(localStorage.getItem('daily-engineer-answers') || '{}'), keepFrom = shifted(today, -31);
     if (sub && typeof sub === 'object' && !Array.isArray(sub))
         for (const [k, v] of Object.entries(sub)) if (Array.isArray(v) && k.split(':')[0] >= keepFrom) submitted[k] = v; // the archive reaches back 30 days
+    const w = JSON.parse(localStorage.getItem('daily-engineer-coins') || '{}');
+    if (w && typeof w === 'object')
+        for (const part of ['earned', 'unlocked']) if (w[part] && typeof w[part] === 'object' && !Array.isArray(w[part])) wallet[part] = w[part];
 } catch {
     storageAvailable = false;
 }
@@ -206,6 +211,7 @@ function save() {
         localStorage.setItem('daily-engineer-v1', JSON.stringify(progress));
         localStorage.setItem('daily-engineer-attempts', JSON.stringify(attempts));
         localStorage.setItem('daily-engineer-answers', JSON.stringify(submitted));
+        localStorage.setItem('daily-engineer-coins', JSON.stringify(wallet));
     } catch {
         storageAvailable = false;
     }
@@ -214,15 +220,77 @@ function save() {
 function updateStorageNote() {
     document.querySelectorAll('.local-note').forEach(el => { el.textContent = storageAvailable ? 'Progress stays in this browser.' : 'Browser storage unavailable; progress lasts for this visit.'; });
 }
-function streak() {
-    const days = new Set(activeRecords().filter(([k, v]) => v.status === 'solved' && v.daily).map(([k]) => k.split(':')[0]));
-    let n = 0, d = days.has(today) ? today : shifted(today, -1);
-    while (days.has(d)) {
-        n++;
-        d = shifted(d, -1);
-    }
-    return n;
+/* ---------- streaks and coins ----------
+   A discipline is done for a day once any one of its levels is solved that day. Every discipline keeps its own streak;
+   each milestone a streak reaches pays coins once, and coins unlock past days in the archive. */
+const MILESTONES = [[3, 10], [7, 20], [10, 30], [15, 50], [30, 100], [60, 200], [180, 500], [365, 1000]];
+const UNLOCK_COST = 10;
+const milestoneName = d => ({30: '1 month', 60: '2 months', 180: '6 months', 365: '1 year'})[d] || `${d} days`;
+const streakName = d => `${({30: '1-month', 60: '2-month', 180: '6-month', 365: '1-year'})[d] || `${d}-day`} streak`;
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const doneOn = (t, d) => [...LEVELS.map(l => l.id), ...RETIRED_LEVELS].some(l => { const r = progress[`${d}:${t}:${l}`]; return r?.status === 'solved' && r.daily; });
+/* The current run: it includes today once today is done, and stays alive through yesterday until midnight. */
+function topicStreak(t) {
+    const doneToday = doneOn(t, today);
+    let d = doneToday ? today : shifted(today, -1), n = 0;
+    while (doneOn(t, d)) { n++; d = shifted(d, -1); }
+    return {length: n, start: shifted(d, 1), doneToday};
 }
+function bestStreak(t) {
+    const days = [...new Set(Object.keys(progress).filter(k => k.split(':')[1] === t).map(k => k.split(':')[0]))].filter(d => doneOn(t, d)).sort();
+    let best = 0, run = 0, prev = null;
+    for (const d of days) { run = prev && shifted(prev, 1) === d ? run + 1 : 1; best = Math.max(best, run); prev = d; }
+    return best;
+}
+const streak = () => Math.max(0, ...TOPICS.map(t => topicStreak(t.id).length)); // the longest current streak, for summaries
+const doneToday = () => TOPICS.filter(t => doneOn(t.id, today)).length;
+const nextMilestone = n => MILESTONES.find(([m]) => m > n);
+const coins = () => Object.values(wallet.earned).reduce((sum, e) => sum + (Number(e.amount) || 0), 0) - Object.values(wallet.unlocked).reduce((sum, u) => sum + (Number(u.cost) || 0), 0);
+/* Pay every milestone each discipline's current run has reached but not yet been paid for. Returns the new rewards. */
+function syncRewards() {
+    const fresh = [];
+    for (const t of TOPICS) {
+        const st = topicStreak(t.id);
+        for (const [days, amount] of MILESTONES) {
+            const k = `${t.id}:${st.start}:${days}`;
+            if (st.length >= days && !wallet.earned[k]) { wallet.earned[k] = {amount, at: today}; fresh.push({topic: t, days, amount}); }
+        }
+    }
+    if (fresh.length) save();
+    return fresh;
+}
+/* Past days start locked; a day you already played stays open. Unlocking opens all four levels of that day. */
+const hasPlayed = (t, d) => [progress, attempts].some(store => Object.keys(store).some(k => k.startsWith(`${d}:${t}:`)));
+const isOpen = (t, d) => d >= today || !!wallet.unlocked[`${t}:${d}`] || hasPlayed(t, d);
+function unlockDay(t, d) {
+    if (isOpen(t, d) || coins() < UNLOCK_COST) return false;
+    wallet.unlocked[`${t}:${d}`] = {cost: UNLOCK_COST, at: today};
+    save();
+    renderCoins();
+    toast(`<p><span>Unlocked ${longDate(d)} · ${topicOf(t).name}</span><b>−${UNLOCK_COST} ◎</b></p>`);
+    return true;
+}
+function renderCoins() {
+    const n = coins();
+    $('#coin-count').textContent = n;
+    $('#coin-link').setAttribute('aria-label', `${plural(n, 'coin')}. Streaks and rewards`);
+}
+let toastTimer;
+function toast(html) {
+    const el = $('#toast');
+    el.innerHTML = html;
+    el.hidden = false;
+    el.classList.remove('show');
+    void el.offsetWidth; // restart the entrance animation
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, 6000);
+}
+function announceRewards(list) {
+    renderCoins();
+    if (list.length) toast(list.map(r => `<p><span>${streakName(r.days)} · ${r.topic.name}</span><b>+${r.amount} ◎</b></p>`).join(''));
+}
+const LOCK_ICON = '<svg class="lock" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3" y="7" width="10" height="7"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>';
 const glyph = tex => window.katex ? katex.renderToString(tex, {throwOnError: false}) : tex;
 const longDate = (d, opts={weekday: 'short', day: 'numeric', month: 'short'}) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', opts);
 const dotDate = d => d.split('-').reverse().join('.');
@@ -242,19 +310,21 @@ function lastPlayed() {
         return topicOf(t) && LEVELS.some(x => x.id === l) ? [t, l] : null;
     } catch { return null; }
 }
-const solvedToday = () => TOPICS.reduce((n, t) => n + LEVELS.filter(l => statusOf(t.id, l.id, today) === 'solved').length, 0);
 /* The home readout: today's summary, or a preview of the discipline under the pointer or focus. */
 function readoutSummary() {
-    const n = streak();
-    return `<p class="readout-k mono">Status · ${dotDate(today)}</p><p class="readout-big">${solvedToday()}<span>/${TOPICS.length * LEVELS.length}</span></p><p class="readout-k mono">Solved today</p><dl class="readout-list mono"><div><dt>Streak</dt><dd>${n} day${n === 1 ? '' : 's'}</dd></div><div><dt>Next set</dt><dd class="countdown">--:--:--</dd></div></dl><p class="readout-hint mono">Point at a discipline to preview it</p>`;
+    const best = streak();
+    return `<p class="readout-k mono">Status · ${dotDate(today)}</p><p class="readout-big">${doneToday()}<span>/${TOPICS.length}</span></p><p class="readout-k mono">Disciplines done today</p><dl class="readout-list mono"><div><dt>Coins</dt><dd>◎ ${coins()}</dd></div><div><dt>Best streak</dt><dd>${best ? plural(best, 'day') : '—'}</dd></div><div><dt>Next set</dt><dd class="countdown">--:--:--</dd></div></dl><p class="readout-hint mono">One level a day keeps a streak alive</p>`;
 }
 function readoutTopic(t) {
-    const rows = LEVELS.map(l => { const st = statusOf(t.id, l.id, today); return `<div class="${st || ''}"><dt>${shortTag(l)} ${l.name}</dt><dd>${statusWord(st)}</dd></div>`; }).join('');
-    return `<p class="readout-k mono">Node ${busCode(t)}</p><p class="readout-glyph" aria-hidden="true">${glyph(GLYPHS[t.id])}</p><p class="readout-name">${t.name}</p><p class="readout-sub">${t.sub}.</p><dl class="readout-list mono">${rows}</dl><p class="readout-hint mono">Opens at ${shortTag(LEVELS.find(l => l.id === levelFor(t.id)))} · Enter ↵</p>`;
+    const st = topicStreak(t.id), next = nextMilestone(st.length);
+    const rows = LEVELS.map(l => { const x = statusOf(t.id, l.id, today); return `<div class="${x || ''}"><dt>${shortTag(l)} ${l.name}</dt><dd>${statusWord(x)}</dd></div>`; }).join('');
+    const streakRows = `<div class="${st.length ? 'solved' : ''}"><dt>Streak</dt><dd>${plural(st.length, 'day')}${st.length && !st.doneToday ? ' · due today' : ''}</dd></div><div><dt>Next reward</dt><dd>${next ? `${milestoneName(next[0])} · +${next[1]} ◎` : 'All earned'}</dd></div>`;
+    return `<p class="readout-k mono">Node ${busCode(t)}</p><p class="readout-glyph" aria-hidden="true">${glyph(GLYPHS[t.id])}</p><p class="readout-name">${t.name}</p><p class="readout-sub">${t.sub}.</p><dl class="readout-list mono">${rows}${streakRows}</dl><p class="readout-hint mono">Opens at ${shortTag(LEVELS.find(l => l.id === levelFor(t.id)))} · Enter ↵</p>`;
 }
 function nodeHTML(t) {
-    const sts = LEVELS.map(l => statusOf(t.id, l.id, today)), n = sts.filter(st => st === 'solved').length;
-    return `<a class="node ${n ? 'on' : ''}" href="#/${t.id}/${levelFor(t.id)}" data-topic="${t.id}" style="--i: ${TOPICS.indexOf(t)}"><span class="drop" aria-hidden="true"></span><span class="ring" aria-hidden="true"></span><span class="node-name">${t.name}</span><span class="levels" role="img" aria-label="${n} of ${LEVELS.length} levels solved today">${sts.map(st => `<i class="${st || ''}"></i>`).join('')}</span></a>`;
+    const sts = LEVELS.map(l => statusOf(t.id, l.id, today)), n = sts.filter(x => x === 'solved').length, run = topicStreak(t.id).length;
+    const streakMark = run ? `<span class="node-streak mono" title="${plural(run, 'day')} streak"><span class="visually-hidden">Streak </span>${run}d</span>` : '';
+    return `<a class="node ${doneOn(t.id, today) ? 'on' : ''}" href="#/${t.id}/${levelFor(t.id)}" data-topic="${t.id}" style="--i: ${TOPICS.indexOf(t)}"><span class="drop" aria-hidden="true"></span><span class="ring" aria-hidden="true"></span><span class="node-name">${t.name}</span><span class="node-meta"><span class="levels" role="img" aria-label="${n} of ${LEVELS.length} levels solved today">${sts.map(x => `<i class="${x || ''}"></i>`).join('')}</span>${streakMark}</span></a>`;
 }
 function busHTML(g, code) {
     const ts = TOPICS.filter(t => t.group === g.id);
@@ -264,7 +334,7 @@ function busHTML(g, code) {
 function renderHome() {
     const last = lastPlayed();
     const resume = last ? `<a class="resume mono" href="#/${last[0]}/${last[1]}">Continue · ${topicOf(last[0]).name} · ${shortTag(LEVELS.find(l => l.id === last[1]))} →</a>` : '';
-    $('#home').innerHTML = `<div class="home-top"><div class="frame title-block"><p class="kicker mono">Select / discipline</p><h1>Pick a discipline, then a level.</h1><p class="muted">One engineering problem per discipline, every day. Five attempts, and the full working when you finish.</p>${resume}</div><aside class="frame readout" id="readout" aria-live="polite">${readoutSummary()}</aside></div>${busHTML(GROUPS[0], 'EL')}${busHTML(GROUPS[1], 'ME')}<footer class="legend mono"><span>○ Open · <b>●</b> Solved today · ▪ Levels 1–4</span><span>←→ move · Enter open · Esc back</span></footer>`;
+    $('#home').innerHTML = `<div class="home-top"><div class="frame title-block"><p class="kicker mono">Select / discipline</p><h1>Pick a discipline, then a level.</h1><p class="muted">One engineering problem per discipline, every day. Solve any one level to keep that discipline’s streak; streaks earn coins, and coins unlock the archive.</p>${resume}</div><aside class="frame readout" id="readout" aria-live="polite">${readoutSummary()}</aside></div>${busHTML(GROUPS[0], 'EL')}${busHTML(GROUPS[1], 'ME')}<footer class="legend mono"><span>○ Not done today · <b>●</b> Done today · ▪ Levels solved · 3d streak</span><span>←→ move · Enter open · Esc back</span></footer>`;
     const readout = $('#readout');
     const show = id => { readout.innerHTML = id ? readoutTopic(topicOf(id)) : readoutSummary(); tick(); };
     const rest = () => show(document.activeElement?.closest?.('#home .node')?.dataset.topic || null);
@@ -282,25 +352,40 @@ function renderBar() {
         const st = statusOf(topic, l.id), current = l.id === level;
         return `<a class="track-node ${st || ''} ${current ? 'current' : ''}" href="#/${topic}/${l.id}${suffix}" data-level="${l.id}" ${current ? 'aria-current="page"' : ''}><span class="dot" aria-hidden="true"></span><span class="track-label">${shortTag(l)} ${l.name}</span><span class="track-time">${st ? statusWord(st) : l.time}</span></a>`;
     }).join('');
-    $('#problem-bar').innerHTML = `<div class="track"><span class="track-line" aria-hidden="true"></span>${nodes}</div><span class="bar-date mono">${date === today ? 'Today' : `Archive · ${longDate(date)}`}</span>`;
+    $('#problem-bar').innerHTML = `<div class="track"><span class="track-line" aria-hidden="true"></span>${nodes}</div><span class="bar-date mono">${date === today ? `Today · ${topicStreak(topic).length ? `${topicStreak(topic).length}-day streak` : 'No streak yet'}` : `Archive · ${longDate(date)}`}</span>`;
 }
 /* Once a problem is finished (or its solution seen), point to the next level and the next unsolved discipline. */
 function nextStepsHTML() {
     if (!finished() && progress[key()]?.status !== 'reviewed') return '';
     const i = LEVELS.findIndex(l => l.id === level), suffix = date === today ? '' : '/' + date, links = [];
     if (i < LEVELS.length - 1) links.push(`<a href="#/${topic}/${LEVELS[i + 1].id}${suffix}">Next level · ${shortTag(LEVELS[i + 1])} ${LEVELS[i + 1].name} →</a>`);
-    const k = TOPICS.findIndex(t => t.id === topic), next = TOPICS.slice(k + 1).concat(TOPICS.slice(0, k)).find(t => !statusOf(t.id, level));
-    if (next) links.push(`<a href="#/${next.id}/${level}${suffix}">Next discipline · ${next.name} →</a>`);
+    const k = TOPICS.findIndex(t => t.id === topic), next = date === today && TOPICS.slice(k + 1).concat(TOPICS.slice(0, k)).find(t => !doneOn(t.id, today));
+    if (next) links.push(`<a href="#/${next.id}/${levelFor(next.id)}">Next discipline · ${next.name} →</a>`);
     return links.join('');
 }
-/* The last 30 days of one discipline, one row per day with its four levels. */
+/* The last 30 days of one discipline. Today is open; past days are locked until unlocked with coins (or already played). */
 function renderArchive() {
-    const t = topicOf(topic);
-    const rows = Array.from({length: 31}, (_, k) => shifted(today, -k)).map(d => `<li class="${d === today ? 'today' : ''}"><span class="arch-date mono">${d === today ? 'Today' : longDate(d)}</span><span class="arch-track">${LEVELS.map((l, i) => {
-        const st = statusOf(t.id, l.id, d);
-        return `<a class="arch-node ${st || ''}" href="#/${t.id}/${l.id}${d === today ? '' : '/' + d}" title="${l.tag} · ${l.name}${st ? ` (${st})` : ''}"><span class="visually-hidden">${longDate(d, {day: 'numeric', month: 'long'})}, ${l.tag}${st ? `, ${st}` : ''}</span><span aria-hidden="true">${i + 1}</span></a>`;
-    }).join('')}</span></li>`).join('');
-    $('#archive').innerHTML = `<header class="page-head"><p class="kicker mono">${busCode(t)} · ${t.name}</p><h1>Archive</h1><p class="muted">Today and the last 30 days. Filled nodes are solved; ringed ones were reviewed.</p></header><ol class="arch-list">${rows}</ol>`;
+    const t = topicOf(topic), bal = coins();
+    const rows = Array.from({length: 31}, (_, k) => shifted(today, -k)).map(d => {
+        const open = isOpen(t.id, d), label = d === today ? 'Today' : longDate(d);
+        const content = open ? LEVELS.map((l, i) => {
+            const st = statusOf(t.id, l.id, d);
+            return `<a class="arch-node ${st || ''}" href="#/${t.id}/${l.id}${d === today ? '' : '/' + d}" title="${l.tag} · ${l.name}${st ? ` (${st})` : ''}"><span class="visually-hidden">${longDate(d, {day: 'numeric', month: 'long'})}, ${l.tag}${st ? `, ${st}` : ''}</span><span aria-hidden="true">${i + 1}</span></a>`;
+        }).join('') : `<button class="text-button bracket unlock" type="button" data-unlock="${d}" ${bal < UNLOCK_COST ? 'disabled' : ''} aria-label="Unlock ${longDate(d, {weekday: 'long', day: 'numeric', month: 'long'})} for ${UNLOCK_COST} coins">Unlock · ${UNLOCK_COST} ◎</button>`;
+        return `<li class="${d === today ? 'today' : ''} ${open ? '' : 'locked'}"><span class="arch-date mono">${open ? '' : LOCK_ICON}${label}</span><span class="arch-track ${open ? '' : 'shut'}">${content}</span></li>`;
+    }).join('');
+    const locked = Array.from({length: 30}, (_, k) => shifted(today, -(k + 1))).filter(d => !isOpen(t.id, d)).length;
+    const need = bal < UNLOCK_COST ? ` Keep a streak going to earn more: ${milestoneName(MILESTONES[0][0])} pays +${MILESTONES[0][1]}.` : '';
+    $('#archive').innerHTML = `<header class="page-head"><p class="kicker mono">${busCode(t)} · ${t.name}</p><h1>Archive</h1><p class="muted">Today is always open. Past days cost ${UNLOCK_COST} coins each and open all four levels; days you already played stay open. You have ${plural(bal, 'coin')}, and ${plural(locked, 'day')} are still locked.${need}</p></header><ol class="arch-list">${rows}</ol>`;
+    $('#archive').querySelectorAll('[data-unlock]').forEach(b => b.addEventListener('click', () => { if (unlockDay(t.id, b.dataset.unlock)) renderArchive(); }));
+}
+/* A past day that is still locked: offer to unlock it right here. */
+function renderLocked() {
+    const t = topicOf(topic), bal = coins();
+    renderBar();
+    const action = bal >= UNLOCK_COST ? `<button class="primary" type="button" id="unlock-here">Unlock for ${UNLOCK_COST} coins</button>` : `<p class="muted">You need ${plural(UNLOCK_COST - bal, 'more coin')}. Keep a daily streak in any discipline: ${milestoneName(MILESTONES[0][0])} pays +${MILESTONES[0][1]}, ${milestoneName(MILESTONES[1][0])} +${MILESTONES[1][1]}.</p>`;
+    $('#challenge').innerHTML = `<div class="frame locked-panel"><p class="kicker mono">${LOCK_ICON} Locked · ${longDate(date)}</p><h1 class="problem-title">This day is still locked.</h1><p class="muted">Unlock it for ${UNLOCK_COST} coins to open all four levels of ${t.name} from ${longDate(date, {weekday: 'long', day: 'numeric', month: 'long'})}. You have ${plural(bal, 'coin')}.</p>${action}<p class="locked-back"><a href="#/${topic}/archive">Back to the archive</a> · <a href="#/${topic}/${level}">Today’s problem</a></p></div>`;
+    $('#unlock-here')?.addEventListener('click', () => { if (unlockDay(topic, date)) route(); });
 }
 const used = () => attempts[key()] || 0;
 const locked = () => progress[key()]?.status !== 'solved' && used() >= MAX_ATTEMPTS;
@@ -480,9 +565,16 @@ function checkAnswer(event) {
         progress[key()] = {status, daily: previous.daily || date === today, hints: Math.max(hintCount, previous.hints || 0), attempts: used() + 1};
         if (previous.status !== 'solved') attempts[key()] = used() + 1;
         save();
+        const fresh = date === today && status === 'solved' ? syncRewards() : [];
         renderBar();
         f.className = 'feedback success';
-        f.textContent = status === 'solved' ? `All correct. Solved at ${exercise.level} in ${used()} attempt${used() === 1 ? '' : 's'}. The full worked solution is below.` : 'All correct. Saved as reviewed because the solution was revealed.';
+        let note = '';
+        if (date === today && status === 'solved') {
+            const st = topicStreak(topic), paid = fresh.filter(r => r.topic.id === topic).reduce((sum, r) => sum + r.amount, 0), next = nextMilestone(st.length);
+            note = ` ${topicOf(topic).name} streak: ${plural(st.length, 'day')}.${paid ? ` +${paid} coins.` : ''}${next ? ` Next reward at ${milestoneName(next[0])} (+${next[1]}).` : ''}`;
+        }
+        f.textContent = status === 'solved' ? `All correct. Solved at ${exercise.level} in ${used()} attempt${used() === 1 ? '' : 's'}.${note} The full worked solution is below.` : 'All correct. Saved as reviewed because the solution was revealed.';
+        announceRewards(fresh);
         $('#status-line').textContent = status === 'solved' ? '✓ COMPLETED' : 'SOLUTION REVIEWED';
         openSolution(true);
     } else {
@@ -536,11 +628,25 @@ function showSolution() {
     $('#solution').setAttribute('aria-expanded', 'false');
 }
 function renderProgress() {
-    const entries = activeRecords(), solved = entries.filter(([k, v]) => v.status === 'solved').length, reviewed = entries.filter(([k, v]) => v.status === 'reviewed').length;
-    const includesRetired = entries.some(([k]) => RETIRED_LEVELS.includes(k.split(':')[2]));
+    const entries = activeRecords(), includesRetired = entries.some(([k]) => RETIRED_LEVELS.includes(k.split(':')[2]));
     const count = (t, l) => entries.filter(([k, v]) => k.split(':')[1] === t && k.split(':')[2] === l && v.status === 'solved').length;
-    const rows = GROUPS.map(g => `<tr class="group-row"><th colspan="${LEVELS.length + 1}">${g.name}</th></tr>` + TOPICS.filter(t => t.group === g.id).map(t => `<tr><th><a href="#/${t.id}">${t.name}</a></th>${LEVELS.map(l => { const n = count(t.id, l.id); return `<td class="${n ? 'some' : ''}">${n || '·'}</td>`; }).join('')}</tr>`).join('')).join('');
-    $('#progress-view').innerHTML = `<header class="page-head"><p class="kicker mono">Log / your learning</p><h1>Progress</h1></header><div class="stats"><div class="stat"><b>${solved}</b><span>Solved</span></div><div class="stat"><b>${streak()}</b><span>Streak</span></div><div class="stat"><b>${reviewed}</b><span>Reviewed</span></div></div><div class="progress-table-wrap"><table class="progress-table"><thead><tr><th>Solved by discipline</th>${LEVELS.map((l, i) => `<th><span class="arch-node static" title="${l.name}">${i + 1}</span></th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div><p class="progress-note">${includesRetired ? 'Totals and streaks include your earlier work on retired levels. ' : ''}Solve at least one of today’s problems to keep your streak. Archive practice adds to your totals. Progress is stored in this browser; clearing browser data removes it.</p>`;
+    const solvedRows = GROUPS.map(g => `<tr class="group-row"><th colspan="${LEVELS.length + 1}">${g.name}</th></tr>` + TOPICS.filter(t => t.group === g.id).map(t => `<tr><th><a href="#/${t.id}">${t.name}</a></th>${LEVELS.map(l => { const n = count(t.id, l.id); return `<td class="${n ? 'some' : ''}">${n || '·'}</td>`; }).join('')}</tr>`).join('')).join('');
+    const streakRows = GROUPS.map(g => `<tr class="group-row"><th colspan="4">${g.name}</th></tr>` + TOPICS.filter(t => t.group === g.id).map(t => {
+        const st = topicStreak(t.id), next = nextMilestone(st.length), best = bestStreak(t.id);
+        return `<tr><th><a href="#/${t.id}">${t.name}</a></th><td class="${st.length ? 'some' : ''}">${st.length || '·'}${st.length && !st.doneToday ? '<span class="due"> due</span>' : ''}</td><td>${best || '·'}</td><td class="next-cell">${next ? `${milestoneName(next[0])} · +${next[1]}` : 'All earned'}</td></tr>`;
+    }).join('')).join('');
+    const ladder = MILESTONES.map(([d, a]) => `<li><span>${milestoneName(d)}</span><b>+${a} ◎</b></li>`).join('');
+    const log = [
+        ...Object.entries(wallet.earned).map(([k, e]) => { const [t, , days] = k.split(':'); return {at: e.at || '', text: `${streakName(Number(days))} · ${topicOf(t)?.name || t}`, amount: Number(e.amount) || 0}; }),
+        ...Object.entries(wallet.unlocked).map(([k, u]) => { const [t, d] = k.split(':'); return {at: u.at || '', text: `Unlocked ${longDate(d)} · ${topicOf(t)?.name || t}`, amount: -(Number(u.cost) || 0)}; })
+    ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 12);
+    const logHTML = log.length ? log.map(x => `<li><span class="log-date mono">${x.at ? longDate(x.at, {day: 'numeric', month: 'short'}) : ''}</span><span>${x.text}</span><b class="${x.amount < 0 ? 'spend' : ''}">${x.amount < 0 ? '−' : '+'}${Math.abs(x.amount)} ◎</b></li>`).join('') : '<li class="empty">No coins yet. A 3-day streak in any discipline pays the first 10.</li>';
+    $('#progress-view').innerHTML = `<header class="page-head"><p class="kicker mono">Log / your learning</p><h1>Progress</h1><p class="muted">Solve any one level of a discipline each day to keep its streak. Streak milestones pay coins once per streak; coins unlock past days in the archive.</p></header>`
+        + `<div class="stats"><div class="stat frame"><b>◎ ${coins()}</b><span>Coins</span></div><div class="stat frame"><b>${doneToday()}<small>/${TOPICS.length}</small></b><span>Done today</span></div><div class="stat frame"><b>${streak()}</b><span>Best current streak</span></div></div>`
+        + `<div class="progress-grid"><section><h2 class="section-k mono">Streaks</h2><div class="progress-table-wrap"><table class="progress-table streaks"><thead><tr><th>Discipline</th><th>Current</th><th>Best</th><th>Next reward</th></tr></thead><tbody>${streakRows}</tbody></table></div></section>`
+        + `<section><h2 class="section-k mono">Rewards</h2><ol class="ladder">${ladder}</ol><h2 class="section-k mono">Coin log</h2><ul class="coin-log">${logHTML}</ul></section></div>`
+        + `<h2 class="section-k mono">Solved by discipline and level</h2><div class="progress-table-wrap"><table class="progress-table"><thead><tr><th>Discipline</th>${LEVELS.map((l, i) => `<th><span class="arch-node static" title="${l.name}">${i + 1}</span></th>`).join('')}</tr></thead><tbody>${solvedRows}</tbody></table></div>`
+        + `<p class="progress-note">${includesRetired ? 'Totals and streaks include your earlier work on retired levels. ' : ''}Archive practice adds to your totals but not to streaks. Progress is stored in this browser; clearing browser data removes it.</p>`;
 }
 /* Routes: #/ home · #/topic levels · #/topic/level-N today's problem · #/topic/level-N/YYYY-MM-DD archive · #/topic/archive · #/progress */
 function parseRoute() {
@@ -572,9 +678,11 @@ function route() {
     $('#archive-link').href = `#/${topic}/archive`;
     $('#progress-link').hidden = view === 'progress';
     $('#chrome-date').textContent = dotDate(today);
+    renderCoins();
     if (view === 'home') renderHome();
     else if (view === 'archive') renderArchive();
     else if (view === 'progress') renderProgress();
+    else if (!isOpen(topic, date)) renderLocked();
     else {
         renderChallenge();
         remember('daily-engineer-last', `${topic}/${level}`);
@@ -595,7 +703,7 @@ document.addEventListener('keydown', e => {
     if (k === 'Escape' && !$('#back-link').hidden) { location.hash = $('#back-link').getAttribute('href'); return; }
     if (view === 'problem') {
         if (/^[1-9]$/.test(k) && LEVELS[k - 1]) { location.hash = `#/${topic}/${LEVELS[k - 1].id}${date === today ? '' : '/' + date}`; return; }
-        if (k === 'h' || k === 'H') { if (!$('#hint').disabled) showHint(); return; }
+        if (k === 'h' || k === 'H') { if ($('#hint') && !$('#hint').disabled) showHint(); return; }
         if (k === 'Enter' && !e.target.closest?.('a, button, summary')) { e.preventDefault(); $('#answer-0')?.focus(); }
         return;
     }
@@ -628,4 +736,5 @@ function tick() {
 }
 $('#close-diagram').onclick = () => $('#diagram-dialog').close();
 route();
+announceRewards(syncRewards()); // streaks that reached a milestone before this visit are paid now
 setInterval(tick, 1000);

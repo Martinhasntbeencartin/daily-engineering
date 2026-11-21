@@ -21,6 +21,7 @@
   <span class="chrome-date mono"><span id="chrome-date"></span> · Next set <span class="countdown">--:--:--</span></span>
   <nav class="chrome-links mono" aria-label="Site">
     <a id="archive-link" href="#/" hidden>Archive</a>
+    <a id="coin-link" class="coins" href="#/progress"><span aria-hidden="true">◎</span> <span id="coin-count">0</span></a>
     <a id="progress-link" href="#/progress">Progress</a>
     <button id="about" type="button" aria-label="About and shortcuts">?</button>
   </nav>
@@ -37,6 +38,8 @@
   <section id="progress-view" class="screen" aria-label="Progress" hidden></section>
 </main>
 
+<div id="toast" class="toast frame mono" role="status" aria-live="polite" hidden></div>
+
 <dialog id="about-dialog" aria-labelledby="about-title">
   <div class="dialog-body frame">
     <p class="kicker mono">Manual</p>
@@ -45,7 +48,9 @@
       <li><b>Pick a discipline</b> on the diagram. Its problem opens at the level you last used there; the track at the top switches between Levels 1–4. Every combination has a new problem each day, the same for everyone.</li>
       <li><b>Type your answer</b> as maths: <code>3/4</code> becomes a fraction, <code>sqrt</code> a root, <code>pi</code> π. Exact forms and decimals both work.</li>
       <li><b>You get five attempts.</b> Solve it, or use them all, and the full worked solution opens. Revealing it earlier marks the problem as reviewed.</li>
-      <li><b>Missed a day?</b> Each discipline’s archive holds the last 30 days.</li>
+      <li><b>One level a day is enough.</b> Solving any one level of a discipline keeps that discipline’s streak; each discipline has its own.</li>
+      <li><b>Streaks earn coins</b> once per streak: 3 days +10, 7 days +20, 10 days +30, 15 days +50, a month +100, two months +200, six months +500 and a year +1000.</li>
+      <li><b>Coins unlock the archive.</b> Today is always open; a past day costs 10 coins and opens all four of its levels.</li>
     </ol>
     <dl class="keys mono">
       <div><dt>1–4</dt><dd>Switch level</dd></div>

@@ -83,10 +83,6 @@ server.listen(0, async () => {
         step('a bare discipline address opens its remembered level', await page.evaluate(() => location.hash) === '#/circuits/level-2');
         await page.click('#back-link'); await page.waitForTimeout(150);
         step('the back link returns to the diagram', await page.evaluate(() => location.hash) === '#/' && await shown('home'));
-        await go('#/circuits/archive');
-        await page.click('#archive .arch-list li:nth-child(3) .arch-node:nth-child(2)');
-        await page.waitForSelector('#problem math-field');
-        step('an archive day opens that date', await page.evaluate(() => date === shifted(today, -2) && level === 'level-2' && /Archive/.test(document.querySelector('.bar-date').textContent)));
         await go('#/nowhere/at-all');
         step('an unknown address falls back to the diagram', await shown('home'));
         await go('#/circuits/level-1');
@@ -120,7 +116,9 @@ server.listen(0, async () => {
         await page.evaluate(() => localStorage.clear());
         // Use a date whose first answer is in Ω (from the archive if today's isn't).
         const ohmDate = await page.evaluate(() => { for (let back = 0; back <= 30; back++) { const d = shifted(today, -back); if (makeExercise('circuits', d, 'level-1').parts[0].unit === 'Ω') return back ? d : ''; } return null; });
+        if (ohmDate) await page.evaluate(d => localStorage.setItem('daily-engineer-coins', JSON.stringify({earned: {}, unlocked: {[`circuits:${d}`]: {cost: 0, at: today}}})), ohmDate); // past days are locked
         await go(`#/circuits/level-1${ohmDate ? '/' + ohmDate : ''}`);
+        await page.reload();
         await page.waitForSelector('#problem math-field');
         for (const [keys, want] of [['1.618 ohm', 1.618], ['(1+sqrt5)/2 Ω', (1 + Math.sqrt(5)) / 2], ['1.618 kohm', NaN]]) {
             await page.evaluate(() => { const m = document.getElementById('answer-0'); m.value = ''; m.focus(); });
@@ -189,6 +187,39 @@ server.listen(0, async () => {
         }
         st = await panelState();
         report('five wrong attempts open the worked solution', st.open && /No attempts left/.test(st.verdict) && st.miss === st.parts && st.steps === st.wantSteps && st.status === 'SOLUTION REVIEWED' && !st.katexErrors, st);
+        // Streaks and coins: one level a day keeps a discipline's own streak, milestones pay once, coins unlock archive days.
+        await page.evaluate(() => {
+            localStorage.clear();
+            localStorage.setItem('daily-engineer-v1', JSON.stringify({[`${shifted(today, -1)}:circuits:level-1`]: {status: 'solved', daily: true}, [`${shifted(today, -2)}:circuits:level-3`]: {status: 'solved', daily: true}}));
+        });
+        await go('#/circuits/archive');
+        await page.reload();
+        await page.waitForSelector('#archive .arch-list');
+        const arch = await page.evaluate(() => ({locked: document.querySelectorAll('#archive li.locked').length, disabled: [...document.querySelectorAll('#archive [data-unlock]')].every(b => b.disabled), coins: document.getElementById('coin-count').textContent}));
+        step('the archive starts locked, apart from days already played', arch.locked === 28 && arch.disabled && arch.coins === '0', JSON.stringify(arch));
+        await go(`#/circuits/level-2/${await page.evaluate(() => shifted(today, -5))}`);
+        step('a locked day shows the unlock screen instead of the problem', await page.locator('.locked-panel').count() === 1 && await page.locator('#problem math-field').count() === 0 && /need 10 more coins/.test(await page.textContent('.locked-panel')));
+        await go('#/circuits/level-2');
+        await page.waitForSelector('#problem math-field');
+        await fill(false); await page.click('#check'); await page.waitForTimeout(200);
+        const paid = await page.evaluate(() => ({coins: document.getElementById('coin-count').textContent, feedback: document.getElementById('feedback').textContent, toast: document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent, circuits: topicStreak('circuits').length, electronics: topicStreak('electronics').length}));
+        step('one level today makes a 3-day streak and pays 10 coins', paid.coins === '10' && /streak: 3 days\. \+10 coins/.test(paid.feedback) && /3-day streak · Circuit analysis\+10/.test(paid.toast), JSON.stringify(paid));
+        step('each discipline keeps its own streak', paid.circuits === 3 && paid.electronics === 0);
+        step('the next reward is announced', /Next reward at 7 days \(\+20\)/.test(paid.feedback));
+        await page.reload(); await page.waitForTimeout(200);
+        step('a milestone pays only once', await page.textContent('#coin-count') === '10');
+        await go('#/');
+        await page.waitForTimeout(1300);
+        step('the diagram marks the discipline done today with its streak', await page.evaluate(() => { const n = document.querySelector('#home .node[data-topic="circuits"]'); return n.classList.contains('on') && n.querySelector('.node-streak')?.textContent.endsWith('3d'); }));
+        await go('#/circuits/archive');
+        await page.click(`#archive [data-unlock="${await page.evaluate(() => shifted(today, -5))}"]`); await page.waitForTimeout(150);
+        const opened = await page.evaluate(() => ({coins: document.getElementById('coin-count').textContent, nodes: document.querySelectorAll('#archive .arch-list li:nth-child(6) .arch-node').length, disabled: [...document.querySelectorAll('#archive [data-unlock]')].every(b => b.disabled)}));
+        step('10 coins unlock one past day, all four levels', opened.coins === '0' && opened.nodes === 4 && opened.disabled, JSON.stringify(opened));
+        await page.click('#archive .arch-list li:nth-child(6) .arch-node:nth-child(2)');
+        await page.waitForSelector('#problem math-field');
+        step('an unlocked day opens its problem', await page.evaluate(() => date === shifted(today, -5) && level === 'level-2' && /Archive/.test(document.querySelector('.bar-date').textContent)));
+        await go('#/progress');
+        step('progress lists streaks, the reward ladder and the coin log', await page.locator('.progress-table.streaks').count() === 1 && await page.locator('.ladder li').count() === 8 && await page.locator('.coin-log li').count() === 2);
         await page.evaluate(() => localStorage.clear());
         if (errors.length) { failures++; console.log('FAIL page errors', errors); }
     } finally {
