@@ -11,12 +11,16 @@ const rk4 = (f, y, t0, t1, n) => { const h = (t1 - t0) / n, out = [[t0, y]]; let
 
 /* ---------- bank diagrams ---------- */
 function arcSVG() {
-    return drawing(`<path d="M260 220A200 200 0 0 1 460 20" stroke-width="5" transform="translate(0,0)"/><path d="M260 220v20M230 240h60" stroke="#aab9a0"/><path d="M460 20h70m-12 -7 12 7 -12 7" stroke="#b5532d"/><path d="M260 20h200M260 20v200" stroke-dasharray="5 6" stroke="#aab9a0"/>${dt(250, 255, 'fixed end')}${dt(500, 12, 'P')}${dt(340, 14, 'R')}${dot(260, 20)}${dt(250, 14, 'O')}`, 'Quarter-circle cantilever of radius R fixed at the bottom with a horizontal force P at the free top end');
+    return drawing(wire('M260 205a165 165 0 0 1 165 -165') +
+        wire('M235 207h50m-46 7 7 -7m5 7 7 -7m5 7 7 -7') + arrow(425, 40, 522, 40) +
+        guide('M260 205h165V40') + dot(425, 205) + dt(450, 211, 'O') + dt(350, 193, 'R') +
+        dt(505, 28, 'P') + dt(253, 242, 'Fixed end'), 'Quarter-circle cantilever with a fixed lower end and a horizontal force at the free upper end.');
 }
 
 /* ================= ELECTRICAL ================= */
 bank('circuits', 'advanced', [{
     title: 'The critically damped kick',
+    diagram: seriesRlc(),
     text: T`A series $RLC$ circuit with $L = 1\,\text{H}$ and $C = 1\,\text{F}$ starts at rest. At $t=0$ a $1\,\text{V}$ step is applied. Choose $R$ for critical damping, then find the peak current and when it occurs.`,
     parts: [ex(T`$R$`, 2, '2', 'Ω'), ex(T`$i_{\max}$`, 1 / Math.E, T`\dfrac{1}{e}`, 'A'), ex(T`$t_{\text{peak}}$`, 1, '1', 's')],
     hints: [T`Critical damping: $R = 2\sqrt{L/C}$. The characteristic equation is $s^2 + 2s + 1 = 0$, a double root at $s = -1$.`, T`$I(s) = \dfrac{V/L}{(s+1)^2}$, which inverts to $i(t) = t e^{-t}$.`],
@@ -26,6 +30,7 @@ bank('circuits', 'advanced', [{
     verify: () => { const tr = rk4((t, [q, i]) => [i, 1 - 2 * i - q], [0, 0], 0, 5, 5000); let b = tr[0]; for (const p of tr) if (p[1][1] > b[1][1]) b = p; return [2, b[1][1], b[0]]; }
 }, {
     title: 'The cutoff of an endless LC ladder',
+    diagram: filterLadder('L', 'C', 3, true),
     text: T`An infinite ladder has series inductors $L = 1\,\text{H}$ and shunt capacitors $C = 1\,\text{F}$, starting with an inductor. Its input impedance satisfies $$Z = j\omega L + \frac{1}{j\omega C} \parallel Z.$$ Find the angular frequency above which $Z$ becomes purely reactive (no power is absorbed), and $\operatorname{Re} Z$ at $\omega = 1\,\text{rad/s}$.`,
     parts: [ex(T`$\omega_c$`, 2, '2', 'rad/s'), ex(T`$\operatorname{Re} Z(\omega=1)$`, Math.sqrt(3) / 2, T`\dfrac{\sqrt3}{2}`, 'Ω')],
     hints: [T`Clear fractions: $Z^2 - j\omega L Z - L/C = 0$.`, T`$Z = \tfrac{j\omega L}{2} + \sqrt{\tfrac{L}{C} - \tfrac{\omega^2L^2}{4}}$. The square root is real only while its argument is positive.`],
@@ -35,6 +40,7 @@ bank('circuits', 'advanced', [{
     verify: () => { const Z = w => ca(cx(0, w / 2), croot(cx(1 - w * w / 4))); const z1 = Z(1), r = cs(z1, ca(cx(0, 1), cd(cm(cd(cx(1), cx(0, 1)), z1), ca(cd(cx(1), cx(0, 1)), z1)))); return [NUM.bisect(w => Z(w).re - 1e-12, .5, 3), cabs(r) < 1e-12 ? z1.re : NaN]; }
 }, {
     title: 'Two RC sections in a row',
+    diagram: filterLadder('R', 'C', 2),
     text: T`Two identical low-pass sections (series $R$, shunt $C$) are cascaded with no buffer, and the output is unloaded. With $RC = 1\,\text{s}$, the transfer function is $$H(s) = \frac{1}{s^2R^2C^2 + 3sRC + 1}.$$ Find the frequency at which the output lags the input by exactly $90^\circ$, and the gain $|H|$ there.`,
     parts: [ex(T`$\omega_{90}$`, 1, '1', 'rad/s'), ex(T`$|H(j\omega_{90})|$`, 1 / 3, T`\dfrac13`)],
     hints: [T`At $90^\circ$ lag, $H(j\omega)$ is purely negative imaginary, so the real part of its denominator is zero.`, T`$1 - \omega^2 R^2C^2 = 0$.`],
@@ -44,6 +50,7 @@ bank('circuits', 'advanced', [{
     verify: () => { const [, vb] = complexSolve([[cx(2, 1), cx(-1)], [cx(-1), cx(1, 1)]], [cx(1), cx(0)]); return [1, cabs(vb)]; }
 }, {
     title: 'Matching with only a resistor',
+    diagram: circuitLoop('10 V RMS', '3 + j4 Ω', 'Rʟ'),
     text: T`The same $10\,\text{V}$ RMS source with $Z_s = 3 + 4j\ \Omega$ must now drive a purely resistive load $R_L$. Find the best $R_L$ and the power it absorbs.`,
     parts: [ex(T`$R_L$`, 5, '5', 'Ω'), ex(T`$P_{\max}$`, 25 / 4, T`\dfrac{25}{4}`, 'W')],
     hints: [T`$P(R_L) = \dfrac{|V|^2 R_L}{(3 + R_L)^2 + 16}$. Differentiate with respect to $R_L$.`, T`The optimum is $R_L = |Z_s|$.`],
@@ -55,6 +62,7 @@ bank('circuits', 'advanced', [{
 
 bank('electronics', 'advanced', [{
     title: 'Steering a differential pair',
+    diagram: curve('Differential input / Vₜ', 'Collector current / tail current', [-5, 5], [0, 1], t => 1 / (1 + Math.exp(-t))),
     text: T`A BJT differential pair has tail current $I_{EE}$ and ideal exponential transistors, with $V_T = 25\,\text{mV}$ and $\beta \to \infty$. What differential input voltage puts $\tfrac34$ of the tail current in one transistor?`,
     parts: [ex(T`$v_{id}$`, 25 * Math.log(3), T`25\ln 3`, 'mV')],
     hints: [T`Both transistors share $V_E$, so $\dfrac{I_{C1}}{I_{C2}} = e^{v_{id}/V_T}$.`, T`A $\tfrac34 : \tfrac14$ split means the ratio is $3$.`],
@@ -64,6 +72,7 @@ bank('electronics', 'advanced', [{
     verify: () => [NUM.bisect(v => 1 / (1 + Math.exp(-v / 25)) - .75, 0, 200)]
 }, {
     title: 'Three RC sections in an oscillator',
+    diagram: filterLadder('C', 'R', 3),
     text: T`A phase-shift oscillator feeds back through three identical high-pass sections (series $C$, shunt $R$), driven by an ideal source and unloaded at the output. Find the value of $\omega RC$ at which the network shifts the phase by $180^\circ$, and the inverting gain magnitude needed to oscillate.`,
     parts: [ex(T`$\omega RC$`, 1 / Math.sqrt(6), T`\dfrac{1}{\sqrt6}`), ex(T`$|A|$`, 29, '29', 'V/V')],
     hints: [T`With $x = 1/(\omega RC)$, the transfer function is $\dfrac{1}{1 - 5x^2 - j(6x - x^3)}$.`, T`$180^\circ$ needs the imaginary part to vanish: $x^2 = 6$.`],
@@ -73,6 +82,7 @@ bank('electronics', 'advanced', [{
     verify: () => { const H = x => { let Mx = [[cx(1), cx(0)], [cx(0), cx(1)]]; for (let k = 0; k < 3; k++) { const se = [[cx(1), cx(0, -x)], [cx(0), cx(1)]], sh = [[cx(1), cx(0)], [cx(1), cx(1)]], mul = (A, B) => A.map(r => B[0].map((_, j) => ca(cm(r[0], B[0][j]), cm(r[1], B[1][j])))); Mx = mul(Mx, mul(se, sh)); } return cd(cx(1), Mx[0][0]); }; const x = NUM.bisect(x => H(x).im, 1, 4); return [1 / x, 1 / Math.abs(H(x).re)]; }
 }, {
     title: 'Equal components in a Sallen–Key filter',
+    diagram: curve('Angular frequency / ω₀', 'Voltage gain |H|', [0, 3], [0, 1], t => 1 / (1 + t * t)),
     text: T`A unity-gain Sallen–Key low-pass filter uses equal resistors $R$ and equal capacitors $C$, giving $$H(s) = \frac{1}{s^2R^2C^2 + 2sRC + 1}.$$ Find its quality factor $Q$ and the gain $|H|$ at $\omega_0 = 1/RC$.`,
     parts: [ex(T`$Q$`, 1 / 2, T`\dfrac12`), ex(T`$|H(j\omega_0)|$`, 1 / 2, T`\dfrac12`)],
     hints: [T`Compare with $\dfrac{1}{s^2/\omega_0^2 + s/(Q\omega_0) + 1}$.`, T`At $\omega_0$, $|H| = Q$.`],
@@ -82,6 +92,7 @@ bank('electronics', 'advanced', [{
     verify: () => { const s = cx(0, 1), [a, b] = complexSolve([[ca(cx(2), s), cx(-1).re ? cs(cx(-1), s) : cx(0)], [cx(-1), ca(cx(1), s)]], [cx(1), cx(0)]); return [.5, cabs(b)]; }
 }, {
     title: 'The efficiency limit of class B',
+    diagram: curve('Time / half-period', 'Upper-device current / peak', [0, 4], [0, 1], t => Math.max(0, Math.sin(Math.PI * t))),
     text: T`An ideal class-B push-pull stage runs from $\pm V_{CC}$ into a resistor and delivers a sine wave of peak $V_p$. Find the maximum possible efficiency (load power divided by supply power), reached at $V_p = V_{CC}$.`,
     parts: [ex(T`$\eta_{\max}$`, Math.PI / 4, T`\dfrac{\pi}{4}`)],
     hints: [T`$P_L = V_p^2/(2R_L)$.`, T`Each supply delivers half-wave current pulses with average $I_p/\pi$.`],
@@ -93,6 +104,7 @@ bank('electronics', 'advanced', [{
 
 bank('signals', 'advanced', [{
     title: 'Basel from a sawtooth',
+    diagram: curve('Time / π', 'Sawtooth / π', [-2, 2], [-1, 1], t => t - 2 * Math.floor((t + 1) / 2)),
     text: T`The sawtooth $f(t) = t$ on $(-\pi, \pi)$, extended periodically, has Fourier series $\displaystyle f(t) = \sum_{n=1}^\infty \frac{2(-1)^{n+1}}{n}\sin nt$. Use Parseval’s theorem to evaluate $$\sum_{n=1}^\infty \frac{1}{n^2}.$$`,
     parts: [ex('Sum', Math.PI ** 2 / 6, T`\dfrac{\pi^2}{6}`)],
     hints: [T`Parseval: $\dfrac1\pi\displaystyle\int_{-\pi}^{\pi} f^2\,dt = \sum b_n^2$.`, T`$\displaystyle\int_{-\pi}^{\pi} t^2\,dt = \dfrac{2\pi^3}{3}$.`],
@@ -102,6 +114,7 @@ bank('signals', 'advanced', [{
     verify: () => { let s = 0; for (let n = 1; n <= 1e6; n++) s += 1 / (n * n); return [s + 1e-6]; }
 }, {
     title: 'A damped sinc integral',
+    diagram: curve('Time t', 'Damped sinc', [0, 7], [-0.05, 1], t => t === 0 ? 1 : Math.exp(-t) * Math.sin(t) / t),
     text: T`Use $\mathcal{L}\left\{\dfrac{\sin t}{t}\right\}(s) = \arctan\dfrac1s$ to evaluate $$\int_0^\infty e^{-t}\,\frac{\sin t}{t}\,dt.$$`,
     parts: [ex('Integral', Math.PI / 4, T`\dfrac\pi4`)],
     hints: [T`The integral is the Laplace transform evaluated at $s = 1$.`, T`To derive the transform, integrate $\mathcal{L}\{\sin t\} = \dfrac{1}{s^2+1}$ from $s$ to $\infty$.`],
@@ -111,6 +124,7 @@ bank('signals', 'advanced', [{
     verify: () => [NUM.simpson(t => t === 0 ? 1 : Math.exp(-t) * Math.sin(t) / t, 0, 60, 60000)]
 }, {
     title: 'Delay through an all-pass',
+    diagram: curve('Angular frequency', 'Phase (rad)', [0, 6], [-3, 0], t => -2 * Math.atan(t)),
     text: T`The all-pass filter $H(s) = \dfrac{1 - s}{1 + s}$ has unit gain at every frequency. Find its group delay $\tau_g = -\dfrac{d\phi}{d\omega}$ at $\omega = 0$.`,
     parts: [ex(T`$\tau_g(0)$`, 2, '2', 's')],
     hints: [T`$\phi(\omega) = -2\arctan\omega$.`, T`$\dfrac{d}{d\omega}\arctan\omega = \dfrac{1}{1+\omega^2}$.`],
@@ -120,6 +134,7 @@ bank('signals', 'advanced', [{
     verify: () => { const ph = w => Math.atan2(-w, 1) - Math.atan2(w, 1), h = 1e-6; return [-(ph(h) - ph(-h)) / (2 * h)]; }
 }, {
     title: 'Noise bandwidth of a Hann window',
+    diagram: curve('Sample position n/N', 'Hann weight', [0, 1], [0, 1], t => Math.sin(Math.PI * t) ** 2),
     text: T`The equivalent noise bandwidth of a length-$N$ window, in DFT bins, is $$\text{ENBW} = N\,\frac{\sum w[n]^2}{\left(\sum w[n]\right)^2}.$$ Find it for the (periodic) Hann window $w[n] = \sin^2(\pi n/N)$ as $N \to \infty$.`,
     parts: [ex('ENBW', 1.5, T`\dfrac32`, 'bins')],
     hints: [T`Average $\sin^2$ over a period: $\tfrac12$. Average $\sin^4$: $\tfrac38$.`, T`ENBW $= \dfrac{\overline{w^2}}{\bar w^2}$.`],
@@ -131,6 +146,7 @@ bank('signals', 'advanced', [{
 
 bank('control', 'advanced', [{
     title: 'The simplest Riccati equation',
+    diagram: stateFeedback('Plant A = 1, B = 1'),
     text: T`For $\dot x = x + u$ (an unstable plant), find the state feedback $u = -Kx$ that minimises $$J = \int_0^\infty \left(x^2 + u^2\right)dt.$$ Give $K$ and the closed-loop pole.`,
     parts: [ex(T`$K$`, 1 + Math.SQRT2, T`1+\sqrt2`), ex('Closed-loop pole', -Math.SQRT2, T`-\sqrt2`)],
     hints: [T`Scalar algebraic Riccati equation: $2ap - p^2 b^2/r + q = 0$ with $a = b = q = r = 1$.`, T`$K = bp/r$. Choose the positive root.`],
@@ -140,6 +156,7 @@ bank('control', 'advanced', [{
     verify: () => { let p = 1; for (let i = 0; i < 5000; i++) p += .01 * (2 * p - p * p + 1); return [p, 1 - p]; }
 }, {
     title: 'A relay starts a limit cycle',
+    diagram: hardFeedbackDiagram('Relay ±1', '1 / [s(s + 1)(s + 2)]'),
     text: T`An ideal relay ($\pm1$) drives $G(s) = \dfrac{1}{s(s+1)(s+2)}$ in a negative-feedback loop. Using the describing function $N(A) = \dfrac{4}{\pi A}$, predict the amplitude $A$ and frequency of the limit cycle.`,
     parts: [ex(T`$A$`, 2 / (3 * Math.PI), T`\dfrac{2}{3\pi}`), ex(T`$\omega$`, Math.SQRT2, T`\sqrt2`, 'rad/s')],
     hints: [T`Harmonic balance: $G(j\omega) = -1/N(A)$, so $G(j\omega)$ must be real and negative.`, T`$G(j\sqrt2) = -\tfrac16$.`],
@@ -149,6 +166,7 @@ bank('control', 'advanced', [{
     verify: () => { const g = cd(cx(1), cx(-3 * 2, Math.SQRT2 * (2 - 2))); return [4 * Math.abs(g.re) / Math.PI, Math.SQRT2]; }
 }, {
     title: 'The damping that minimises squared error',
+    diagram: curve('Damping ratio ζ', 'Normalised squared error ωₙ ISE', [0.1, 1.5], [0, 3], z => (1 + 4 * z * z) / (4 * z)),
     text: T`For the unit-step response of $\dfrac{\omega_n^2}{s^2 + 2\zeta\omega_n s + \omega_n^2}$, the integral of squared error is $$\text{ISE} = \int_0^\infty e(t)^2\,dt = \frac{1 + 4\zeta^2}{4\zeta\omega_n}.$$ Which $\zeta$ minimises it?`,
     parts: [ex(T`$\zeta^\star$`, 1 / 2, T`\dfrac12`)],
     hints: [T`Minimise $\dfrac{1}{\zeta} + 4\zeta$.`],
@@ -158,6 +176,7 @@ bank('control', 'advanced', [{
     verify: () => { const ise = z => { const tr = rk4((t, [y, v, s]) => [v, 1 - 2 * z * v - y, (1 - y) ** 2], [0, 0, 0], 0, 60, 6000); return tr[tr.length - 1][1][2]; }; let b = [0, Infinity]; for (let z = .3; z < .8; z += .005) { const v = ise(z); if (v < b[1]) b = [z, v]; } return [b[0]]; }
 }, {
     title: 'How much delay can an integrator take?',
+    diagram: hardFeedbackDiagram('Delay τ', '1 / s'),
     text: T`The loop $L(s) = \dfrac{e^{-s\tau}}{s}$ is closed with unity negative feedback. Find the largest delay $\tau$ for which it remains stable.`,
     parts: [ex(T`$\tau_{\max}$`, Math.PI / 2, T`\dfrac\pi2`, 's')],
     hints: [T`$|L(j\omega)| = 1/\omega$, so crossover is at $\omega_c = 1$.`, T`The phase at crossover is $-90^\circ - \tau\omega_c$ (in radians: $-\pi/2 - \tau$).`],
@@ -169,6 +188,7 @@ bank('control', 'advanced', [{
 
 bank('digital', 'advanced', [{
     title: 'Self-dual functions',
+    diagram: signalChain(['Input x|000', 'Complement|111', 'Output|1 − f(000)'], 'Self-duality pairs each input with its bitwise complement'),
     text: T`A Boolean function is self-dual if $f(\bar x_1, \bar x_2, \bar x_3) = \overline{f(x_1, x_2, x_3)}$. How many self-dual functions of three variables exist?`,
     parts: [exInt('Self-dual functions', 16)],
     hints: [T`The 8 input vectors form 4 complementary pairs.`, T`Choosing $f$ on one member of each pair fixes it on the other.`],
@@ -178,6 +198,7 @@ bank('digital', 'advanced', [{
     verify: () => { let n = 0; for (let f = 0; f < 256; f++) { let ok = 1; for (let x = 0; x < 8; x++) ok &= +((((f >> (7 - x)) & 1)) === 1 - ((f >> x) & 1)); n += ok; } return [n]; }
 }, {
     title: 'A power of x in GF(2)',
+    diagram: bitWord(['1', '0', '1', '1'], ['x³', 'x²', 'x', '1'], 'Coefficients of the divisor over GF(2)'),
     text: T`Over $\mathrm{GF}(2)$, compute $x^7 \bmod (x^3 + x + 1)$. Give the remainder as the integer whose binary digits are its coefficients (for example, $x^2 + 1 \to 5$).`,
     parts: [exInt('Remainder', 1)],
     hints: [T`$x^3 \equiv x + 1$.`, T`$x^3 + x + 1$ is primitive, so $x$ has order $2^3 - 1 = 7$.`],
@@ -187,6 +208,10 @@ bank('digital', 'advanced', [{
     verify: () => { let r = 1; for (let i = 0; i < 7; i++) { r <<= 1; if (r & 8) r ^= 0b1011; } return [r]; }
 }, {
     title: 'Monotone functions of three inputs',
+    diagram: sketch(
+        'One chain in the three-input Boolean lattice, ordered by bitwise inclusion.',
+        arrow(146, 165, 249, 131) + arrow(293, 120, 402, 84) + arrow(448, 75, 546, 42),
+        [[120, 177, '000'], [272, 132, '001'], [426, 88, '011'], [572, 44, '111'], [360, 220, 'Changing one input from 0 to 1']]),
     text: T`A Boolean function is monotone if changing any input from $0$ to $1$ never changes the output from $1$ to $0$. How many monotone functions of three variables are there (including the constants)?`,
     parts: [exInt('Monotone functions', 20)],
     hints: [T`Monotone functions correspond to antichains (sets of mutually incomparable subsets) of $\{1,2,3\}$.`, T`Count them by size, or enumerate all 256 functions.`],
@@ -196,6 +221,7 @@ bank('digital', 'advanced', [{
     verify: () => { let n = 0; for (let f = 0; f < 256; f++) { let ok = 1; for (let x = 0; x < 8; x++) for (let k = 0; k < 3; k++) if (!(x & (1 << k)) && ((f >> x) & 1) > ((f >> (x | (1 << k))) & 1)) ok = 0; n += ok; } return [n]; }
 }, {
     title: 'Maximal-length LFSRs of degree five',
+    diagram: bitWord(['q₄', 'q₃', 'q₂', 'q₁', 'q₀'], [], 'Five register bits · feedback taps select the polynomial'),
     text: T`How many distinct degree-5 feedback polynomials over $\mathrm{GF}(2)$ produce a maximal-length (period $31$) LFSR? That is, how many primitive polynomials of degree 5 are there?`,
     parts: [exInt('Primitive polynomials', 6)],
     hints: [T`The number of primitive polynomials of degree $n$ is $\varphi(2^n - 1)/n$.`, T`$31$ is prime.`],
@@ -207,6 +233,11 @@ bank('digital', 'advanced', [{
 
 bank('fields', 'advanced', [{
     title: 'Brewster’s angle and the other polarisation',
+    diagram: sketch(
+        'Incidence, reflection and refraction at an air–glass interface.',
+        wire('M80 121H640') + guide('M356 28v178') + arrow(230, 45, 356, 121) + arrow(356, 121, 482, 45) +
+        arrow(356, 121, 407, 202),
+        [[114, 103, 'Air'], [125, 156, 'Glass'], [319, 78, 'θᵢ']]),
     text: T`Light in air strikes glass with $n = \sqrt3$. Find Brewster’s angle (in degrees), and the power reflectance of the $s$-polarised component at that angle.`,
     parts: [ex(T`$\theta_B$`, 60, '60', '°'), ex(T`$R_s$`, 1 / 4, T`\dfrac14`)],
     hints: [T`$\tan\theta_B = n$.`, T`At Brewster’s angle the transmitted angle is $90^\circ - \theta_B$. Use $r_s = \dfrac{\cos\theta_i - n\cos\theta_t}{\cos\theta_i + n\cos\theta_t}$.`],
@@ -215,6 +246,7 @@ bank('fields', 'advanced', [{
     prereq: 'Fresnel equations; Snell’s law.'
 }, {
     title: 'Directivity of a Hertzian dipole',
+    diagram: curve('Polar angle θ (degrees)', 'Normalised radiation intensity', [0, 180], [0, 1], t => Math.sin(t * Math.PI / 180) ** 2),
     text: T`A short dipole radiates intensity $U(\theta) \propto \sin^2\theta$. Find its directivity $D = 4\pi U_{\max}\Big/\displaystyle\oint U\,d\Omega$.`,
     parts: [ex(T`$D$`, 1.5, T`\dfrac32`)],
     hints: [T`$\displaystyle\oint \sin^2\theta\,d\Omega = 2\pi\int_0^\pi \sin^3\theta\,d\theta$.`, T`$\displaystyle\int_0^\pi \sin^3\theta\,d\theta = \tfrac43$.`],
@@ -224,6 +256,7 @@ bank('fields', 'advanced', [{
     verify: () => [4 * Math.PI / (2 * Math.PI * NUM.simpson(t => Math.sin(t) ** 3, 0, Math.PI))]
 }, {
     title: 'A waveguide at twice cutoff',
+    diagram: curve('Frequency / cutoff frequency', 'Phase constant β / k₀', [1, 3], [0, 1], t => Math.sqrt(1 - 1 / (t * t))),
     text: T`A hollow waveguide carries a mode at exactly twice that mode’s cutoff frequency. Find the guide wavelength in units of the free-space wavelength, $\lambda_g/\lambda_0$.`,
     parts: [ex(T`$\lambda_g/\lambda_0$`, 2 / Math.sqrt(3), T`\dfrac{2}{\sqrt3}`)],
     hints: [T`$\lambda_g = \dfrac{\lambda_0}{\sqrt{1 - (f_c/f)^2}}$.`],
@@ -232,6 +265,10 @@ bank('fields', 'advanced', [{
     prereq: 'Waveguide dispersion.'
 }, {
     title: 'Field inside a magnetised sphere',
+    diagram: sketch(
+        'Uniform magnetisation within a sphere.',
+        ring(355, 122, 85) + [320, 355, 390].map(x => arrow(x, 154, x, 88)).join(''),
+        [[479, 126, 'M']]),
     text: T`A sphere is uniformly magnetised with magnetisation $\mathbf M$. Find the uniform field inside, $B/(\mu_0 M)$.`,
     parts: [ex(T`$B/(\mu_0M)$`, 2 / 3, T`\dfrac23`)],
     hints: [T`$\mathbf H$ inside a uniformly magnetised sphere is $-\mathbf M/3$ (demagnetising factor $\tfrac13$).`, T`$\mathbf B = \mu_0(\mathbf H + \mathbf M)$.`],
@@ -242,6 +279,7 @@ bank('fields', 'advanced', [{
 
 bank('power', 'advanced', [{
     title: 'Critical clearing angle in closed form',
+    diagram: powerAngle(true),
     text: T`A generator delivers $P_m = \tfrac12 P_{\max}$ through a single power–angle curve $P_e = P_{\max}\sin\delta$. A fault drops $P_e$ to zero, and after clearing the same curve returns. Use the equal-area criterion to find the critical clearing angle, in degrees.`,
     parts: [ex(T`$\delta_{cr}$`, 180 / Math.PI * Math.acos(Math.PI / 3 - Math.sqrt(3) / 2), T`\tfrac{180}{\pi}\arccos\!\left(\tfrac{\pi}{3} - \tfrac{\sqrt3}{2}\right)`, '°')],
     hints: [T`$\delta_0 = \pi/6$ and $\delta_{\max} = \pi - \delta_0 = 5\pi/6$.`, T`$\cos\delta_{cr} = \dfrac{P_m}{P_{\max}}(\delta_{\max} - \delta_0) + \cos\delta_{\max}$.`],
@@ -251,6 +289,7 @@ bank('power', 'advanced', [{
     verify: () => { const d0 = Math.PI / 6, dm = 5 * Math.PI / 6, f = dc => .5 * (dc - d0) - NUM.simpson(d => Math.sin(d) - .5, dc, dm, 2000); return [NUM.bisect(f, d0 + .01, dm - .01) * 180 / Math.PI]; }
 }, {
     title: 'Worst-case ripple in a buck converter',
+    diagram: buckDiagram(48, 'Vₒ', 0.1, 100),
     text: T`An ideal buck converter in continuous conduction has inductor ripple $\Delta I = \dfrac{V_{in}D(1-D)}{Lf}$. With $V_{in} = 48\,\text{V}$, $L = 100\,\mu\text{H}$ and $f = 100\,\text{kHz}$, which duty cycle gives the largest ripple, and how large is it?`,
     parts: [ex(T`$D$`, 1 / 2, T`\dfrac12`), ex(T`$\Delta I_{\max}$`, 1.2, T`\dfrac65`, 'A')],
     hints: [T`$D(1-D)$ peaks at $D = \tfrac12$, where it equals $\tfrac14$.`],
@@ -259,6 +298,12 @@ bank('power', 'advanced', [{
     prereq: 'Switch-mode converters.'
 }, {
     title: 'A single line-to-ground fault',
+    diagram: sketch(
+        'Series connection of the three sequence networks during a bolted ground fault.',
+        element('AC', 95, 82, 95, 194, 'E') + element('R', 95, 82, 255, 82, 'Z₁') +
+        element('R', 255, 82, 415, 82, 'Z₂') + element('R', 415, 82, 575, 82, 'Z₀') + wire('M575 82v112H95') +
+        ground(575, 194),
+        [[355, 219, 'Z₁ = Z₂ = Z₀ = j0.1 pu']]),
     text: T`A bolted single line-to-ground fault occurs at a bus with prefault voltage $E = 1\,\text{pu}$ and sequence impedances $Z_1 = Z_2 = Z_0 = j0.1\,\text{pu}$. Find the fault current magnitude in per unit.`,
     parts: [ex(T`$|I_f|$`, 10, '10', 'pu')],
     hints: [T`For an SLG fault the sequence networks are in series: $I_1 = I_2 = I_0 = \dfrac{E}{Z_1+Z_2+Z_0}$.`, T`$I_f = 3I_0$.`],
@@ -267,6 +312,7 @@ bank('power', 'advanced', [{
     prereq: 'Symmetrical components.'
 }, {
     title: 'Economic dispatch with equal lambdas',
+    diagram: curve('Generator 1 output P₁', 'Combined generation cost', [0, 3], [0, 18], x => x * x + 2 * (3 - x) ** 2),
     text: T`Two generators have costs $C_1 = P_1^2$ and $C_2 = 2P_2^2$ (arbitrary units) and must together supply $P_1 + P_2 = 3$. Minimise the total cost. Find $P_1$ and the system marginal cost $\lambda$.`,
     parts: [ex(T`$P_1$`, 2, '2'), ex(T`$\lambda$`, 4, '4')],
     hints: [T`At the optimum, the incremental costs are equal: $dC_1/dP_1 = dC_2/dP_2 = \lambda$.`],
@@ -278,6 +324,7 @@ bank('power', 'advanced', [{
 
 bank('measurement', 'advanced', [{
     title: 'A three-point straight-line fit',
+    diagram: curve('x', 'Observed y', [0, 2], [0, 3], x => [0, 1, 3][x], 'points'),
     text: T`Fit $y = a + bx$ by ordinary least squares to the points $(0, 0)$, $(1, 1)$ and $(2, 3)$. Find the slope and the intercept.`,
     parts: [ex(T`$b$`, 1.5, T`\dfrac32`), ex(T`$a$`, -1 / 6, T`-\dfrac16`)],
     hints: [T`$b = \dfrac{\sum (x - \bar x)(y - \bar y)}{\sum (x - \bar x)^2}$ and $a = \bar y - b\bar x$.`],
@@ -287,6 +334,7 @@ bank('measurement', 'advanced', [{
     verify: () => { const x = [0, 1, 2], y = [0, 1, 3], n = 3, sx = 3, sy = 4, sxx = 5, sxy = 7, b = (n * sxy - sx * sy) / (n * sxx - sx * sx); return [b, (sy - b * sx) / n]; }
 }, {
     title: 'The golden Kalman gain',
+    diagram: signalChain(['Predict|random walk', 'Innovation|z − prediction', 'Update|with gain K'], 'Process and measurement noise each have variance 1'),
     text: T`A scalar random walk $x_{k+1} = x_k + w_k$ is measured as $z_k = x_k + v_k$, with $\operatorname{Var} w = \operatorname{Var} v = 1$. Find the steady-state Kalman gain.`,
     parts: [ex(T`$K$`, (Math.sqrt(5) - 1) / 2, T`\dfrac{\sqrt5-1}{2}`)],
     hints: [T`The prior variance satisfies $P = \dfrac{P}{P+1} + 1$, i.e. $P^2 - P - 1 = 0$.`, T`$K = \dfrac{P}{P+1}$.`],
@@ -296,6 +344,7 @@ bank('measurement', 'advanced', [{
     verify: () => { let P = 1, K = 0; for (let i = 0; i < 200; i++) { const Pp = P + 1; K = Pp / (Pp + 1); P = (1 - K) * Pp; } return [K]; }
 }, {
     title: 'kTC noise does not depend on R',
+    diagram: rcDiagram('R', '1 pF', 'Noise', 'C'),
     text: T`A resistor charges a $1\,\text{pF}$ capacitor at $T = 300\,\text{K}$. Find the RMS thermal-noise voltage on the capacitor ($k = 1.380649\times10^{-23}\,\text{J/K}$).`,
     parts: [ex(T`$v_n$`, Math.sqrt(1.380649e-23 * 300 / 1e-12) * 1e6, T`\sqrt{kT/C}`, 'µV')],
     hints: [T`The noise density $4kTR$ is shaped by the $RC$ low-pass, whose noise bandwidth is $\dfrac{1}{4RC}$.`, T`$v_n^2 = 4kTR\cdot\dfrac{1}{4RC} = \dfrac{kT}{C}$.`],
@@ -305,6 +354,7 @@ bank('measurement', 'advanced', [{
     verify: () => { const k = 1.380649e-23, Tk = 300, C = 1e-12, R = 1e3, S = 4 * k * Tk * R, bw = NUM.simpson(f => 1 / (1 + (2 * Math.PI * f * R * C) ** 2), 0, 1e13, 200000) + 1 / (4 * Math.PI ** 2 * R * R * C * C * 1e13); return [Math.sqrt(S * bw) * 1e6]; }
 }, {
     title: 'Noise figure of a two-stage chain',
+    diagram: signalChain(['Input', 'Stage 1|F₁ = 2, G₁ = 10', 'Stage 2|F₂ = 11', 'Output'], 'Cascaded receiver stages'),
     text: T`A receiver chain has a first stage with noise factor $F_1 = 2$ and gain $G_1 = 10$, followed by a stage with $F_2 = 11$. Find the overall noise factor (as a ratio, not in dB).`,
     parts: [ex(T`$F$`, 3, '3')],
     hints: [T`Friis formula: $F = F_1 + \dfrac{F_2 - 1}{G_1}$.`],

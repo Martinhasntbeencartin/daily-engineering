@@ -46,7 +46,19 @@ server.listen(0, async () => {
     page.on('response', r => r.status() >= 400 && errors.push(`${r.status()} ${r.url()}`));
     let failures = 0;
     try {
+        // A fixed date keeps the run reproducible. A saved preference for a removed level falls back to Level 1.
+        await page.clock.setFixedTime(new Date(2026, 1, 1, 12));
+        await page.addInitScript(() => { // only on the first load, so later reloads keep what the tests save
+            if (sessionStorage.getItem('seeded')) return;
+            sessionStorage.setItem('seeded', '1');
+            localStorage.setItem('daily-engineer-level', 'foundations');
+        });
         await page.goto(url);
+        const levels = await page.locator('[data-level]').evaluateAll(buttons => buttons.map(b => b.dataset.level));
+        if (levels.join(',') !== 'level-1,level-2,level-3,level-4' ||
+            await page.locator('[data-level][aria-pressed="true"]').getAttribute('data-level') !== 'level-1') {
+            failures++; console.log('FAIL four-level picker or retired-level fallback');
+        }
         await page.waitForSelector('math-field');
         for (const [keys, want] of cases) {
             await page.evaluate(() => { const m = document.getElementById('answer-0'); m.value = ''; m.focus(); });
@@ -116,10 +128,43 @@ server.listen(0, async () => {
         });
         await page.reload();
         await page.waitForSelector('math-field');
-        const moved = await page.evaluate(() => ({level, attempts: attempts[`${today}:circuits:level-3`], cards: [...document.querySelectorAll('.level-option')].map(b => b.querySelector('.level-top span').textContent + ':' + b.querySelector('.level-completion').textContent)}));
+        const moved = await page.evaluate(() => ({level, attempts: attempts[`${today}:circuits:level-3`], cards: [...document.querySelectorAll('.level-option')].map(b => b.querySelector('.level-top span').textContent + ':' + (b.querySelector('.level-completion')?.textContent || ''))}));
         const movedOk = moved.level === 'level-3' && moved.attempts === 3 && moved.cards.length === 4 && /Level 4:✓ Solved/.test(moved.cards.join('|')) && !/Level [123]:✓/.test(moved.cards.join('|'));
         if (!movedOk) failures++;
         console.log(`${movedOk ? 'ok  ' : 'FAIL'} saved progress moved to new levels:`, JSON.stringify(moved));
+        await page.evaluate(() => localStorage.clear());
+        // Finishing a problem opens the full worked solution: solving it, or using all five attempts.
+        const panelState = () => page.evaluate(() => {
+            const panel = document.getElementById('solution-content');
+            return {open: !panel.hidden, verdict: panel.querySelector('.solution-verdict')?.textContent || '', ok: panel.querySelectorAll('.answer-review li.ok').length,
+                miss: panel.querySelectorAll('.answer-review li.miss').length, steps: panel.querySelectorAll('ol.steps li').length, katexErrors: panel.querySelectorAll('.katex-error').length,
+                parts: exercise.parts.length, wantSteps: exercise.steps.length, button: document.getElementById('solution').textContent, status: document.getElementById('status-line').textContent,
+                prefilled: document.getElementById('answer-0').value};
+        });
+        const fill = wrong => page.evaluate(w => exercise.parts.forEach((p, i) => { document.getElementById(`answer-${i}`).value = w ? '12345' : String(p.answer); }), wrong);
+        const report = (name, ok, state) => { if (!ok) failures++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}:`, JSON.stringify(state)); };
+        await page.reload();
+        await page.waitForSelector('math-field');
+        await page.click('[data-group="electrical"]'); await page.click('[data-topic="circuits"]'); await page.click('[data-level="level-2"]');
+        await page.waitForSelector('math-field');
+        let st = await panelState();
+        report('solution hidden before finishing', !st.open && st.button === 'Reveal solution', st);
+        await fill(false); await page.click('#check'); await page.waitForTimeout(150);
+        st = await panelState();
+        report('solving opens the worked solution', st.open && /Solved in 1 attempt/.test(st.verdict) && st.ok === st.parts && st.miss === 0 && st.steps === st.wantSteps && !st.katexErrors, st);
+        await page.reload();
+        await page.waitForSelector('math-field');
+        st = await panelState();
+        report('still open after reload, with your answers', st.open && st.ok === st.parts && st.prefilled !== '' && st.button === 'Hide solution', st);
+        await page.click('[data-level="level-3"]');
+        await page.waitForSelector('math-field');
+        for (let attempt = 1; attempt <= 5; attempt++) {
+            st = await panelState();
+            if (st.open) { report(`solution stayed closed before attempt ${attempt}`, false, st); break; }
+            await fill(true); await page.click('#check'); await page.waitForTimeout(100);
+        }
+        st = await panelState();
+        report('five wrong attempts open the worked solution', st.open && /No attempts left/.test(st.verdict) && st.miss === st.parts && st.steps === st.wantSteps && st.status === 'SOLUTION REVIEWED' && !st.katexErrors, st);
         await page.evaluate(() => localStorage.clear());
         if (errors.length) { failures++; console.log('FAIL page errors', errors); }
     } finally {

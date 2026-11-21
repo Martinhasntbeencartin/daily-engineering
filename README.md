@@ -3,10 +3,11 @@
 A static web app with a new engineering problem every day, in the spirit of dailyintegral.com.
 
 - **11 topics in two groups.** Electrical: circuits, electronics, signals, control, digital, electromagnetism, power, measurement. Mechanical & civil: statics/structures, dynamics/vibrations, thermo-fluids.
-- **4 levels.**
-  - **Level 1 (Insight)** is a hand-curated bank of 44 problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
-  - **Levels 2–4 (Advanced, Challenge, Expert)** are generated multi-part problems whose values change daily. Level 4 alternates between qualifying-exam problems and research-grade work that needs numerical methods.
+- **Four levels.**
+  - **Level 1 (Insight)** is a rotation of 44 hand-picked problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
+  - **Levels 2–4 (Advanced, Challenge, Expert)** are multi-part problems whose values change daily. Level 4 alternates between graduate-level problems and research-grade work that needs numerical methods.
   - Internally the generators work on five difficulty *tiers* (`TIERS` in `js/core.js`); each public level maps to one or more tiers, so the levels can be regrouped without changing any problem.
+- **The full working once you finish.** Solving a problem, or using all five attempts, opens its worked solution: each answer (exact form and decimal) beside the one you gave, the approach, every step of the working and the key idea. Your last answers are kept, so the comparison is still there when you come back (also in the Archive). Revealing the solution before finishing marks the problem as reviewed.
 - **LaTeX everywhere.** All problem text, hints and solutions are typeset with KaTeX, which is bundled in `vendor/katex/` (MIT licence), so the site needs no CDN.
 - **A real maths editor for answers.** The answer box is a MathLive field (bundled in `vendor/mathlive/`, MIT licence; it shares KaTeX's fonts), so maths becomes typeset as you type:
   - `3/4` becomes a stacked fraction, `sqrt` a root, `pi` gives π, and `^` starts an exponent.
@@ -56,7 +57,7 @@ The suite checks:
 
 ## Adding a curated problem
 
-Add an object to the relevant `bank(topic, 'advanced', [...])` list in `js/bank.js` (electrical) or `js/bank-mech.js` (mechanical & civil):
+Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, in `js/bank.js` (electrical) or `js/bank-mech.js` (mechanical & civil):
 
 ```js
 {

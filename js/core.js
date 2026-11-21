@@ -18,12 +18,12 @@ const TIERS = ['advanced', 'university', 'challenge', 'expert', 'mastery'];
 const CURATED_TIER = 'advanced';
 /* The four levels people choose from. A level with several tiers rotates through them day by day. */
 const LEVELS = [
-    {id: 'level-1', tag: 'Level 1', name: 'Insight', tiers: ['advanced'], description: 'Elegant tricks, transforms and optimisation. Exact answers.', time: '20–40 min'},
-    {id: 'level-2', tag: 'Level 2', name: 'Advanced', tiers: ['university'], description: 'Derive models. Solve coupled equations.', time: '30–50 min'},
+    {id: 'level-1', tag: 'Level 1', name: 'Insight', tiers: ['advanced'], description: 'Exact answers using optimisation and transforms.', time: '20–40 min'},
+    {id: 'level-2', tag: 'Level 2', name: 'Advanced', tiers: ['university'], description: 'Model systems and solve coupled equations.', time: '30–50 min'},
     {id: 'level-3', tag: 'Level 3', name: 'Challenge', tiers: ['challenge'], description: 'Nonlinear systems and design constraints.', time: '45–75 min'},
-    {id: 'level-4', tag: 'Level 4', name: 'Expert', tiers: ['expert', 'mastery'], description: 'Qualifying-exam to research grade, with numerical methods.', time: '60–150 min', elite: true}
+    {id: 'level-4', tag: 'Level 4', name: 'Expert', tiers: ['expert', 'mastery'], description: 'Graduate-level analysis and design, up to research grade.', time: '60–150 min'}
 ];
-/* The public level that serves a tier (used to link older saved progress and source cards). */
+/* The public level that serves a tier (used to file progress saved under the old tier ids). */
 const levelOfTier = tier => LEVELS.find(l => l.tiers.includes(tier));
 const fmt = n => Number(n.toPrecision(5)).toString();
 /* tolerance is relative; abs is an optional absolute floor for answers that can be close to zero. */

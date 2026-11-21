@@ -1,6 +1,10 @@
 /* ================= MECHANICAL & CIVIL ================= */
 bank('statics', 'advanced', [{
     title: 'The strongest beam from a log',
+    diagram: sketch(
+        'Rectangular beam inscribed in a round log.',
+        ring(353, 119, 92) + wire('M299 44.5h108v149H299z') + guide('M299 44.5l108 149'),
+        [[354, 235, 'Width b'], [470, 124, 'h'], [335, 124, 'd']]),
     text: T`A rectangular beam of width $b$ and depth $h$ is cut from a round log of diameter $d$. The bending strength is proportional to the section modulus $bh^2/6$. Find the ratio $h/b$ for the strongest beam.`,
     parts: [ex(T`$h/b$`, Math.SQRT2, T`\sqrt2`)],
     hints: [T`Constraint: $b^2 + h^2 = d^2$. Maximise $b(d^2 - b^2)$.`],
@@ -10,6 +14,10 @@ bank('statics', 'advanced', [{
     verify: () => { let b = [0, 0]; for (let x = .001; x < 1; x += 1e-5) { const v = x * (1 - x * x); if (v > b[1]) b = [x, v]; } return [Math.sqrt(1 - b[0] ** 2) / b[0]]; }
 }, {
     title: 'Peak shear in a rectangular beam',
+    diagram: sketch(
+        'Rectangle under vertical shear, with the neutral axis through its middle.',
+        wire('M246 44h178v151H246z') + guide('M189 120H472') + arrow(509, 175, 509, 63),
+        [[533, 112, 'V'], [183, 107, 'Neutral axis'], [335, 226, 'Cross-section A']]),
     text: T`A rectangular beam carries a shear force $V$. Find the ratio of the maximum shear stress (at the neutral axis) to the average shear stress $V/A$.`,
     parts: [ex('Ratio', 3 / 2, T`\dfrac32`)],
     hints: [T`$\tau = \dfrac{VQ}{It}$ with $Q = b\dfrac h2\cdot\dfrac h4$ at the neutral axis.`],
@@ -18,6 +26,11 @@ bank('statics', 'advanced', [{
     prereq: 'Shear formula; first moment of area.'
 }, {
     title: 'The lightest two-bar truss',
+    diagram: sketch(
+        'Two equal inclined bars support a vertical joint load.',
+        wire('M174 165L357 64l183 101') + pinSupport(174, 165) + pinSupport(540, 165) + arrow(357, 16, 357, 57) +
+        guide('M174 165H540'),
+        [[386, 37, 'W'], [239, 154, 'θ'], [470, 155, 'θ']]),
     text: T`Two bars meet at an apex above the midpoint between two pin supports a fixed distance apart, and carry a vertical load there. Each bar is sized to work at the same allowable stress. Which angle to the horizontal minimises the total volume of material?`,
     parts: [ex(T`$\theta$`, 45, '45', '°')],
     hints: [T`Bar force $F = \dfrac{W}{2\sin\theta}$ and bar length $L = \dfrac{a}{\cos\theta}$. Volume $\propto FL$.`],
@@ -49,6 +62,11 @@ bank('dynamics', 'advanced', [{
     verify: () => { const e = NUM.eigSym([[2, -1], [-1, 1]]); return e.values.map(Math.sqrt); }
 }, {
     title: 'A bead on a spinning hoop',
+    diagram: sketch(
+        'Bead on a vertical rotating hoop, with angle measured from its bottom radius.',
+        ring(354, 123, 83) + guide('M354 24v190') + wire('M354 123l59 59') + dot(413, 182) +
+        arrow(316, 33, 382, 33),
+        [[329, 176, 'θ'], [433, 196, 'm'], [402, 37, 'ω']]),
     text: T`A bead slides without friction on a vertical hoop of radius $R$ spinning about its vertical diameter at angular speed $\omega$, with $\omega^2 = 2g/R$. At what angle from the bottom, in degrees, does the bead sit in stable equilibrium?`,
     parts: [ex(T`$\theta$`, 60, '60', '°')],
     hints: [T`In the rotating frame: $\omega^2R\sin\theta\cos\theta = g\sin\theta$.`, T`Off-bottom equilibrium: $\cos\theta = \dfrac{g}{\omega^2R}$.`],
@@ -57,6 +75,7 @@ bank('dynamics', 'advanced', [{
     prereq: 'Rotating frames; stability of equilibria.'
 }, {
     title: 'Critical damping, one time constant later',
+    diagram: curve('Normalised time ωₙt', 'Displacement / x₀', [0, 5], [0, 1], t => (1 + t) * Math.exp(-t)),
     text: T`A critically damped oscillator ($\zeta = 1$) is released from rest at displacement $x_0$. Find its displacement at $t = 1/\omega_n$, as a fraction of $x_0$.`,
     parts: [ex(T`$x/x_0$`, 2 / Math.E, T`\dfrac2e`)],
     hints: [T`$x(t) = (A + Bt)e^{-\omega_n t}$.`, T`Rest at $t = 0$ gives $B = \omega_n A$.`],
@@ -66,6 +85,10 @@ bank('dynamics', 'advanced', [{
     verify: () => { const tr = rk4((t, [x, v]) => [v, -2 * v - x], [1, 0], 0, 1, 2000); return [tr[tr.length - 1][1][0]]; }
 }, {
     title: 'A chain slides off a table',
+    diagram: sketch(
+        'Chain on a smooth tabletop with a free end hanging over its edge.',
+        wire('M125 95H462v109M160 83H450q23 0 23 23v67') + arrow(505, 117, 505, 169),
+        [[286, 63, 'Chain'], [545, 151, 'g']]),
     text: T`A uniform chain of length $L$ lies straight on a frictionless table, perpendicular to the edge. It starts to slide off from a negligible overhang. Find its speed at the moment it leaves the table, in units of $\sqrt{gL}$.`,
     parts: [ex(T`$v/\sqrt{gL}$`, 1, '1')],
     hints: [T`Energy: the centre of mass drops by $L/2$.`],
@@ -77,6 +100,7 @@ bank('dynamics', 'advanced', [{
 
 bank('thermo', 'advanced', [{
     title: 'Maximum work from two bodies',
+    diagram: heatEngine('1200 K initially', '300 K initially', 'Finite bodies with equal heat capacity mc'),
     text: T`A reversible engine runs between two identical finite bodies (constant heat capacity $mc$), initially at $300\,\text{K}$ and $1200\,\text{K}$, until they reach a common temperature. Find that final temperature.`,
     parts: [ex(T`$T_f$`, 600, '600', 'K')],
     hints: [T`Reversible means zero total entropy change: $mc\ln\dfrac{T_f}{T_1} + mc\ln\dfrac{T_f}{T_2} = 0$.`],
@@ -85,6 +109,7 @@ bank('thermo', 'advanced', [{
     prereq: 'Entropy; reversible engines.'
 }, {
     title: 'The best pressure ratio for a Brayton cycle',
+    diagram: braytonCycle(),
     text: T`An ideal Brayton cycle has turbine-inlet temperature $T_3 = 4T_1$. Choose the pressure ratio that maximises net work per unit mass. Find the cycle’s thermal efficiency at that pressure ratio.`,
     parts: [ex(T`$\eta$`, 1 / 2, T`\dfrac12`)],
     hints: [T`With $x = r_p^{(\gamma-1)/\gamma}$: $w \propto (T_3 - T_3/x) - (T_1x - T_1)$.`, T`Maximise over $x$: $x^2 = T_3/T_1$.`],
@@ -94,6 +119,7 @@ bank('thermo', 'advanced', [{
     verify: () => { let b = [1, -Infinity]; for (let x = 1; x < 4; x += 1e-5) { const w = (4 - 4 / x) - (x - 1); if (w > b[1]) b = [x, w]; } return [1 - 1 / b[0]]; }
 }, {
     title: 'Efficiency at maximum power',
+    diagram: heatEngine('675 K', '300 K', 'Endoreversible heat engine'),
     text: T`An endoreversible engine runs between $675\,\text{K}$ and $300\,\text{K}$. At maximum power output, its efficiency is the Curzon–Ahlborn value $\eta = 1 - \sqrt{T_c/T_h}$. Find it.`,
     parts: [ex(T`$\eta_{CA}$`, 1 / 3, T`\dfrac13`)],
     hints: [T`$T_c/T_h = \dfrac{300}{675} = \dfrac49$.`],
@@ -102,6 +128,11 @@ bank('thermo', 'advanced', [{
     prereq: 'Finite-time thermodynamics.'
 }, {
     title: 'When a nozzle chokes',
+    diagram: sketch(
+        'Reservoir feeding a converging nozzle with its minimum area at the outlet.',
+        wire('M120 58h165q104 0 203 54h54M120 194h165q104 0 203 -54h54') + arrow(170, 126, 296, 126) +
+        guide('M542 104v44'),
+        [[200, 95, 'p₀, T₀'], [563, 88, 'Throat'], [554, 183, 'M = 1']]),
     text: T`Air ($\gamma = 1.4$) flows isentropically from a reservoir through a converging nozzle. Find the critical pressure ratio $p^*/p_0$ at which the throat reaches Mach 1.`,
     parts: [ex(T`$p^*/p_0$`, (5 / 6) ** 3.5, T`\left(\dfrac56\right)^{7/2}`)],
     hints: [T`$\dfrac{p^*}{p_0} = \left(\dfrac{2}{\gamma+1}\right)^{\gamma/(\gamma-1)}$.`],
