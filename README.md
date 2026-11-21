@@ -2,6 +2,12 @@
 
 A static web app with a new engineering problem every day, in the spirit of dailyintegral.com.
 
+- **A minimal, dark layout with two clicks to a problem.**
+  - The home screen puts every discipline on a ring of orbs, with four dots under each showing today's solved levels.
+  - Picking one shows its four levels and the archive on a second ring; a level opens the problem.
+  - Every screen has its own address (`#/circuits`, `#/circuits/level-2`, `#/circuits/level-2/2026-11-20`, `#/circuits/archive`, `#/progress`). The browser's Back button, the "←" link and the Escape key all step back up a screen, and links can be shared or bookmarked.
+  - On a problem, the 1–4 circles switch level in place. The home screen offers to continue your last problem.
+  - On phones and short windows the rings become grids.
 - **11 topics in two groups.** Electrical: circuits, electronics, signals, control, digital, electromagnetism, power, measurement. Mechanical & civil: statics/structures, dynamics/vibrations, thermo-fluids.
 - **Four levels.**
   - **Level 1 (Insight)** is a rotation of 44 hand-picked problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
@@ -46,7 +52,7 @@ node tests/exercises.test.js
 node tests/editor.test.js
 ```
 
-`editor.test.js` needs Playwright with Chromium. It types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces.
+`editor.test.js` needs Playwright with Chromium. It walks the navigation (home → levels → problem, the level switch, Back, Escape, the archive, unknown addresses), types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces, then checks the worked solution after solving and after five wrong attempts.
 
 The suite checks:
 - Every topic × level, and every topic × tier, for 120 days: each exercise is complete and every answer is finite.
@@ -81,7 +87,7 @@ Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, i
 | `js/mechanical.js` | Mechanical & civil Levels 2–4 |
 | `js/numerics.js` | Linear solve, matrix exponential, Jacobi eigenvalues, polynomial roots, bisection, Simpson |
 | `js/diagrams.js` | SVG drawing helpers |
-| `js/app.js` | UI, progress and attempts (localStorage), archive |
+| `js/app.js` | Screens and hash routes, the answer editor, progress and attempts (localStorage), archive |
 
 ## Licence note
 

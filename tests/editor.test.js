@@ -46,20 +46,37 @@ server.listen(0, async () => {
     page.on('response', r => r.status() >= 400 && errors.push(`${r.status()} ${r.url()}`));
     let failures = 0;
     try {
-        // A fixed date keeps the run reproducible. A saved preference for a removed level falls back to Level 1.
+        // A fixed date keeps the run reproducible.
         await page.clock.setFixedTime(new Date(2026, 1, 1, 12));
-        await page.addInitScript(() => { // only on the first load, so later reloads keep what the tests save
-            if (sessionStorage.getItem('seeded')) return;
-            sessionStorage.setItem('seeded', '1');
-            localStorage.setItem('daily-engineer-level', 'foundations');
-        });
+        const step = (name, ok, detail='') => { if (!ok) failures++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? ': ' + detail : ''}`); };
+        const go = async hash => { await page.evaluate(h => { location.hash = h; }, hash); await page.waitForTimeout(150); };
+        const shown = id => page.evaluate(i => !document.getElementById(i).hidden, id);
+        // Navigation: the home ring, a discipline's levels, a problem, and back up again.
         await page.goto(url);
-        const levels = await page.locator('[data-level]').evaluateAll(buttons => buttons.map(b => b.dataset.level));
-        if (levels.join(',') !== 'level-1,level-2,level-3,level-4' ||
-            await page.locator('[data-level][aria-pressed="true"]').getAttribute('data-level') !== 'level-1') {
-            failures++; console.log('FAIL four-level picker or retired-level fallback');
-        }
-        await page.waitForSelector('math-field');
+        step('home shows every discipline', await page.locator('#home .orb').count() === 11);
+        await page.click('#home .orb[data-topic="circuits"]');
+        const levelIds = await page.locator('#levels .orb[data-level]').evaluateAll(as => as.map(a => a.dataset.level));
+        step('a discipline offers levels 1–4 and the archive', levelIds.join() === 'level-1,level-2,level-3,level-4' && await page.locator('#levels .orb.archive').count() === 1, levelIds.join());
+        await page.click('#levels .orb[data-level="level-1"]');
+        await page.waitForSelector('#problem math-field');
+        step('a level opens its problem', await page.evaluate(() => location.hash) === '#/circuits/level-1');
+        await page.click('#problem-bar .pill.l3'); await page.waitForTimeout(150);
+        step('the bar switches level in place', await page.evaluate(() => location.hash === '#/circuits/level-3' && level === 'level-3'));
+        await page.goBack(); await page.waitForTimeout(150);
+        step('browser Back returns to the previous level', await page.evaluate(() => location.hash === '#/circuits/level-1' && level === 'level-1'));
+        await page.click('#back-link'); await page.waitForTimeout(150);
+        step('the back link goes up to the levels', await page.evaluate(() => location.hash) === '#/circuits' && await shown('levels'));
+        await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+        step('Escape goes up to the home ring', await shown('home'));
+        step('home offers to continue the last problem', await page.getAttribute('#home .resume', 'href') === '#/circuits/level-1');
+        await go('#/circuits/archive');
+        await page.click('#archive .arch-list li:nth-child(3) .pill.l2');
+        await page.waitForSelector('#problem math-field');
+        step('an archive day opens that date', await page.evaluate(() => date === shifted(today, -2) && level === 'level-2' && /Archive/.test(document.querySelector('.bar-date').textContent)));
+        await go('#/nowhere/at-all');
+        step('an unknown address falls back to the home ring', await shown('home'));
+        await go('#/circuits/level-1');
+        await page.waitForSelector('#problem math-field');
         for (const [keys, want] of cases) {
             await page.evaluate(() => { const m = document.getElementById('answer-0'); m.value = ''; m.focus(); });
             await page.waitForTimeout(200);
@@ -87,17 +104,10 @@ server.listen(0, async () => {
         }
         // A unit typed after the answer is accepted; a different unit gets a clear hint.
         await page.evaluate(() => localStorage.clear());
-        await page.click('[data-group="electrical"]'); await page.click('[data-topic="circuits"]'); await page.click('[data-level="level-1"]');
-        await page.waitForSelector('math-field');
         // Use a date whose first answer is in Ω (from the archive if today's isn't).
-        if (await page.evaluate(() => exercise.parts[0].unit !== 'Ω')) {
-            await page.click('[data-view="archive"]');
-            await page.evaluate(() => {
-                const input = document.getElementById('archive-date');
-                for (let back = 1; back <= 30 && exercise.parts[0].unit !== 'Ω'; back++) { input.value = shifted(today, -back); input.dispatchEvent(new Event('change')); }
-            });
-            await page.waitForSelector('math-field');
-        }
+        const ohmDate = await page.evaluate(() => { for (let back = 0; back <= 30; back++) { const d = shifted(today, -back); if (makeExercise('circuits', d, 'level-1').parts[0].unit === 'Ω') return back ? d : ''; } return null; });
+        await go(`#/circuits/level-1${ohmDate ? '/' + ohmDate : ''}`);
+        await page.waitForSelector('#problem math-field');
         for (const [keys, want] of [['1.618 ohm', 1.618], ['(1+sqrt5)/2 Ω', (1 + Math.sqrt(5)) / 2], ['1.618 kohm', NaN]]) {
             await page.evaluate(() => { const m = document.getElementById('answer-0'); m.value = ''; m.focus(); });
             await page.waitForTimeout(200);
@@ -123,13 +133,12 @@ server.listen(0, async () => {
             localStorage.clear();
             localStorage.setItem('daily-engineer-v1', JSON.stringify({[`${today}:circuits:mastery`]: {status: 'solved', daily: true}, [`${today}:circuits:foundations`]: {status: 'solved', daily: true}}));
             localStorage.setItem('daily-engineer-attempts', JSON.stringify({[`${today}:circuits:challenge`]: 3}));
-            localStorage.setItem('daily-engineer-level', 'challenge');
-            localStorage.setItem('daily-engineer-group', 'electrical');
         });
+        await go('#/circuits');
         await page.reload();
-        await page.waitForSelector('math-field');
-        const moved = await page.evaluate(() => ({level, attempts: attempts[`${today}:circuits:level-3`], cards: [...document.querySelectorAll('.level-option')].map(b => b.querySelector('.level-top span').textContent + ':' + (b.querySelector('.level-completion')?.textContent || ''))}));
-        const movedOk = moved.level === 'level-3' && moved.attempts === 3 && moved.cards.length === 4 && /Level 4:✓ Solved/.test(moved.cards.join('|')) && !/Level [123]:✓/.test(moved.cards.join('|'));
+        await page.waitForSelector('#levels .orb');
+        const moved = await page.evaluate(() => ({attempts: attempts[`${today}:circuits:level-3`], solved: [...document.querySelectorAll('#levels .orb.level')].map(o => `${o.dataset.level}:${o.classList.contains('solved')}`)}));
+        const movedOk = moved.attempts === 3 && moved.solved.join() === 'level-1:false,level-2:false,level-3:false,level-4:true';
         if (!movedOk) failures++;
         console.log(`${movedOk ? 'ok  ' : 'FAIL'} saved progress moved to new levels:`, JSON.stringify(moved));
         await page.evaluate(() => localStorage.clear());
@@ -143,10 +152,9 @@ server.listen(0, async () => {
         });
         const fill = wrong => page.evaluate(w => exercise.parts.forEach((p, i) => { document.getElementById(`answer-${i}`).value = w ? '12345' : String(p.answer); }), wrong);
         const report = (name, ok, state) => { if (!ok) failures++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}:`, JSON.stringify(state)); };
+        await go('#/circuits/level-2');
         await page.reload();
-        await page.waitForSelector('math-field');
-        await page.click('[data-group="electrical"]'); await page.click('[data-topic="circuits"]'); await page.click('[data-level="level-2"]');
-        await page.waitForSelector('math-field');
+        await page.waitForSelector('#problem math-field');
         let st = await panelState();
         report('solution hidden before finishing', !st.open && st.button === 'Reveal solution', st);
         await fill(false); await page.click('#check'); await page.waitForTimeout(150);
@@ -156,8 +164,9 @@ server.listen(0, async () => {
         await page.waitForSelector('math-field');
         st = await panelState();
         report('still open after reload, with your answers', st.open && st.ok === st.parts && st.prefilled !== '' && st.button === 'Hide solution', st);
-        await page.click('[data-level="level-3"]');
-        await page.waitForSelector('math-field');
+        await page.click('#problem-bar .pill.l3');
+        await page.waitForTimeout(150);
+        await page.waitForSelector('#problem math-field');
         for (let attempt = 1; attempt <= 5; attempt++) {
             st = await panelState();
             if (st.open) { report(`solution stayed closed before attempt ${attempt}`, false, st); break; }

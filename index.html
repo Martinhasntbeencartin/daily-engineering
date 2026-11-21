@@ -4,65 +4,52 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Daily Engineer</title>
-<meta name="description" content="A new engineering exercise every day, in electrical, mechanical and civil engineering. Choose a topic and a difficulty from Level 1 to Level 4.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23315740'/%3E%3Cpath d='M5 18h5l3-8 6 14 3-6h5' fill='none' stroke='%23f4efe3' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<meta name="description" content="A new engineering exercise every day, in electrical, mechanical and civil engineering. Choose a discipline and a level from 1 to 4.">
+<meta name="theme-color" content="#0a0f1a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%230a0f1a' stroke='%236aa8ff' stroke-width='1.5'/%3E%3Cpath d='M6 17h5l3-7 5 13 3-6h4' fill='none' stroke='%236aa8ff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,650;1,9..144,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/katex/katex.min.css">
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-<header class="site-header">
-  <a href="#" class="brand" aria-label="Daily Engineer home"><span class="brand-mark" aria-hidden="true">⌁</span><span>Daily Engineer</span></a>
-  <nav class="views" aria-label="Views">
-    <button data-view="today" class="active">Today</button>
-    <button data-view="archive">Archive</button>
-    <button data-view="progress">Progress</button>
+<header class="chrome">
+  <a id="back-link" class="back-link" href="#/" hidden><span aria-hidden="true">←</span> <span id="back-label">All disciplines</span></a>
+  <nav class="corner-links" aria-label="Site">
+    <a href="#/progress" id="progress-link">Progress</a>
+    <button id="about" type="button">About</button>
   </nav>
-  <button id="about" class="text-button about-button">About</button>
 </header>
 
 <main>
-  <header class="practice-heading">
-    <h1 id="view-title">Daily exercises</h1>
-    <time id="date-label"></time>
-  </header>
-
-  <div id="archive-bar" class="archive-bar" hidden>
-    <label for="archive-date">Pick a date from the last 30 days</label>
-    <input type="date" id="archive-date">
-    <button id="back-today" class="text-button">Back to today</button>
-  </div>
-
-  <section id="level-picker" class="level-picker" aria-label="Difficulty level"></section>
-
-  <section id="practice" class="practice">
-    <aside class="sidebar">
-      <h2 class="picker-heading">Topic</h2>
-      <div id="groups" class="group-tabs" role="tablist" aria-label="Discipline group"></div>
-      <div id="topics" class="topics"></div>
-      <p class="local-note"></p>
-    </aside>
+  <section id="home" class="screen" aria-label="Choose a discipline" hidden></section>
+  <section id="levels" class="screen" aria-label="Choose a level" hidden></section>
+  <section id="problem" class="screen page" hidden>
+    <nav id="problem-bar" class="problem-bar" aria-label="Level"></nav>
     <article id="challenge" class="challenge" aria-live="polite"></article>
   </section>
-
-  <section id="progress-view" class="progress-view" hidden></section>
+  <section id="archive" class="screen page" aria-label="Archive" hidden></section>
+  <section id="progress-view" class="screen page" aria-label="Progress" hidden></section>
 </main>
 
 <dialog id="about-dialog" aria-labelledby="about-title">
   <div class="dialog-body">
-    <h2 id="about-title">How Daily Engineer works</h2>
-    <p>Choose a topic and a difficulty from Level 1 (Insight) to Level 4 (Expert). Each combination has a daily exercise. The archive holds the last 30 days.</p>
-    <p>Each exercise allows five attempts. You can enter exact expressions or decimals. Once you solve an exercise or use all five attempts, the full worked solution opens. Revealing it earlier marks the exercise as reviewed. Progress is saved in this browser.</p>
-    <p>New exercises arrive at local midnight. Next set in <span id="countdown" class="mono"></span>.</p>
-    <button id="close-dialog" class="primary">Close</button>
+    <h2 id="about-title">How it works</h2>
+    <ol class="how">
+      <li><b>Pick a discipline</b>, then a level from 1 to 4. Every combination has a new problem each day, the same for everyone.</li>
+      <li><b>Type your answer</b> as maths: <code>3/4</code> becomes a fraction, <code>sqrt</code> a root, <code>pi</code> π. Exact forms and decimals both work.</li>
+      <li><b>You get five attempts.</b> Solve it, or use them all, and the full worked solution opens. Revealing it earlier marks the problem as reviewed.</li>
+      <li><b>Missed a day?</b> The archive holds the last 30 days.</li>
+    </ol>
+    <p class="muted">New problems arrive at local midnight, in <span class="countdown mono">--:--:--</span>. <span class="local-note"></span></p>
+    <button id="close-dialog" class="primary" type="button">Got it</button>
   </div>
 </dialog>
 
 <dialog id="diagram-dialog" class="diagram-dialog" aria-labelledby="diagram-title">
   <div class="dialog-body">
-    <div class="dialog-head"><h2 id="diagram-title"></h2><button id="close-diagram" class="text-button">Close</button></div>
+    <div class="dialog-head"><h2 id="diagram-title"></h2><button id="close-diagram" class="text-button" type="button">Close</button></div>
     <div id="large-diagram" class="diagram large" tabindex="0" role="region" aria-labelledby="diagram-title"></div>
   </div>
 </dialog>

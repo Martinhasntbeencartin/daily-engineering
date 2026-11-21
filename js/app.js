@@ -6,6 +6,9 @@ const shifted = (date, days) => {
     return localDate(d);
 };
 const GROUPS = [{id: 'electrical', name: 'Electrical'}, {id: 'mechanical', name: 'Mechanical & civil'}];
+/* Each discipline's symbol on the home screen, in LaTeX. */
+const GLYPHS = {circuits: '\\Omega', electronics: '\\beta', signals: '\\mathcal F', control: 'G(s)', digital: '\\mathtt{01}', fields: '\\nabla', power: '3\\phi', measurement: '\\sigma', statics: '\\Sigma F', dynamics: '\\omega', thermo: '\\Delta S'};
+const CALENDAR_ICON = '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>';
 const MAX_ATTEMPTS = 5;
 /* MathLive turns each answer box into a WYSIWYG math editor (typing 3/4 makes a stacked fraction).
    It shares KaTeX's fonts; if it fails to load, plain text inputs are used instead. */
@@ -154,7 +157,7 @@ function readField(i) {
         return {value: NaN, error: err.message, raw};
     }
 }
-let today = localDate(), date = today, topic = 'circuits', level = 'level-1', group = 'electrical', view = 'today', hintCount = 0, solutionShown = false, exercise;
+let today = localDate(), date = today, topic = 'circuits', level = 'level-1', view = 'home', hintCount = 0, solutionShown = false, exercise;
 let progress = {}, attempts = {}, storageAvailable = true;
 /* key → the answers last checked for that problem, so a finished problem can show them beside the solution. */
 let submitted = {};
@@ -179,14 +182,6 @@ try {
     const sub = JSON.parse(localStorage.getItem('daily-engineer-answers') || '{}'), keepFrom = shifted(today, -31);
     if (sub && typeof sub === 'object' && !Array.isArray(sub))
         for (const [k, v] of Object.entries(sub)) if (Array.isArray(v) && k.split(':')[0] >= keepFrom) submitted[k] = v; // the archive reaches back 30 days
-    const preference = localStorage.getItem('daily-engineer-level'), chosen = LEVELS.find(l => l.id === preference) || levelOfTier(preference);
-    if (chosen)
-        level = chosen.id;
-    const g = localStorage.getItem('daily-engineer-group');
-    if (GROUPS.some(x => x.id === g)) {
-        group = g;
-        topic = TOPICS.find(t => t.group === g).id;
-    }
 } catch {
     storageAvailable = false;
 }
@@ -229,38 +224,59 @@ function streak() {
     }
     return n;
 }
-function renderLevels() {
-    const buttons = LEVELS.map(l => {
-        const status = progress[key(topic, l.id)]?.status;
-        const completion = status === 'solved' ? '✓ Solved' : status === 'reviewed' ? 'Solution reviewed' : '';
-        return `<button class="level-option ${level === l.id ? 'selected' : ''}" data-level="${l.id}" aria-pressed="${level === l.id}">
-            <span class="level-top"><span>${l.tag}</span><span>${l.time}</span></span>
-            <strong>${l.name}</strong><span class="level-description">${l.description}</span>
-            ${completion ? `<span class="level-completion">${completion}</span>` : ''}
-        </button>`;
-    });
-    $('#level-picker').innerHTML = `<h2 class="picker-heading">Difficulty</h2><div class="level-options">${buttons.join('')}</div>`;
-    document.querySelectorAll('[data-level]').forEach(b => b.onclick = () => {
-        level = b.dataset.level;
-        remember('daily-engineer-level', level);
-        renderChallenge();
-    });
+const glyph = tex => window.katex ? katex.renderToString(tex, {throwOnError: false}) : tex;
+const longDate = (d, opts={weekday: 'short', day: 'numeric', month: 'short'}) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', opts);
+const statusOf = (t, l, d=date) => progress[`${d}:${t}:${l}`]?.status;
+const topicOf = id => TOPICS.find(t => t.id === id);
+/* Position i of n on a circle (radius r, % of the ring), starting at the top and going clockwise. */
+function ringPos(i, n, r) {
+    const a = -Math.PI / 2 + 2 * Math.PI * i / n;
+    return `--x: ${(50 + r * Math.cos(a)).toFixed(2)}%; --y: ${(50 + r * Math.sin(a)).toFixed(2)}%`;
 }
-function renderTopics() {
-    $('#groups').innerHTML = GROUPS.map(g => `<button role="tab" class="group-tab ${group === g.id ? 'selected' : ''}" data-group="${g.id}" aria-selected="${group === g.id}">${g.name}</button>`).join('');
-    $('#topics').innerHTML = TOPICS.filter(t => t.group === group).map(t => `<button class="topic ${topic === t.id ? 'selected' : ''}" data-topic="${t.id}" aria-pressed="${topic === t.id}"><span class="topic-icon" aria-hidden="true">${t.icon}</span><span><strong>${t.name}</strong><small>${t.sub}</small></span><span class="topic-done" aria-label="${progress[key(t.id)]?.status === 'solved' ? 'Solved' : ''}">${progress[key(t.id)]?.status === 'solved' ? '✓' : ''}</span></button>`).join('');
-    updateStorageNote();
-    document.querySelectorAll('[data-topic]').forEach(b => b.onclick = () => {
-        topic = b.dataset.topic;
-        renderChallenge();
-    });
-    document.querySelectorAll('[data-group]').forEach(b => b.onclick = () => {
-        if (group === b.dataset.group) return;
-        group = b.dataset.group;
-        remember('daily-engineer-group', group);
-        topic = TOPICS.find(t => t.group === group).id;
-        renderChallenge();
-    });
+const ringGuide = r => `<svg class="ring-guide" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="${r}"/></svg>`;
+function lastPlayed() {
+    try {
+        const [t, l] = (localStorage.getItem('daily-engineer-last') || '').split('/');
+        return topicOf(t) && LEVELS.some(x => x.id === l) ? [t, l] : null;
+    } catch { return null; }
+}
+/* Home: every discipline on one ring, today's progress as four dots under each. */
+function renderHome() {
+    const orbs = TOPICS.map((t, i) => {
+        const done = LEVELS.filter(l => statusOf(t.id, l.id, today) === 'solved').length;
+        const dots = `<span class="orb-dots" role="img" aria-label="${done} of ${LEVELS.length} levels solved today">${LEVELS.map(l => `<i class="${statusOf(t.id, l.id, today) || ''}"></i>`).join('')}</span>`;
+        return `<a class="orb ${t.group}" href="#/${t.id}" data-topic="${t.id}" style="${ringPos(i, TOPICS.length, 41)}"><span class="orb-disc" aria-hidden="true">${glyph(GLYPHS[t.id])}</span><span class="orb-name">${t.name}</span><span class="orb-sub">${t.group === 'electrical' ? 'Electrical' : 'Mechanical'}</span>${dots}</a>`;
+    }).join('');
+    const last = lastPlayed(), n = streak();
+    const resume = last ? `<a class="resume" href="#/${last[0]}/${last[1]}">Continue with ${topicOf(last[0]).name} · ${LEVELS.find(l => l.id === last[1]).tag} <span aria-hidden="true">→</span></a>` : '<p class="cue mono">Choose a discipline</p>';
+    $('#home').innerHTML = `<div class="ring ring-home">${ringGuide(41)}<div class="ring-center"><p class="kicker">The Daily</p><h1 class="wordmark">Engineer</h1><p class="tagline">One engineering problem per discipline, every day.</p><p class="meta mono"><span>New set in <b class="countdown">--:--:--</b></span>${n ? `<span>Streak <b>${n}</b></span>` : ''}</p>${resume}</div>${orbs}</div>`;
+}
+/* A discipline: its four levels and the archive on a ring. */
+function renderLevelRing() {
+    const t = topicOf(topic);
+    const orbs = LEVELS.map((l, i) => {
+        const st = statusOf(t.id, l.id, today), sub = st === 'solved' ? '✓ Solved today' : st === 'reviewed' ? 'Reviewed today' : l.time;
+        return `<a class="orb level l${i + 1} ${st || ''}" href="#/${t.id}/${l.id}" data-level="${l.id}" style="${ringPos(i, 5, 38)}"><span class="orb-disc" aria-hidden="true"><span class="numeral">${i + 1}</span></span><span class="orb-name"><span class="visually-hidden">${l.tag}: </span>${l.name}</span><span class="orb-sub">${sub}</span></a>`;
+    }).join('') + `<a class="orb archive" href="#/${t.id}/archive" style="${ringPos(4, 5, 38)}"><span class="orb-disc" aria-hidden="true">${CALENDAR_ICON}</span><span class="orb-name">Archive</span><span class="orb-sub">Last 30 days</span></a>`;
+    $('#levels').innerHTML = `<div class="ring ring-levels ${t.group}">${ringGuide(38)}<div class="ring-center"><p class="kicker">The Daily</p><h1 class="wordmark topic-mark">${t.name}</h1><p class="tagline">${t.sub}.</p><p class="meta mono"><span>New set in <b class="countdown">--:--:--</b></span></p><p class="cue mono">Choose a level</p></div>${orbs}</div>`;
+}
+/* The bar above a problem: discipline, a switch between the four levels, and the date. */
+function renderBar() {
+    const suffix = date === today ? '' : '/' + date;
+    const pills = LEVELS.map((l, i) => {
+        const st = statusOf(topic, l.id), current = l.id === level;
+        return `<a class="pill l${i + 1} ${st || ''} ${current ? 'current' : ''}" href="#/${topic}/${l.id}${suffix}" ${current ? 'aria-current="page"' : ''} title="${l.tag} · ${l.name}${st ? ` (${st})` : ''}"><span class="visually-hidden">${l.tag}</span><span aria-hidden="true">${i + 1}</span></a>`;
+    }).join('');
+    $('#problem-bar').innerHTML = `<span class="pills">${pills}</span><span class="bar-date mono">${date === today ? `Today · <span class="countdown">--:--:--</span> left` : `Archive · ${longDate(date)}`}</span>`;
+}
+/* The last 30 days of one discipline, one row per day with its four levels. */
+function renderArchive() {
+    const t = topicOf(topic);
+    const rows = Array.from({length: 31}, (_, k) => shifted(today, -k)).map(d => `<li class="${d === today ? 'today' : ''}"><span class="arch-date mono">${d === today ? 'Today' : longDate(d)}</span><span class="pills">${LEVELS.map((l, i) => {
+        const st = statusOf(t.id, l.id, d);
+        return `<a class="pill l${i + 1} ${st || ''}" href="#/${t.id}/${l.id}${d === today ? '' : '/' + d}" title="${l.tag} · ${l.name}${st ? ` (${st})` : ''}"><span class="visually-hidden">${longDate(d, {day: 'numeric', month: 'long'})}, ${l.tag}${st ? `, ${st}` : ''}</span><span aria-hidden="true">${i + 1}</span></a>`;
+    }).join('')}</span></li>`).join('');
+    $('#archive').innerHTML = `<header class="page-head"><p class="kicker">${t.name}</p><h1>Archive</h1><p class="muted">Today and the last 30 days. Filled circles are solved; coloured rings were reviewed.</p></header><ol class="arch-list">${rows}</ol>`;
 }
 const used = () => attempts[key()] || 0;
 const locked = () => progress[key()]?.status !== 'solved' && used() >= MAX_ATTEMPTS;
@@ -276,11 +292,9 @@ function renderChallenge() {
     solutionShown = progress[key()]?.status === 'reviewed' || finished();
     exercise = makeExercise(topic, date, level);
     const t = TOPICS.find(t => t.id === topic), e = exercise, record = progress[key()], curated = e.curated;
-    group = t.group;
-    renderTopics();
-    renderLevels();
+    renderBar();
     const exactParts = e.parts.some(p => p.exact);
-    $('#challenge').innerHTML = `<div class="challenge-top"><div class="challenge-tags"><span class="tag">${t.name}</span><span class="tag level">${e.level}</span></div><span class="challenge-date">${date === today ? 'TODAY’S CHALLENGE' : 'FROM THE ARCHIVE'}</span></div><div class="challenge-body ${curated ? 'curated' : ''}"><div class="problem-meta"><span id="status-line">${record?.status === 'solved' ? '✓ COMPLETED' : record?.status === 'reviewed' ? 'SOLUTION REVIEWED' : e.parts.length > 1 ? `${e.parts.length} CONNECTED PARTS` : 'ONE KEY INSIGHT'}</span><span>${e.minutes}</span></div><h3>${e.title}</h3><div class="problem-text">${e.text}</div>${e.diagram ? `<div class="diagram-toolbar"><span>DIAGRAM</span><button type="button" id="enlarge-diagram" class="text-button" aria-haspopup="dialog">Enlarge</button></div><div class="diagram">${e.diagram}</div>` : ''}${e.givens?.length ? `<div class="givens">${e.givens.map(g => `<span class="given">${g}</span>`).join('')}</div>` : ''}<details class="prerequisites"><summary>What you’ll need</summary><p>${e.prerequisites}</p></details><form id="answer-form" novalidate><div class="answers">${e.parts.map((p, i) => `<div class="answer-part"><label class="answer-label" for="answer-${i}">${e.parts.length > 1 ? String.fromCharCode(65 + i) + '. ' : ''}${p.label}</label><div class="input-wrap">${fieldHTML(p, i)}${p.unit ? `<span>${p.unit}</span>` : ''}</div><div class="preview" id="preview-${i}" aria-hidden="true"></div><div id="part-feedback-${i}" class="part-feedback" role="status"></div></div>`).join('')}</div><p class="input-help" id="answer-help">${MATH_EDITOR ? 'Type maths naturally: <code>3/4</code> becomes a fraction, <code>sqrt</code> a root, <code>pi</code> π and <code>^</code> an exponent. Press <kbd>→</kbd> to leave a fraction, root or exponent, and <kbd>Enter</kbd> to check. ' : 'Type expressions such as <code>pi/4</code>, <code>ln(2)</code> or <code>sqrt(3)/2</code>. '}${exactParts ? 'Exact answers are best; decimals need 4 significant figures.' : 'Decimals and scientific notation (<code>2e-3</code>) work too. Tolerance: 1% unless stated; counts must be exact.'}</p>${typingGuideHTML()}<div class="submit-row"><button class="primary" type="submit" id="check">${e.parts.length > 1 ? 'Check all answers' : 'Check answer'}</button><span id="attempts">${attemptsLabel()}</span></div><div class="feedback ${record?.status === 'solved' ? 'success' : ''}" id="feedback" role="status">${record?.status === 'solved' ? 'You’ve solved this challenge. You can revisit your reasoning below.' : ''}</div></form></div><div class="challenge-actions"><button id="hint" class="text-button">☼ &nbsp; Get a hint <span id="hint-count">(0/${e.hints.length})</span></button><button id="solution" class="text-button" aria-expanded="${solutionShown}">${solutionLabel(solutionShown)}</button></div><div id="hints" class="hint-content" hidden></div><div id="solution-content" class="solution" ${solutionShown ? '' : 'hidden'}>${solutionHTML()}</div>${sourceHTML(e.source)}`;
+    $('#challenge').innerHTML = `<div class="challenge-body ${curated ? 'curated' : ''}"><div class="problem-meta"><span id="status-line">${record?.status === 'solved' ? '✓ COMPLETED' : record?.status === 'reviewed' ? 'SOLUTION REVIEWED' : e.parts.length > 1 ? `${e.parts.length} CONNECTED PARTS` : 'ONE KEY INSIGHT'}</span><span>${e.level} · ${e.minutes}</span></div><h1 class="problem-title">${e.title}</h1><div class="problem-text">${e.text}</div>${e.diagram ? `<div class="diagram-toolbar"><span>DIAGRAM</span><button type="button" id="enlarge-diagram" class="text-button" aria-haspopup="dialog">Enlarge</button></div><div class="diagram">${e.diagram}</div>` : ''}${e.givens?.length ? `<div class="givens">${e.givens.map(g => `<span class="given">${g}</span>`).join('')}</div>` : ''}<details class="prerequisites"><summary>What you’ll need</summary><p>${e.prerequisites}</p></details><form id="answer-form" novalidate><div class="answers">${e.parts.map((p, i) => `<div class="answer-part"><label class="answer-label" for="answer-${i}">${e.parts.length > 1 ? String.fromCharCode(65 + i) + '. ' : ''}${p.label}</label><div class="input-wrap">${fieldHTML(p, i)}${p.unit ? `<span>${p.unit}</span>` : ''}</div><div class="preview" id="preview-${i}" aria-hidden="true"></div><div id="part-feedback-${i}" class="part-feedback" role="status"></div></div>`).join('')}</div><p class="input-help" id="answer-help">${MATH_EDITOR ? 'Type maths naturally: <code>3/4</code> becomes a fraction, <code>sqrt</code> a root, <code>pi</code> π and <code>^</code> an exponent. Press <kbd>→</kbd> to leave a fraction, root or exponent, and <kbd>Enter</kbd> to check. ' : 'Type expressions such as <code>pi/4</code>, <code>ln(2)</code> or <code>sqrt(3)/2</code>. '}${exactParts ? 'Exact answers are best; decimals need 4 significant figures.' : 'Decimals and scientific notation (<code>2e-3</code>) work too. Tolerance: 1% unless stated; counts must be exact.'}</p>${typingGuideHTML()}<div class="submit-row"><button class="primary" type="submit" id="check">${e.parts.length > 1 ? 'Check all answers' : 'Check answer'}</button><span id="attempts">${attemptsLabel()}</span></div><div class="feedback ${record?.status === 'solved' ? 'success' : ''}" id="feedback" role="status">${record?.status === 'solved' ? 'You’ve solved this challenge. You can revisit your reasoning below.' : ''}</div></form></div><div class="challenge-actions"><button id="hint" class="text-button">☼ &nbsp; Get a hint <span id="hint-count">(0/${e.hints.length})</span></button><button id="solution" class="text-button" aria-expanded="${solutionShown}">${solutionLabel(solutionShown)}</button></div><div id="hints" class="hint-content" hidden></div><div id="solution-content" class="solution" ${solutionShown ? '' : 'hidden'}>${solutionHTML()}</div>${sourceHTML(e.source)}`;
     renderMath($('#challenge'));
     if (e.diagram) {
         const dialog = $('#diagram-dialog');
@@ -296,6 +310,8 @@ function renderChallenge() {
     }
     e.parts.forEach((p, i) => {
         const el = $(`#answer-${i}`);
+        let pendingClose = false; // after ")", step out of a root or function once MathLive has placed the bracket
+        const flushClose = () => { if (pendingClose) { pendingClose = false; closeWrappedGroup(el); } };
         el.addEventListener('input', () => { if (isMath(el)) fixUnicode(el); preview(i); });
         if (isMath(el)) {
             el.smartSuperscript = false; // 2^10 stays one exponent; operators step out instead.
@@ -303,8 +319,12 @@ function renderChallenge() {
             el.inlineShortcuts = {...el.inlineShortcuts, ...EDITOR_SHORTCUTS};
         }
         if (isMath(el)) el.addEventListener('keydown', ev => {
+            // Finish pending clean-ups before this key lands: browsers can run a fast typist's next keystroke
+            // before the timer after ")" or the input event after a pasted "∜".
+            flushClose();
+            fixUnicode(el);
             if (ev.key === 'Enter') { ev.preventDefault(); $('#answer-form').requestSubmit(); }
-            else if (ev.key === ')') { smartClose(el); setTimeout(() => closeWrappedGroup(el)); }
+            else if (ev.key === ')') { smartClose(el); pendingClose = true; setTimeout(flushClose); }
             else if (ROOT_CHARS[ev.key]) { // √ ∛ ∜ keys (Option+V etc.): a real root with a bar, not a bare symbol
                 ev.preventDefault();
                 ev.stopImmediatePropagation();
@@ -436,8 +456,7 @@ function checkAnswer(event) {
         progress[key()] = {status, daily: previous.daily || date === today, hints: Math.max(hintCount, previous.hints || 0), attempts: used() + 1};
         if (previous.status !== 'solved') attempts[key()] = used() + 1;
         save();
-        renderTopics();
-        renderLevels();
+        renderBar();
         f.className = 'feedback success';
         f.textContent = status === 'solved' ? `All correct. Solved at ${exercise.level} in ${used()} attempt${used() === 1 ? '' : 's'}. The full worked solution is below.` : 'All correct. Saved as reviewed because the solution was revealed.';
         $('#status-line').textContent = status === 'solved' ? '✓ COMPLETED' : 'SOLUTION REVIEWED';
@@ -473,7 +492,7 @@ function openSolution(scroll=false) {
     if (status !== 'solved' && status !== 'reviewed') {
         progress[key()] = {status: 'reviewed', daily: date === today, hints: hintCount};
         save();
-        renderLevels();
+        renderBar();
         $('#status-line').textContent = 'SOLUTION REVIEWED';
     }
     panel.innerHTML = solutionHTML();
@@ -493,45 +512,53 @@ function showSolution() {
 function renderProgress() {
     const entries = activeRecords(), solved = entries.filter(([k, v]) => v.status === 'solved').length, reviewed = entries.filter(([k, v]) => v.status === 'reviewed').length;
     const includesRetired = entries.some(([k]) => RETIRED_LEVELS.includes(k.split(':')[2]));
-    $('#progress-view').innerHTML = `<div class="stats"><div class="stat"><b>${solved}</b><span>Challenges solved</span></div><div class="stat"><b>${streak()}</b><span>Day streak</span></div><div class="stat"><b>${reviewed}</b><span>Solutions reviewed</span></div></div><div class="progress-topics"><h2>Solved by topic and difficulty</h2><div class="progress-table-wrap"><table class="progress-table"><thead><tr><th>Discipline</th>${LEVELS.map(l => `<th>${l.name}</th>`).join('')}</tr></thead><tbody>${GROUPS.map(g => `<tr class="group-row"><th colspan="${LEVELS.length + 1}">${g.name}</th></tr>` + TOPICS.filter(t => t.group === g.id).map(t => `<tr><th>${t.name}</th>${LEVELS.map(l => `<td>${entries.filter(([k, v]) => k.split(':')[1] === t.id && k.split(':')[2] === l.id && v.status === 'solved').length} solved</td>`).join('')}</tr>`).join('')).join('')}</tbody></table></div></div><p class="progress-note">${includesRetired ? 'Totals and streaks include your earlier work on retired levels. ' : ''}Solve at least one of today’s challenges at any level to build your streak. Archive practice adds to your totals. Progress is stored in this browser; clearing browser data removes it.</p>`;
+    const count = (t, l) => entries.filter(([k, v]) => k.split(':')[1] === t && k.split(':')[2] === l && v.status === 'solved').length;
+    const rows = GROUPS.map(g => `<tr class="group-row"><th colspan="${LEVELS.length + 1}">${g.name}</th></tr>` + TOPICS.filter(t => t.group === g.id).map(t => `<tr><th><a href="#/${t.id}">${t.name}</a></th>${LEVELS.map(l => { const n = count(t.id, l.id); return `<td class="${n ? 'some' : ''}">${n || '·'}</td>`; }).join('')}</tr>`).join('')).join('');
+    $('#progress-view').innerHTML = `<header class="page-head"><p class="kicker">Your learning</p><h1>Progress</h1></header><div class="stats"><div class="stat"><b>${solved}</b><span>Solved</span></div><div class="stat"><b>${streak()}</b><span>Streak</span></div><div class="stat"><b>${reviewed}</b><span>Reviewed</span></div></div><div class="progress-table-wrap"><table class="progress-table"><thead><tr><th>Solved by discipline</th>${LEVELS.map((l, i) => `<th><span class="pill l${i + 1} static" title="${l.name}">${i + 1}</span></th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div><p class="progress-note">${includesRetired ? 'Totals and streaks include your earlier work on retired levels. ' : ''}Solve at least one of today’s problems to keep your streak. Archive practice adds to your totals. Progress is stored in this browser; clearing browser data removes it.</p>`;
 }
-function setView(v) {
-    view = v;
-    document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === v));
-    $('#archive-bar').hidden = v !== 'archive';
-    $('#practice').hidden = v === 'progress';
-    $('#level-picker').hidden = v === 'progress';
-    $('#progress-view').hidden = v !== 'progress';
-    $('#view-title').textContent = v === 'progress' ? 'Your progress' : v === 'archive' ? 'Exercise archive' : 'Daily exercises';
-    $('#date-label').hidden = v === 'progress';
-    if (v === 'today')
-        date = today;
-    if (v === 'archive') {
-        date = shifted(today, -1);
-        $('#archive-date').value = date;
+/* Routes: #/ home · #/topic levels · #/topic/level-N today's problem · #/topic/level-N/YYYY-MM-DD archive · #/topic/archive · #/progress */
+function parseRoute() {
+    const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+    if (a === 'progress') return {view: 'progress'};
+    if (!topicOf(a)) return {view: 'home'};
+    if (!b) return {view: 'levels', topic: a};
+    if (b === 'archive') return {view: 'archive', topic: a};
+    if (!LEVELS.some(l => l.id === b)) return {view: 'levels', topic: a};
+    const inArchive = /^\d{4}-\d{2}-\d{2}$/.test(c || '') && c >= shifted(today, -30) && c < today;
+    return {view: 'problem', topic: a, level: b, date: inArchive ? c : today};
+}
+const SCREEN = {home: '#home', levels: '#levels', problem: '#problem', archive: '#archive', progress: '#progress-view'};
+function route() {
+    const r = parseRoute();
+    view = r.view;
+    if (r.topic) topic = r.topic;
+    if (r.level) level = r.level;
+    date = r.date || today;
+    for (const [v, sel] of Object.entries(SCREEN)) $(sel).hidden = v !== view;
+    document.body.dataset.view = view;
+    const t = topicOf(topic), back = view === 'home' ? null : view === 'levels' || view === 'progress' ? ['#/', 'All disciplines'] : [`#/${topic}`, t.name];
+    $('#back-link').hidden = !back;
+    if (back) { $('#back-link').href = back[0]; $('#back-label').textContent = back[1]; }
+    $('#progress-link').hidden = view === 'progress';
+    if (view === 'home') renderHome();
+    else if (view === 'levels') renderLevelRing();
+    else if (view === 'archive') renderArchive();
+    else if (view === 'progress') renderProgress();
+    else {
+        renderChallenge();
+        remember('daily-engineer-last', `${topic}/${level}`);
     }
-    if (v === 'progress')
-        renderProgress();
-    else
-        renderChallenge();
-    renderDate();
+    const lvl = LEVELS.find(l => l.id === level);
+    document.title = view === 'problem' ? `${t.name} · ${lvl.tag} · Daily Engineer` : view === 'levels' || view === 'archive' ? `${t.name} · Daily Engineer` : view === 'progress' ? 'Progress · Daily Engineer' : 'Daily Engineer';
+    tick();
+    window.scrollTo(0, 0);
 }
-function renderDate() {
-    $('#date-label').dateTime = date;
-    $('#date-label').textContent = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric', month: 'long', year: 'numeric'});
-}
-document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => setView(b.dataset.view));
-$('#back-today').onclick = () => setView('today');
-$('#archive-date').min = shifted(today, -30);
-$('#archive-date').max = shifted(today, -1);
-$('#archive-date').onchange = e => {
-    if (e.target.value >= shifted(today, -30) && e.target.value < today) {
-        date = e.target.value;
-        renderChallenge();
-        renderDate();
-    } else
-        e.target.value = date;
-};
+window.addEventListener('hashchange', route);
+// Escape steps back up one screen (unless a dialog or the answer box is using it).
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('dialog[open]') || e.target.closest?.('math-field, input, textarea') || $('#back-link').hidden) return;
+    location.hash = $('#back-link').getAttribute('href');
+});
 $('#about').onclick = () => $('#about-dialog').showModal();
 $('#close-dialog').onclick = () => $('#about-dialog').close();
 $('#about-dialog').onclick = e => {
@@ -541,28 +568,17 @@ $('#about-dialog').onclick = e => {
             e.target.close();
     }
 };
-document.querySelectorAll('.brand').forEach(a => a.onclick = e => {
-    e.preventDefault();
-    setView('today');
-    window.scrollTo({top: 0, behavior: 'smooth'});
-});
 function tick() {
     const now = new Date(), next = new Date(now);
     next.setHours(24, 0, 0, 0);
-    const s = Math.floor((next - now) / 1000);
-    $('#countdown').textContent = [Math.floor(s / 3600), Math.floor(s % 3600 / 60), s % 60].map(n => String(n).padStart(2, '0')).join(':');
+    const s = Math.floor((next - now) / 1000), left = [Math.floor(s / 3600), Math.floor(s % 3600 / 60), s % 60].map(n => String(n).padStart(2, '0')).join(':');
+    document.querySelectorAll('.countdown').forEach(el => { el.textContent = left; });
     const current = localDate();
-    if (current !== today) {
+    if (current !== today) { // midnight: a new set of problems
         today = current;
-        $('#archive-date').min = shifted(today, -30);
-        $('#archive-date').max = shifted(today, -1);
-        if (view === 'today')
-            setView('today');
-        else if (view === 'progress')
-            renderProgress();
+        route();
     }
 }
 $('#close-diagram').onclick = () => $('#diagram-dialog').close();
-setView('today');
-tick();
+route();
 setInterval(tick, 1000);
