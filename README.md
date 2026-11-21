@@ -3,26 +3,27 @@
 A static web app with a new engineering problem every day, in the spirit of dailyintegral.com.
 
 - **Easy to find your way:** thin white lines on black with one red accent, plain words and familiar patterns.
-  - **Tabs:** Today, Archive and Progress sit in the top bar, with the coin balance and a Help button. On phones they become a bottom tab bar.
-  - **Today:**
-    - A "done today" progress bar, and a three-step explanation on the first visit that "Got it" dismisses for good.
-    - "Continue where you left off".
-    - An **All / Electrical / Mechanical & civil** switch, showing how many are done in each, filters the cards. The choice is remembered.
-    - A card per discipline, grouped into Electrical and Mechanical & civil. Each card shows its name, a description, a plain status ("Done today · 3-day streak", "Solve today to keep your 5-day streak"), the four level buttons, and a button that says what clicking does ("Start level 1 →"). The card opens the level you last used there.
+  - **Tabs:** Menu, Archive and Progress sit in the top bar, with the coin balance and a Help button. On phones they become a bottom tab bar.
+  - **Main menu (`#/`):**
+    - Today at a glance: disciplines done (with a progress bar), coins and best current streak.
+    - A three-step explanation on the first visit, which "Got it" dismisses for good.
+    - Two large category tiles, **Electrical** and **Mechanical & civil**, each listing its disciplines, how many are done today and its best streak.
+    - **Continue** (your last problem), **Archive**, **Progress** and **How it works**.
+    - Arrow keys move through the menu; Enter opens.
+  - **Category pages (`#/electrical`, `#/mechanical`):** a breadcrumb back to the menu, a switch to the other category, and a card per discipline. Each card shows its name, a description, a plain status ("Done today · 3-day streak", "Solve today to keep your 5-day streak"), the four level buttons, and a button that says what clicking does ("Start level 1 →"). The card opens the level you last used there.
   - **Problems:**
-    - A breadcrumb ("← Today / Circuit analysis") with the discipline's streak status.
+    - A breadcrumb ("← Electrical / Circuit analysis") with the discipline's streak status.
     - Labelled level tabs ("Level 2 · Advanced · 30–50 min", "✓ Solved").
     - The problem, with the answer panel beside it ("Your answer", "4 attempts left"); it stays in view on wide screens.
     - Right under **Check answer**: **Show a hint**, which opens the hint in place, and **Reveal solution**.
     - Once you finish, the panel offers the next level and the next discipline not yet done today.
-  - **The swoosh:** opening a level from any level circle zooms into the orb you clicked. This covers the circles on the Today cards, the level tabs and the archive days; a whole card zooms from its level's circle. The clicked orb lights up, the page dives into it while a red glow spreads out of it and the level number swells, and then the problem eases in. It is skipped when the system asks for reduced motion, and ctrl/⌘-click still opens a new tab.
   - **Archive** is its own tab: a coin summary, a discipline picker, then today and the last 30 days with unlock buttons.
   - **Shortcuts** (when not typing in an answer box; listed under Help):
     - <kbd>1</kbd>–<kbd>4</kbd> switch level.
     - <kbd>H</kbd> shows a hint.
     - <kbd>Enter</kbd> jumps to the answer box.
-    - <kbd>Esc</kbd> goes back.
-  - **Addresses:** every screen has one (`#/`, `#/circuits/level-2`, `#/circuits/level-2/2026-11-20`, `#/archive`, `#/circuits/archive`, `#/progress`; a bare `#/circuits` opens its remembered level). The browser's Back button works, and links can be shared or bookmarked.
+    - <kbd>Esc</kbd> goes back: problem, then category, then menu.
+  - **Addresses:** every screen has one (`#/`, `#/electrical`, `#/mechanical`, `#/circuits/level-2`, `#/circuits/level-2/2026-11-20`, `#/archive`, `#/circuits/archive`, `#/progress`; a bare `#/circuits` opens its remembered level). The browser's Back button works, and links can be shared or bookmarked.
 - **Streaks, coins and a locked archive.**
   - **Streaks per discipline:** solving any one level of a discipline counts it as done for the day and keeps that discipline's streak alive. Each discipline has its own streak, which stays alive through yesterday until midnight.
   - **Coin rewards:** streak milestones pay coins once per streak: 3 days +10, 7 +20, 10 +30, 15 +50, 1 month (30 days) +100, 2 months +200, 6 months +500, 1 year +1000. A broken streak can earn them again. Rewards are paid when you solve, or on the next visit for streaks reached earlier, and announced in a pop-up.
@@ -82,7 +83,7 @@ node tests/exercises.test.js
 node tests/editor.test.js
 ```
 
-`editor.test.js` needs Playwright with Chromium. It walks the navigation (the Today cards and first-visit intro, level buttons, the breadcrumb and level tabs, the Today and Archive tabs, the archive picker, Back, the 1–4/H/Enter/Esc shortcuts, remembered levels, unknown addresses), types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces, then checks the worked solution after solving and after five wrong attempts.
+`editor.test.js` needs Playwright with Chromium. It walks the navigation (the main menu and first-visit intro, both category pages and their switch, level buttons, the breadcrumbs and level tabs, the tabs, the archive picker, Back, the 1–4/H/Enter/Esc and arrow-key shortcuts, remembered levels, unknown addresses), types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces, then checks the worked solution after solving and after five wrong attempts.
 
 The suite checks:
 - Every topic × level, and every topic × tier, for 120 days: each exercise is complete and every answer is finite.

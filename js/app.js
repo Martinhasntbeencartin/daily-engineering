@@ -156,7 +156,7 @@ function readField(i) {
         return {value: NaN, error: err.message, raw};
     }
 }
-let today = localDate(), date = today, topic = 'circuits', level = 'level-1', view = 'home', hintCount = 0, solutionShown = false, exercise;
+let today = localDate(), date = today, topic = 'circuits', level = 'level-1', group = 'electrical', view = 'home', hintCount = 0, solutionShown = false, exercise;
 let progress = {}, attempts = {}, storageAvailable = true;
 /* key → the answers last checked for that problem, so a finished problem can show them beside the solution. */
 let submitted = {};
@@ -313,7 +313,7 @@ function introHTML() {
     try { seen = localStorage.getItem('daily-engineer-intro') === 'done'; } catch {}
     if (seen || Object.keys(progress).length) return '';
     return `<section class="intro frame" aria-labelledby="intro-title"><h2 id="intro-title">New here? It works in three steps.</h2><ol class="intro-steps">`
-        + `<li><b aria-hidden="true">1</b><span><strong>Pick a discipline</strong> below. Each has a new problem every day.</span></li>`
+        + `<li><b aria-hidden="true">1</b><span><strong>Choose a category</strong> below, then a discipline. Each has a new problem every day.</span></li>`
         + `<li><b aria-hidden="true">2</b><span><strong>Choose a level</strong>, from 1 (Insight) to 4 (Expert). One solved level a day keeps that discipline’s streak.</span></li>`
         + `<li><b aria-hidden="true">3</b><span><strong>Type your answer.</strong> You get five attempts; the full worked solution opens when you finish.</span></li>`
         + `</ol><button class="ghost" type="button" id="dismiss-intro">Got it</button></section>`;
@@ -334,37 +334,45 @@ function cardHTML(t) {
         + `<p class="card-status ${status.cls}">${status.text}</p>`
         + `<div class="card-levels" role="group" aria-label="${t.name} levels"><span class="lvl-k" aria-hidden="true">Level</span>${levels}</div><span class="card-cta" aria-hidden="true">${done ? 'Practise another level' : `Start level ${n}`} →</span></article>`;
 }
-/* Which field Today shows: every discipline, or only Electrical or Mechanical & civil. Remembered between visits. */
-function homeFilter() {
-    try { const f = localStorage.getItem('daily-engineer-filter'); return GROUPS.some(g => g.id === f) ? f : 'all'; } catch { return 'all'; }
-}
-function filterHTML(current) {
-    const options = [{id: 'all', name: 'All', topics: TOPICS}, ...GROUPS.map(g => ({id: g.id, name: g.name, topics: TOPICS.filter(t => t.group === g.id)}))];
-    return `<div class="filter" role="group" aria-label="Show disciplines">${options.map(o => {
-        const [short, more] = o.name.split(' & ');
-        return `<button type="button" class="seg" data-filter="${o.id}" aria-pressed="${current === o.id}">${short}${more ? `<span class="seg-more"> &amp; ${more}</span>` : ''} <span class="seg-count">${o.topics.filter(t => doneOn(t.id, today)).length}/${o.topics.length}</span></button>`;
-    }).join('')}</div>`;
-}
+/* ---------- Main menu: choose a category, continue, or open the archive, progress or help ---------- */
+const MENU_ICONS = {
+    play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10-6.5z"/></svg>',
+    archive: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+    progress: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9M3 20h18"/></svg>',
+    help: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.6M12 16.8v.4"/></svg>'
+};
+const groupName = id => GROUPS.find(g => g.id === id).name;
 function renderHome() {
-    const n = doneToday(), last = lastPlayed(), filter = homeFilter();
-    const resume = last && !doneOn(last[0], today) ? `<a class="resume frame" href="#/${last[0]}/${last[1]}"><span class="resume-k">Continue where you left off</span><span class="resume-v">${topicOf(last[0]).name} · ${LEVELS.find(l => l.id === last[1]).tag} →</span></a>` : '';
-    const groups = filterHTML(filter) + GROUPS.map(g => {
-        const ts = TOPICS.filter(t => t.group === g.id);
-        return `<section class="group" data-group="${g.id}" aria-labelledby="group-${g.id}" ${filter === 'all' || filter === g.id ? '' : 'hidden'}><div class="group-head"><h2 id="group-${g.id}">${g.name}</h2><span class="muted">${ts.filter(t => doneOn(t.id, today)).length} of ${ts.length} done today</span></div><div class="cards">${ts.map(cardHTML).join('')}</div></section>`;
+    const n = doneToday(), best = streak(), last = lastPlayed();
+    const cats = GROUPS.map(g => {
+        const ts = TOPICS.filter(t => t.group === g.id), done = ts.filter(t => doneOn(t.id, today)).length, run = Math.max(0, ...ts.map(t => topicStreak(t.id).length));
+        return `<a class="menu-cat frame" href="#/${g.id}" data-menu="${g.id}"><span class="menu-glyphs" aria-hidden="true">${ts.slice(0, 4).map(t => `<span>${glyph(GLYPHS[t.id])}</span>`).join('')}</span>`
+            + `<span class="menu-cat-name">${g.name}</span><span class="menu-cat-sub">${plural(ts.length, 'discipline')} · ${done} done today${run ? ` · best streak ${plural(run, 'day')}` : ''}</span>`
+            + `<span class="menu-cat-list">${ts.map(t => t.name).join(' · ')}</span><span class="menu-go" aria-hidden="true">Open ${g.name} →</span></a>`;
     }).join('');
-    $('#home').innerHTML = `<header class="page-head today-head"><h1>Today’s problems</h1><p class="muted">${longDate(today, {weekday: 'long', day: 'numeric', month: 'long'})} · new problems in <span class="countdown">--:--:--</span></p></header>`
-        + `<section class="goal frame" aria-label="Today’s goal"><p class="goal-num"><b>${n}</b><span>/${TOPICS.length}</span></p><div class="goal-text"><p class="goal-title">disciplines done today</p><div class="goal-bar" role="progressbar" aria-label="Disciplines done today" aria-valuemin="0" aria-valuemax="${TOPICS.length}" aria-valuenow="${n}"><span style="width: ${(100 * n / TOPICS.length).toFixed(1)}%"></span></div><p class="goal-hint">Solve any one level of a discipline to keep its streak. Streaks earn coins, and coins unlock past days in the archive.</p></div></section>`
-        + introHTML() + resume + groups;
+    const items = [
+        last && `<a class="menu-item" href="#/${last[0]}/${last[1]}" data-menu="continue">${MENU_ICONS.play}<span><b>Continue</b><small>${topicOf(last[0]).name} · ${LEVELS.find(l => l.id === last[1]).tag}</small></span></a>`,
+        `<a class="menu-item" href="#/archive" data-menu="archive">${MENU_ICONS.archive}<span><b>Archive</b><small>Past days, unlocked with coins</small></span></a>`,
+        `<a class="menu-item" href="#/progress" data-menu="progress">${MENU_ICONS.progress}<span><b>Progress</b><small>Streaks, rewards and history</small></span></a>`,
+        `<button class="menu-item" type="button" id="menu-help" data-menu="help">${MENU_ICONS.help}<span><b>How it works</b><small>Rules, coins and shortcuts</small></span></button>`
+    ].filter(Boolean).join('');
+    $('#home').innerHTML = `<header class="menu-head"><p class="kicker mono">Main menu</p><h1>Daily Engineer</h1><p class="muted">${longDate(today, {weekday: 'long', day: 'numeric', month: 'long'})} · new problems in <span class="countdown">--:--:--</span></p></header>`
+        + `<section class="menu-stats" aria-label="Today at a glance"><div class="frame"><b>${n}<small>/${TOPICS.length}</small></b><span>disciplines done today</span><div class="goal-bar" role="progressbar" aria-label="Disciplines done today" aria-valuemin="0" aria-valuemax="${TOPICS.length}" aria-valuenow="${n}"><span style="width: ${(100 * n / TOPICS.length).toFixed(1)}%"></span></div></div><div class="frame"><b>◎ ${coins()}</b><span>coins</span></div><div class="frame"><b>${best}</b><span>best current streak</span></div></section>`
+        + introHTML()
+        + `<nav class="menu" aria-label="Main menu"><h2 class="menu-k">Choose a category</h2><div class="menu-cats">${cats}</div><h2 class="menu-k">More</h2><div class="menu-items">${items}</div></nav>`;
     $('#dismiss-intro')?.addEventListener('click', () => { remember('daily-engineer-intro', 'done'); $('#home .intro')?.remove(); });
-    $('#home').querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => {
-        const f = b.dataset.filter;
-        remember('daily-engineer-filter', f);
-        $('#home').querySelectorAll('[data-filter]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-        $('#home').querySelectorAll('.group').forEach(g => { g.hidden = f !== 'all' && g.dataset.group !== f; });
-    }));
+    $('#menu-help').addEventListener('click', () => $('#about-dialog').showModal());
 }
-/* Where Back and Esc lead: the archive for a past day, otherwise Today. */
-const backHref = () => view === 'problem' && date !== today ? `#/${topic}/archive` : '#/';
+/* A category: its disciplines as cards, with a switch to the other category. */
+function renderCategory() {
+    const ts = TOPICS.filter(t => t.group === group), done = ts.filter(t => doneOn(t.id, today)).length;
+    const sw = GROUPS.map(g => `<a class="switch-opt ${g.id === group ? 'current' : ''}" href="#/${g.id}" ${g.id === group ? 'aria-current="page"' : ''}>${g.name}</a>`).join('');
+    $('#category').innerHTML = `<nav class="crumbs" aria-label="Breadcrumb"><a id="cat-back" href="#/">← Main menu</a><span aria-hidden="true">/</span><span class="crumb-here">${groupName(group)}</span></nav>`
+        + `<header class="cat-head"><div><h1>${groupName(group)}</h1><p class="muted">${done} of ${ts.length} done today. Pick a discipline and a level; one solved level a day keeps its streak.</p></div><nav class="switch" aria-label="Category">${sw}</nav></header>`
+        + `<div class="cards">${ts.map(cardHTML).join('')}</div>`;
+}
+/* Where Back and Esc lead: problem → its category (or the archive for a past day) → main menu. */
+const backHref = () => view === 'problem' ? (date !== today ? `#/${topic}/archive` : `#/${topicOf(topic).group}`) : '#/';
 /* Above a problem: a breadcrumb with this discipline's streak, and the four levels as labelled tabs. */
 function renderBar() {
     const t = topicOf(topic), suffix = date === today ? '' : '/' + date, st = topicStreak(topic);
@@ -373,7 +381,7 @@ function renderBar() {
         return `<a class="level-tab ${x || ''} ${current ? 'current' : ''}" href="#/${topic}/${l.id}${suffix}" data-level="${l.id}" ${current ? 'aria-current="page"' : ''}><span class="tab-num" aria-hidden="true">${i + 1}</span><span class="tab-text"><b>${l.tag} · ${l.name}</b><small>${x === 'solved' ? '✓ Solved' : x === 'reviewed' ? 'Solution seen' : l.time}</small></span></a>`;
     }).join('');
     const where = date !== today ? `From the archive · ${longDate(date, {weekday: 'long', day: 'numeric', month: 'long'})}` : st.doneToday ? `✓ Done today · ${st.length}-day streak` : st.length ? `Solve any level to keep your ${st.length}-day streak` : 'Solve any level to start a streak';
-    $('#problem-bar').innerHTML = `<nav class="crumbs" aria-label="Breadcrumb"><a id="back-link" href="${backHref()}">← ${date === today ? 'Today' : 'Archive'}</a><span aria-hidden="true">/</span><span class="crumb-here">${t.name}</span><span class="bar-date ${date === today && st.doneToday ? 'ok' : ''}">${where}</span></nav><nav class="level-tabs" aria-label="Level">${tabs}</nav>`;
+    $('#problem-bar').innerHTML = `<nav class="crumbs" aria-label="Breadcrumb"><a id="back-link" href="${backHref()}">← ${date === today ? groupName(t.group) : 'Archive'}</a><span aria-hidden="true">/</span><span class="crumb-here">${t.name}</span><span class="bar-date ${date === today && st.doneToday ? 'ok' : ''}">${where}</span></nav><nav class="level-tabs" aria-label="Level">${tabs}</nav>`;
 }
 /* Once a problem is finished (or its solution seen), point to the next level and the next unsolved discipline. */
 function nextStepsHTML() {
@@ -680,6 +688,7 @@ function parseRoute() {
     const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
     if (a === 'progress') return {view: 'progress'};
     if (a === 'archive') return {view: 'archive'};
+    if (GROUPS.some(g => g.id === a)) return {view: 'group', group: a};
     if (!topicOf(a)) return {view: 'home'};
     if (!b) return {view: 'levels', topic: a};
     if (b === 'archive') return {view: 'archive', topic: a};
@@ -687,7 +696,7 @@ function parseRoute() {
     const inArchive = /^\d{4}-\d{2}-\d{2}$/.test(c || '') && c >= shifted(today, -30) && c < today;
     return {view: 'problem', topic: a, level: b, date: inArchive ? c : today};
 }
-const SCREEN = {home: '#home', problem: '#problem', archive: '#archive', progress: '#progress-view'};
+const SCREEN = {home: '#home', group: '#category', problem: '#problem', archive: '#archive', progress: '#progress-view'};
 function route() {
     const r = parseRoute();
     if (r.view === 'levels') { location.replace(`#/${r.topic}/${levelFor(r.topic)}`); return; } // a discipline opens straight at its level
@@ -696,12 +705,15 @@ function route() {
     if (r.topic) topic = r.topic;
     if (r.level) level = r.level;
     date = r.date || today;
+    if (r.group) group = r.group;
+    if (view === 'problem' || view === 'archive') group = topicOf(topic).group;
     for (const [v, sel] of Object.entries(SCREEN)) $(sel).hidden = v !== view;
     document.body.dataset.view = view;
-    const tab = view === 'archive' || (view === 'problem' && date !== today) ? 'archive' : view === 'progress' ? 'progress' : 'today';
+    const tab = view === 'archive' || (view === 'problem' && date !== today) ? 'archive' : view === 'progress' ? 'progress' : 'menu';
     document.querySelectorAll('[data-tab]').forEach(a => { a.classList.toggle('active', a.dataset.tab === tab); if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     renderCoins();
     if (view === 'home') renderHome();
+    else if (view === 'group') renderCategory();
     else if (view === 'archive') renderArchive();
     else if (view === 'progress') renderProgress();
     else if (!isOpen(topic, date)) renderLocked();
@@ -711,7 +723,7 @@ function route() {
         remember('daily-engineer-levels', JSON.stringify({...readJSON('daily-engineer-levels'), [topic]: level}));
     }
     const t = topicOf(topic), lvl = LEVELS.find(l => l.id === level);
-    document.title = view === 'problem' ? `${t.name} · ${lvl.tag} · Daily Engineer` : view === 'archive' ? `Archive · ${t.name} · Daily Engineer` : view === 'progress' ? 'Progress · Daily Engineer' : 'Today · Daily Engineer';
+    document.title = view === 'problem' ? `${t.name} · ${lvl.tag} · Daily Engineer` : view === 'archive' ? `Archive · ${t.name} · Daily Engineer` : view === 'progress' ? 'Progress · Daily Engineer' : view === 'group' ? `${groupName(group)} · Daily Engineer` : 'Daily Engineer';
     tick();
     window.scrollTo(0, 0);
 }
@@ -727,54 +739,14 @@ document.addEventListener('keydown', e => {
         if (/^[1-9]$/.test(k) && LEVELS[k - 1]) { location.hash = `#/${topic}/${LEVELS[k - 1].id}${date === today ? '' : '/' + date}`; return; }
         if (k === 'h' || k === 'H') { if ($('#hint') && !$('#hint').disabled) showHint(); return; }
         if (k === 'Enter' && !e.target.closest?.('a, button, summary')) { e.preventDefault(); $('#answer-0')?.focus(); }
+        return;
     }
-});
-/* ---------- the swoosh: opening a level zooms into the orb you clicked ----------
-   A circle grows from the orb to fill the screen, the level number swells and fades, then the problem eases in.
-   Skipped for reduced motion and for clicks that open a new tab. */
-const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-function orbFor(a) {
-    if (a.matches('.lvl, .arch-node')) return a;
-    if (a.matches('.level-tab')) return a.querySelector('.tab-num');
-    const card = a.closest('.card'); // a whole card opens its level, so it zooms from that level's orb
-    return card?.querySelector(`.lvl[href="${a.getAttribute('href')}"]`) || card?.querySelector('.card-glyph') || null;
-}
-let swooshing = false;
-function swoosh(orb, href) {
-    if (!orb || !document.body.animate) { location.hash = href; return; }
-    swooshing = true;
-    const r = orb.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    const reach = Math.hypot(Math.max(cx, innerWidth - cx), Math.max(cy, innerHeight - cy)) + 4;
-    const veil = document.createElement('div');
-    veil.className = 'swoosh';
-    veil.setAttribute('aria-hidden', 'true');
-    veil.style.setProperty('--x', `${cx}px`);
-    veil.style.setProperty('--y', `${cy}px`);
-    const digit = (orb.querySelector('[aria-hidden="true"]') || orb).textContent.trim(); // the visible number, not the screen-reader label
-    if (/^\d$/.test(digit)) { const label = document.createElement('span'); label.className = 'swoosh-label'; label.textContent = digit; veil.append(label); }
-    document.body.append(veil);
-    const ease = 'cubic-bezier(.7, 0, .3, 1)', main = $('#main'), m = main.getBoundingClientRect();
-    orb.classList.add('swoosh-source'); // the clicked orb lights up as the zoom starts
-    // The camera dives into the orb: the page scales up around it while the glowing circle spreads out of it.
-    const dive = main.animate([{transformOrigin: `${cx - m.left}px ${cy - m.top}px`, transform: 'scale(1)', opacity: 1}, {transformOrigin: `${cx - m.left}px ${cy - m.top}px`, transform: 'scale(3.2)', opacity: 0}], {duration: 620, easing: ease, fill: 'forwards'});
-    const grow = veil.animate([{clipPath: `circle(${r.width / 2}px at ${cx}px ${cy}px)`, offset: 0}, {clipPath: `circle(${r.width * 1.6}px at ${cx}px ${cy}px)`, offset: .25}, {clipPath: `circle(${reach}px at ${cx}px ${cy}px)`, offset: 1}], {duration: 620, easing: ease, fill: 'forwards'});
-    veil.querySelector('.swoosh-label')?.animate([{transform: 'translate(-50%, -50%) scale(1)', opacity: 1}, {transform: 'translate(-50%, -50%) scale(2.4)', opacity: 1, offset: .35}, {transform: 'translate(-50%, -50%) scale(9)', opacity: 0}], {duration: 680, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards'});
-    grow.finished.then(() => { // switch pages only once the circle covers the screen
-        window.addEventListener('hashchange', () => requestAnimationFrame(() => { // the new page is rendered by now
-            dive.cancel();
-            main.animate([{opacity: 0, transform: 'scale(.92)'}, {opacity: 1, transform: 'none'}], {duration: 460, easing: 'cubic-bezier(.2, .7, .2, 1)'});
-            veil.animate([{opacity: 1}, {opacity: 0}], {duration: 460, easing: 'ease-out', fill: 'forwards'}).finished.then(() => { veil.remove(); swooshing = false; });
-        }), {once: true});
-        location.hash = href;
-    });
-}
-document.addEventListener('click', e => {
-    const a = e.target.closest?.('a.lvl, a.level-tab, a.arch-node, a.card-link');
-    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || reduceMotion()) return;
-    const href = a.getAttribute('href');
-    if (!href || href === location.hash) return;
-    e.preventDefault();
-    if (!swooshing) swoosh(orbFor(a), href);
+    if ((view === 'home' || view === 'group') && /^Arrow(Up|Down|Left|Right)$/.test(k)) {
+        const items = [...document.querySelectorAll(view === 'home' ? '#home [data-menu]' : '#category .card-link')], i = items.indexOf(document.activeElement);
+        if (!items.length || (i < 0 && document.activeElement !== document.body)) return;
+        e.preventDefault();
+        items[i < 0 ? 0 : (i + (k === 'ArrowDown' || k === 'ArrowRight' ? 1 : -1) + items.length) % items.length].focus();
+    }
 });
 for (const id of ['#about', '#about-bottom']) $(id).onclick = () => $('#about-dialog').showModal();
 $('#close-dialog').onclick = () => $('#about-dialog').close();
