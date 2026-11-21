@@ -38,33 +38,90 @@ const vecTex = v => `(${v.map(x => tf(Math.abs(x) < 1e-12 ? 0 : x)).join(',\\ ')
 
 /* ---------- diagrams ---------- */
 /* Maps world points (x right, y up) into the drawing box, keeping proportions. */
-function fitter(pts, box=[120, 34, 600, 206]) {
+function fitter(pts, box) {
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
     const s = Math.min((box[2] - box[0]) / Math.max(x1 - x0, 1e-6), (box[3] - box[1]) / Math.max(y1 - y0, 1e-6));
     const ox = (box[0] + box[2]) / 2 - s * (x0 + x1) / 2, oy = (box[1] + box[3]) / 2 + s * (y0 + y1) / 2;
     return ([x, y]) => [+(ox + s * x).toFixed(1), +(oy - s * y).toFixed(1)];
 }
-/* A serial arm drawn through its joint positions, with a base, joint circles, link names and marked points. */
-function armDiagram(world, label, {names=[], joints=[], marks=[], ground=true}={}) {
-    const f = fitter([...world, ...marks.map(m => [m[0], m[1]])]), P = world.map(f), [bx, by] = P[0];
-    let b = ground ? `<path d="M${bx - 30} ${by + 18}h60" stroke="#aab9a0"/><path d="M${bx - 14} ${by + 18}L${bx} ${by}l14 18"/>` : '';
-    b += wire('M' + P.map(p => p.join(' ')).join('L'));
-    P.slice(0, -1).forEach(([x, y]) => { b += ring(x, y, 7); });
-    b += dot(...P[P.length - 1]);
-    names.forEach((n, i) => {
-        const [x1, y1] = P[i], [x2, y2] = P[i + 1], len = Math.hypot(x2 - x1, y2 - y1) || 1;
-        b += dt(+((x1 + x2) / 2 - 18 * (y2 - y1) / len).toFixed(1), +((y1 + y2) / 2 + 18 * (x2 - x1) / len + 5).toFixed(1), n);
+/* Number the pivots on the mechanism and key the symbols beside it. A folded
+   pose can put the hand very close to a joint, so keep text off the links. */
+function armDiagram(world, label, {names, joints, tool="hand"}) {
+    const f = fitter(world, [60, 42, 400, 211]), points = world.map(f), [bx, by] = points[0];
+    const joint = (x, y, i) => `<circle cx="${x}" cy="${y}" r="12" fill="#fffdf7"/>` + dt(x, y + 6, i + 1);
+    let b = guide(`M${bx - 27} ${by}h82`) + wire(`M${bx - 20} ${by + 20}L${bx} ${by}l20 20z`) +
+        wire('M' + points.map(p => p.join(' ')).join('L')) + dt(510, 35, 'Pivot') + dt(620, 35, 'Outgoing link');
+    points.slice(0, -1).forEach(([x, y], i) => {
+        const row = 70 + 43 * i;
+        b += joint(x, y, i) + joint(464, row, i) + dt(511, row + 6, joints[i] || '—') + dt(620, row + 6, names[i]);
     });
-    joints.forEach((n, i) => { const [x, y] = P[i]; b += dt(x + 22, y + 24, n); });
-    marks.forEach(([x, y, n]) => { const [px, py] = f([x, y]); b += `<path d="M${px - 8} ${py - 8}l16 16m0 -16l-16 16" stroke="#b5532d"/>` + dt(px, py - 14, n); });
-    return drawing(b, label, 240);
+    const [tx, ty] = points.at(-1);
+    const tip = (x, y) => `<path d="M${x - 6} ${y}l6 -6 6 6 -6 6z" fill="#b5532d" stroke="#b5532d"/>`;
+    return drawing(b + tip(tx, ty) + tip(464, 207) + note(490, 213, tool),
+        label + '. Numbered pivots run from base to hand. Outgoing links: ' + names.join(', ') + '.', 247);
 }
-function motorCircuit(caption, load='J, b') {
-    return drawing(element('DC', 110, 75, 110, 195, '') + dt(62, 140, 'V') + element('R', 110, 75, 250, 75, 'R') + element('L', 250, 75, 390, 75, 'L') +
+
+function voltageVector(vd, vq, limit) {
+    const ox = 270, oy = 205, scale = 146 / Math.max(limit, Math.hypot(vd, vq));
+    const x = ox + vd * scale, y = oy - vq * scale, r = limit * scale;
+    return drawing(guide(`M${ox - r} ${oy}a${r} ${r} 0 0 1 ${2 * r} 0`) +
+        arrow(83, oy, 457, oy) + arrow(ox, 224, ox, 27) +
+        guide(`M${x} ${oy}V${y}H${ox}`) + arrow(ox, oy, x, y) +
+        dt(466, 230, 'd (V)') + dt(287, 20, 'q (V)') +
+        note(475, 87, 'v_d = −ωₑ L i_q') + note(475, 123, 'v_q = Rₛ i_q + ωₑ ψ') +
+        guide('M475 160h34') + note(520, 166, 'V limit') + dt(290, 256, 'Voltage at the specified speed and torque'),
+        'Voltage vector with negative d and positive q components. Dashed arc shows the inverter voltage limit at the same scale.', 278);
+}
+
+function fieldLimits(we, psi, L, Rs, Im, Vm, id, iq) {
+    // For equal d/q inductance the voltage locus is a displaced circle,
+    // including the q-axis displacement due to stator resistance.
+    const wl = we * L, emf = we * psi, a = Rs * Rs + wl * wl;
+    const cx = -wl * emf / a, cy = -Rs * emf / a, radius = Vm / Math.sqrt(a);
+    const f = fitter([[-Im, -Im], [Im, Im], [cx - radius, cy - radius], [cx + radius, cy + radius]], [40, 30, 443, 235]);
+    const [ox, oy] = f([0, 0]), [vx, vy] = f([cx, cy]), s = (f([Im, 0])[0] - ox) / Im;
+    const [px, py] = f([id, iq]);
+    return drawing(arrow(34, oy, 452, oy) + arrow(ox, 248, ox, 15) +
+        dt(451, oy + 25, 'i_d (A)') + note(ox + 13, 17, 'i_q (A)') +
+        `<circle cx="${ox}" cy="${oy}" r="${s * Im}" stroke-dasharray="6 5"/>` +
+        `<circle cx="${vx}" cy="${vy}" r="${s * radius}" stroke="#b5532d"/>` +
+        dot(px, py) + guide('M490 77h32') + note(535, 83, `I limit · ${Im} A`) +
+        '<path d="M490 121h32" stroke="#b5532d"/>' + note(535, 127, `V limit · ${Vm} V`) +
+        dot(506, 165) + note(535, 171, 'Operating point'),
+        'Current and voltage limits at the specified speed, drawn to the same current scale. Their upper intersection gives the operating point.', 268);
+}
+
+function tiltFilter(dtSeconds) {
+    return drawing(arrow(78, 72, 191, 72) + dt(120, 50, 'Gyro ω Δt') +
+        ring(211, 72, 20) + dt(211, 78, 'Σ') + arrow(231, 72, 309, 72) +
+        wire('M309 52h58v40h-58z') + dt(338, 78, 'α') + arrow(367, 72, 450, 72) +
+        ring(470, 72, 20) + dt(470, 78, 'Σ') + arrow(490, 72, 647, 72) + dt(623, 50, 'Tilt θ̂') +
+        wire('M70 171H203m0 0a8 8 0 0 1 16 0') + arrow(219, 171, 272, 171) + dt(116, 155, 'Accelerometer θₐ') +
+        wire('M272 151h90v40h-90z') + dt(317, 177, '1 − α') + wire('M362 171H470') + arrow(470, 171, 470, 92) +
+        dot(566, 72) + wire('M566 72V233H377M377 214h-83v38h83zM294 233H211') +
+        dt(336, 239, 'Delay') + arrow(211, 233, 211, 92) +
+        dt(360, 292, `Sample interval Δt = ${dtSeconds} s`),
+        'Previous tilt plus the gyro increment is weighted by alpha. The accelerometer enters the final sum through a separate one-minus-alpha branch.', 312);
+}
+
+function beaconRanges(beacons, ranges, side, estimate) {
+    const f = fitter(beacons, [255, 42, 465, 230]), [rx, ry] = f(estimate);
+    let b = guide('M' + beacons.map(pos => f(pos).join(' ')).join('L') + 'z');
+    beacons.forEach((pos, i) => {
+        const [x, y] = f(pos);
+        b += wire(`M${rx} ${ry}L${x} ${y}`) + `<rect x="${x - 6}" y="${y - 6}" width="12" height="12" fill="#fffdf7"/>` +
+            dt(x + (pos[0] ? 90 : -90), y + 6, `B${i + 1} · ${ranges[i]} m`);
+    });
+    return drawing(b + `<circle cx="${rx}" cy="${ry}" r="6" fill="#b5532d"/>` +
+        dt(360, 268, `Square side ${side} m · B1 at (0, 0)`),
+        'Four corner beacons around the robot, numbered counterclockwise from the lower left. Each range is labelled beside its beacon.', 290);
+}
+function motorCircuit(caption, load='J, b', inductive=true) {
+    return drawing(element('DC', 110, 75, 110, 195, '') + dt(62, 140, 'V') + element('R', 110, 75, 250, 75, 'R') + (inductive ? element('L', 250, 75, 390, 75, 'L') : wire('M250 75H390')) +
         wire('M390 75h30v30M420 165v30H110') + ring(420, 135, 30) + dt(420, 141, 'M') + dt(352, 140, 'E = kω') +
         wire('M450 135h80') + `<rect x="530" y="100" width="44" height="70" rx="4"/>` + dt(552, 200, load) + dt(500, 122, 'τ = kI') +
-        dt(360, 238, caption), 'DC motor equivalent circuit: supply, armature resistance and inductance, back-EMF, and a shaft driving an inertia. ' + caption, 250);
+        dt(360, 238, caption), 'Motor armature loop and back-EMF, with a shaft driving the mechanical load. ' + caption, 250);
 }
 function encoderDisc(caption) {
     let b = ring(200, 125, 90) + ring(200, 125, 24);
@@ -79,9 +136,11 @@ function encoderDisc(caption) {
 /* ---------- Level 1: curated ---------- */
 bank('kinematics', 'advanced', [{
     title: 'How much floor can a two-link arm reach?',
-    diagram: sketch('Two-link arm on a fixed base; the hand can reach a ring.',
-        ring(360, 125, 105) + ring(360, 125, 35) + guide('M360 125H465') + wire('M360 125L413.6 80L436.1 106.8') + ring(360, 125, 6) + ring(413.6, 80, 6) + dot(436.1, 106.8),
-        [[372, 92, 'l₁ = 2 m'], [452, 82, 'l₂ = 1 m'], [530, 128, 'r = 3 m'], [360, 158, '1 m']]),
+    diagram: sketch('Reachable annulus centred on the shoulder. The hand spans radii between the difference and sum of the two link lengths.',
+        ring(270, 125, 105) + ring(270, 125, 35) +
+        wire('M270 125l53.6 -45 22.5 26.8') + ring(270, 125, 5) + ring(323.6, 80, 5) + dot(346.1, 106.8) +
+        guide('M305 125h170M344.25 199.25l18 18H475'),
+        [[541, 73, 'Links 2 m and 1 m'], [542, 131, 'Inner radius 1 m'], [545, 223, 'Outer radius 3 m']]),
     text: T`A planar arm has a shoulder on a fixed base and an elbow. The links are $l_1 = 2\,\text{m}$ and $l_2 = 1\,\text{m}$, and both joints turn through a full circle. What floor area can the hand reach?`,
     parts: [ex('Reachable area', 8 * Math.PI, T`8\pi`, 'm²')],
     hints: [T`The hand's distance from the base is $r = \sqrt{l_1^2 + l_2^2 + 2l_1l_2\cos q_2}$. Which values can it take?`],
@@ -111,10 +170,11 @@ bank('kinematics', 'advanced', [{
     }
 }, {
     title: 'Two quarter turns make a third of a turn',
-    diagram: sketch('Right-handed x, y and z axes with quarter turns about x and then y.',
-        arrow(360, 140, 500, 140) + arrow(360, 140, 360, 26) + arrow(360, 140, 268, 212) + guide('M360 140L452 48') +
-        wire('M300 186a36 22 0 0 0 26 30') + wire('M456 120a20 36 0 0 1 22 36'),
-        [[516, 146, 'y'], [360, 16, 'z'], [252, 226, 'x'], [478, 44, 'one equivalent axis'], [286, 170, '90°'], [500, 120, '90°']]),
+    diagram: sketch('Initial and final body frames viewed from the same direction. The final x-axis points along original minus z, y along original x, and z along original minus y.',
+        arrow(215, 116, 151, 167) + arrow(215, 116, 312, 116) + arrow(215, 116, 215, 40) +
+        arrow(525, 116, 525, 192) + arrow(525, 116, 461, 167) + arrow(525, 116, 428, 116),
+        [[137, 182, 'x'], [328, 123, 'y'], [215, 28, 'z'], [542, 200, 'x′'], [442, 181, 'y′'], [409, 121, 'z′'],
+         [215, 236, 'Initial frame'], [518, 236, 'After +90° about fixed x, then y']]),
     text: T`A rigid body is turned $90^\circ$ about the $x$ axis, then $90^\circ$ about the fixed $y$ axis. Together the two turns equal a single rotation about one axis. Through what angle?`,
     parts: [ex(T`Angle $\theta$`, 120, '120', '°')],
     hints: [T`Rotations about fixed axes multiply on the left: $R = R_y(90^\circ)\,R_x(90^\circ)$.`, T`For any rotation matrix, $\operatorname{tr}R = 1 + 2\cos\theta$.`],
@@ -168,8 +228,8 @@ bank('robotcontrol', 'advanced', [{
 }, {
     title: 'How much the shoulder’s inertia changes',
     diagram: sketch('Two-link arm with point masses at the elbow and the hand, shown stretched and folded.',
-        wire('M120 150H260H400') + ring(120, 150, 7) + ring(260, 150, 9) + ring(400, 150, 9) + wire('M470 150H610L500 150') + ring(470, 150, 7) + ring(610, 150, 9) + ring(500, 158, 9),
-        [[190, 134, 'L'], [330, 134, 'L'], [260, 182, 'm'], [400, 182, 'm'], [260, 220, 'Stretched: q₂ = 0'], [540, 220, 'Folded: q₂ = 180°']]),
+        wire('M120 150H260H400') + ring(120, 150, 7) + ring(260, 150, 9) + ring(400, 150, 9) + wire('M470 150H610') + ring(470, 150, 7) + ring(610, 150, 9) + ring(470, 150, 11),
+        [[190, 134, 'L'], [330, 134, 'L'], [260, 182, 'm'], [400, 182, 'm'], [260, 220, 'Stretched: q₂ = 0'], [470, 118, 'Hand at pivot'], [610, 182, 'm'], [540, 220, 'Folded: q₂ = 180°']]),
     text: T`A two-link arm has equal links of length $L$, each massless with a point mass $m$ at its outer end. How many times larger is the inertia felt at the shoulder, $M_{11}$, with the arm stretched out than with the elbow folded back?`,
     parts: [ex('Ratio', 5, '5')],
     hints: [T`$M_{11} = (m_1 + m_2)l_1^2 + m_2l_2^2 + 2m_2l_1l_2\cos q_2$.`],
@@ -269,7 +329,7 @@ bank('sensors', 'advanced', [{
     verify: () => { let b = Infinity; for (let w = 0; w <= 1; w += 1e-6) b = Math.min(b, w * w * 9 + (1 - w) ** 2 * 16); return [Math.sqrt(b)]; }
 }, {
     title: 'The golden Kalman gain',
-    diagram: signalChain(['Random walk|x + w', 'Sensor|z = x + v', 'Kalman filter|gain K'], 'Equal process and measurement noise: Q = R'),
+    diagram: estimatorDiagram('Delay', 'Predicted x', 'Estimate x̂', 'Random walk · Q = R'),
     text: T`A quantity drifts as a random walk, $x_{k+1} = x_k + w_k$, and is measured as $z_k = x_k + v_k$. The process and measurement noise have equal variances, $Q = R$. Find the steady-state Kalman gain.`,
     parts: [ex(T`$K_\infty$`, (Math.sqrt(5) - 1) / 2, T`\dfrac{\sqrt5-1}{2}`)],
     hints: [T`With prior variance $P$, the steady state satisfies $P = \left(P - \dfrac{P^2}{P + R}\right) + Q$.`],
@@ -325,7 +385,7 @@ function makeRoboticsExercise(topic, date, level) {
                     T`$J = \begin{bmatrix}-l_1s_1 - l_2s_{12} & -l_2s_{12}\\ l_1c_1 + l_2c_{12} & l_2c_{12}\end{bmatrix} = ${mat2(J)}$ and $\det J = l_1l_2\sin q_2 = ${tf(det)}\,\text{m}^2$.`,
                     T`$\dot q_1 = \dfrac{J_{22}v_x - J_{12}v_y}{\det J} = ${tf(qd1)}\,\text{rad/s}$ and $\dot q_2 = \dfrac{-J_{21}v_x + J_{11}v_y}{\det J} = ${tf(qd2)}\,\text{rad/s}$.`],
                 'Inverse kinematics has two branches (elbow one way or the other); the Jacobian turns hand velocities into joint rates and fails where det J = 0.',
-                armDiagram(fkN([l1, l2], [q1, q2]), 'Two-link planar arm reaching the target point', {names: ['l₁', 'l₂'], joints: ['q₁', 'q₂'], marks: [[x, y, 'target']]}),
+                armDiagram(fkN([l1, l2], [q1, q2]), 'Two-link planar arm reaching the target point', {names: ['l₁', 'l₂'], joints: ['q₁', 'q₂'], tool: 'target'}),
                 'Trigonometry; 2×2 matrices; the chain rule.');
         }
         if (li === 2) {
@@ -344,7 +404,7 @@ function makeRoboticsExercise(topic, date, level) {
                     T`Joints at $(0, 0)$, $${vecTex(pts[1])}$ and $${vecTex(pts[2])}$; tip at $${vecTex(pts[3])}$.`,
                     T`$\boldsymbol\tau = ${vecTex(tau)}\,\text{N}\cdot\text{m}$.`],
                 'Decouple position and orientation at the wrist, then use the Jacobian transpose for statics: joint torques are the moments of the tip force about each joint.',
-                armDiagram(pts, 'Three-link planar arm with its tool tip at the target pose', {names: ['l₁', 'l₂', 'l₃'], joints: ['q₁', 'q₂', 'q₃'], marks: [[x, y, 'tip']]}),
+                armDiagram(pts, 'Three-link planar arm with its tool tip at the target pose', {names: ['l₁', 'l₂', 'l₃'], joints: ['q₁', 'q₂', 'q₃'], tool: 'tip'}),
                 'Two-link inverse kinematics; moments; the Jacobian.');
         }
         if (li === 3) {
@@ -364,7 +424,7 @@ function makeRoboticsExercise(topic, date, level) {
                     T`$J = \begin{bmatrix}-Rs_1 & -Sc_1 & -a_3s_{23}c_1\\ Rc_1 & -Ss_1 & -a_3s_{23}s_1\\ 0 & R & a_3c_{23}\end{bmatrix}$ with $R = ${tf(R)}$, $S = ${tf(S)}$; $|\det J| = a_2a_3|\sin q_3|\,R = ${tf(det)}\,\text{m}^3$.`,
                     T`Solving $J\dot{\mathbf q} = \mathbf v$: $\dot{\mathbf q} = ${vecTex(qd)}\,\text{rad/s}$.`],
                 'A spatial elbow arm splits into a base rotation and a planar two-link problem; its Jacobian determinant shows both singularities at a glance.',
-                armDiagram([[0, 0], [0, d1], [a2 * Math.cos(q2), d1 + a2 * Math.sin(q2)], [r, z]], 'Side view of the elbow arm in its vertical plane: base column, upper arm and forearm', {names: ['d₁', 'a₂', 'a₃'], joints: ['', 'q₂', 'q₃'], marks: [[r, z, 'hand (r, z)']]}),
+                armDiagram([[0, 0], [0, d1], [a2 * Math.cos(q2), d1 + a2 * Math.sin(q2)], [r, z]], 'Side view of the elbow arm in its vertical plane: base column, upper arm and forearm', {names: ['d₁', 'a₂', 'a₃'], joints: ['', 'q₂', 'q₃'], tool: 'hand (r, z)'}),
                 '3D forward kinematics; 3×3 linear systems.');
         }
         // Mastery: a redundant arm placing its hand at a point; choose the most manipulable posture.
@@ -388,7 +448,7 @@ function makeRoboticsExercise(topic, date, level) {
                 T`Scanning $\varphi$ in $0.1^\circ$ steps on both branches and refining: $w_{\max} = ${tf(wMax)}\,\text{m}^2$ at $\varphi - 30^\circ = \pm${tf(off)}^\circ$.`,
                 T`There $\mathbf q = ${vecTex(qOpt.map(deg))}^\circ$, so $|q_2| = ${tf(deg(Math.abs(qOpt[1])))}^\circ$. The mirror posture about the line to the target gives the same $w$.`],
             'Redundancy leaves a family of postures (the self-motion) for one hand position; resolving it by maximising manipulability keeps the arm far from singularities, as redundant industrial arms do online.',
-            armDiagram(fkN([l1, l2, l3], qOpt), 'Redundant three-link arm in its most manipulable posture for the given hand position', {names: ['l₁', 'l₂', 'l₃'], joints: ['q₁', 'q₂', 'q₃'], marks: [[px, py, 'hand']]}),
+            armDiagram(fkN([l1, l2, l3], qOpt), 'Redundant three-link arm in its most manipulable posture for the given hand position', {names: ['l₁', 'l₂', 'l₃'], joints: ['q₁', 'q₂', 'q₃'], tool: 'hand'}),
             'Inverse kinematics; Jacobians; numerical optimisation.');
     }
 
@@ -402,7 +462,7 @@ function makeRoboticsExercise(topic, date, level) {
                 [T`A uniform rod about one end: $I = ml^2/3$. Matching $I s^2 + K_ds + K_p$ to $I(s^2 + 2\zeta\omega_ns + \omega_n^2)$ gives the gains.`, T`Gravity torque: $mg\tfrac l2\cos\theta$.`, T`At rest the controller balances gravity: $K_pe = mg\tfrac l2\cos(\theta_d - e)$. Solve numerically.`],
                 [T`$I = \dfrac{ml^2}{3} = ${tf(I)}\,\text{kg}\cdot\text{m}^2$.`, T`$K_p = I\omega_n^2 = ${tf(Kp)}\,\text{N}\cdot\text{m/rad}$ and $K_d = 2\zeta\omega_nI = ${tf(Kd)}\,\text{N}\cdot\text{m}\cdot\text{s/rad}$.`, T`Horizontal: $\tau = mg\,l/2 = ${tf(tg)}\,\text{N}\cdot\text{m}$.`, T`$${tf(Kp)}\,e = ${tf(tg)}\cos(${thd}^\circ - e)$ has the root $e = ${tf(e)}\,\text{rad} = ${tf(deg(e))}^\circ$ (bisection).`],
                 'PD control leaves a gravity-dependent offset; adding the gravity torque as feedforward (or integral action) removes it.',
-                armDiagram([[0, 0], [l * Math.cos(rad(thd)), l * Math.sin(rad(thd))]], 'Single link pivoting about one end in a vertical plane, at the desired angle', {names: ['l, m'], joints: ['θ'], marks: []}),
+                armDiagram([[0, 0], [l * Math.cos(rad(thd)), l * Math.sin(rad(thd))]], 'Single link pivoting about one end in a vertical plane, at the desired angle', {names: ['l, m'], joints: ['θ']}),
                 'Rigid-body rotation; second-order systems; root finding.');
         }
         if (li === 2) {
@@ -414,7 +474,7 @@ function makeRoboticsExercise(topic, date, level) {
                 [T`$M = \begin{bmatrix}(m_1 + m_2)l_1^2 + m_2l_2^2 + 2m_2l_1l_2c_2 & m_2l_2^2 + m_2l_1l_2c_2\\ m_2l_2^2 + m_2l_1l_2c_2 & m_2l_2^2\end{bmatrix}$.`, T`With $h = m_2l_1l_2\sin q_2$: velocity torques $-h(2\dot q_1\dot q_2 + \dot q_2^2)$ and $h\dot q_1^2$.`, T`Gravity: $(m_1 + m_2)gl_1c_1 + m_2gl_2c_{12}$ and $m_2gl_2c_{12}$. Then $\boldsymbol\tau = M\ddot{\mathbf q} + \mathbf c + \mathbf g$.`],
                 [T`$M = ${mat2(M)}\,\text{kg}\cdot\text{m}^2$.`, T`Velocity torques: $\mathbf c = ${vecTex(C)}\,\text{N}\cdot\text{m}$.`, T`Gravity torques: $\mathbf g = ${vecTex(G)}\,\text{N}\cdot\text{m}$.`, T`$\boldsymbol\tau = M\ddot{\mathbf q} + \mathbf c + \mathbf g = ${vecTex(tau)}\,\text{N}\cdot\text{m}$.`],
                 'The Lagrangian model M(q)q̈ + c(q, q̇) + g(q) = τ is the basis of computed-torque control: evaluate it at the desired motion and the robot follows.',
-                armDiagram(fkN([l1, l2], qq), 'Two-link arm with point masses at the elbow and hand, in a vertical plane', {names: ['l₁', 'l₂'], joints: ['q₁', 'q₂'], marks: []}),
+                armDiagram(fkN([l1, l2], qq), 'Two-link arm with point masses at the elbow and hand, in a vertical plane', {names: ['l₁', 'l₂'], joints: ['q₁', 'q₂']}),
                 'Lagrangian mechanics; matrices.');
         }
         if (li === 3) {
@@ -455,7 +515,7 @@ function makeRoboticsExercise(topic, date, level) {
                 T`$q_1$ first reaches $${qdd[0]}^\circ$ at $t = ${tf(cross ?? 3)}\,\text{s}$; $q_2$ overshoots by at most $${tf(deg(Math.max(0, over)))}^\circ$.`,
                 T`Peak kinetic energy: $${tf(peakKE)}\,\text{J}$.`, T`With gravity compensation, $V = \tfrac12\dot{\mathbf q}^{\mathsf T}M\dot{\mathbf q} + \tfrac12\mathbf e^{\mathsf T}K_p\mathbf e$ never increases, so the arm settles at $\mathbf q_d$.`],
             'PD plus gravity compensation is globally stable for any positive gains (a Lyapunov argument), but the transient still depends on the posture-dependent inertia and coupling: simulation shows it.',
-            armDiagram(fkN([l1, l2], qd), 'Two-link arm at its target posture, driven from the horizontal by PD control', {names: ['l₁', 'l₂'], joints: ['q₁', 'q₂'], marks: []}),
+            armDiagram(fkN([l1, l2], qd), 'Two-link arm at its target posture, driven from the horizontal by PD control', {names: ['l₁', 'l₂'], joints: ['q₁', 'q₂']}),
             'Nonlinear ODEs; Runge–Kutta integration; Lagrangian dynamics.');
     }
 
@@ -469,7 +529,7 @@ function makeRoboticsExercise(topic, date, level) {
                 [T`$V = IR + k\omega$ and $\tau = kI$.`, T`No load: $I = 0$. Stall: $\omega = 0$.`, T`Efficiency $= \dfrac{\tau\omega}{VI}$.`],
                 [T`$\omega_0 = V/k = ${tf(w0)}\,\text{rad/s} = ${tf(rpm(w0))}\,\text{rpm}$.`, T`$\tau_s = kV/R = ${tf(stall)}\,\text{N}\cdot\text{m}$.`, T`$I = \tau/k = ${tf(I)}\,\text{A}$; $\omega = (V - IR)/k = ${tf(w)}\,\text{rad/s} = ${tf(rpm(w))}\,\text{rpm}$.`, T`$\eta = \dfrac{${tl}\times${tf(w)}}{${V}\times${tf(I)}} = ${tf(100 * eta)}\%$.`],
                 'Two constants describe a DC motor: k converts current to torque and speed to voltage, R sets the slope of the torque–speed line.',
-                motorCircuit('Steady state: L plays no part'),
+                motorCircuit('Steady-state armature circuit', `Load · ${tl} N·m`, false),
                 'Ohm’s law; DC motor equations.');
         }
         if (li === 2) {
@@ -496,7 +556,7 @@ function makeRoboticsExercise(topic, date, level) {
                 [T`Steady-state dq equations: $v_d = R_si_d - \omega_eLi_q$, $v_q = R_si_q + \omega_e(Li_d + \psi)$.`, T`$\omega_e = p\,\omega_m$.`, T`With $i_d = 0$: $(R_si_q + \omega_e\psi)^2 + (\omega_eLi_q)^2 = V_{\max}^2$ is a quadratic in $\omega_e$.`],
                 [T`$i_q = \dfrac{T}{1.5p\psi} = ${tf(iq)}\,\text{A}$.`, T`$\omega_e = ${pp}\times${n}\cdot\dfrac{2\pi}{60} = ${tf(we)}\,\text{rad/s}$.`, T`$v_d = -\omega_eLi_q = ${tf(vd)}\,\text{V}$; $v_q = R_si_q + \omega_e\psi = ${tf(vq)}\,\text{V}$; $|v| = ${tf(vm)}\,\text{V}$.`, T`$V_{\max} = ${Vdc}/\sqrt3 = ${tf(Vmax)}\,\text{V}$. Solving $(\psi^2 + L^2i_q^2)\omega_e^2 + 2R_si_q\psi\,\omega_e + R_s^2i_q^2 - V_{\max}^2 = 0$: $\omega_e = ${tf(web)}\,\text{rad/s}$, i.e. $${tf(nb)}\,\text{rpm}$.`],
                 'In the rotating dq frame a brushless motor looks like a DC motor: i_q makes torque and the back-EMF ωψ grows with speed until the inverter runs out of voltage.',
-                drawing(wire('M100 210V40M100 210H620') + arrow(100, 210, 100, 40) + arrow(100, 210, 620, 210) + arrow(100, 210, 400, 80) + guide('M400 80V210M100 80H400') + dt(80, 40, 'q') + dt(630, 230, 'd') + dt(425, 72, 'v') + dt(250, 120, '|v|') + dt(560, 140, 'voltage limit V_dc/√3'), 'Voltage vector in the dq plane with its d and q components', 250),
+                voltageVector(vd, vq, Vmax),
                 'Synchronous machines; Park transform; quadratic equations.');
         }
         // Mastery: field weakening with resistance, at a speed above base speed.
@@ -511,7 +571,7 @@ function makeRoboticsExercise(topic, date, level) {
             [T`$v_d = R_si_d - \omega_eLi_q$, $v_q = R_si_q + \omega_e(\psi + Li_d)$. Expanding, $|v|^2 = (\omega_e^2L^2 + R_s^2)i_q^2 + 2R_s\omega_e\psi\,i_q + R_s^2i_d^2 + \omega_e^2(\psi + Li_d)^2$.`, T`For each $i_d$, the voltage limit caps $i_q$ (a quadratic); the current limit caps it at $\sqrt{I_{\max}^2 - i_d^2}$.`, T`Negative $i_d$ relaxes the voltage cap but tightens the current cap: the best point is where they meet. Bisect on $i_d$.`],
             [T`Base speed: $|v| = V_{\max}$ with $i_d = 0$, $i_q = I_{\max}$ gives $\omega_e = ${tf(web)}\,\text{rad/s}$, i.e. $${tf(rpmOf(web))}\,\text{rpm}$.`, T`At $${n}\,\text{rpm}$: $\omega_e = ${tf(we)}\,\text{rad/s}$.`, T`Bisection on the meeting point gives $i_d = ${tf(id)}\,\text{A}$ and $i_q = ${tf(iq)}\,\text{A}$.`, T`$T = 1.5\times${pp}\times${psi}\times${tf(iq)} = ${tf(Tq)}\,\text{N}\cdot\text{m}$ and $P = T\omega_m = ${tf(P)}\,\text{W}$.`],
             'Above base speed a PM motor trades torque-producing current for negative d-axis current that cancels part of the magnet’s back-EMF: field weakening extends the speed range at roughly constant power.',
-            drawing(wire('M360 200V30M120 200H600') + `<circle cx="360" cy="200" r="150" stroke-dasharray="6 5"/>` + `<ellipse cx="${(360 - 60).toFixed(0)}" cy="200" rx="110" ry="80" stroke="#b5532d"/>` + dot(+(360 + 150 * id / Im).toFixed(1), +(200 - 150 * iq / Im).toFixed(1)) + dt(600, 220, 'i_d') + dt(375, 24, 'i_q') + dt(560, 80, 'current circle') + dt(190, 110, 'voltage limit'), 'Current circle and voltage-limit ellipse in the id–iq plane; the operating point is where they meet', 240),
+            fieldLimits(we, psi, L, Rs, Im, Vm, id, iq),
             'Synchronous machines; constrained optimisation; root finding.');
     }
 
@@ -537,7 +597,7 @@ function makeRoboticsExercise(topic, date, level) {
             [T`In steady state the estimate error $e$ satisfies $e = \alpha(e + b\Delta t)$.`, T`Accelerometer noise passes through $y_k = \alpha y_{k-1} + (1 - \alpha)n_k$: variance $\dfrac{(1 - \alpha)^2\sigma^2}{1 - \alpha^2}$.`, T`The gyro is high-passed and the accelerometer low-passed at $f_c = \dfrac{1}{2\pi\tau}$; the discrete pole $\alpha$ decays as $e^{-t/\tau_d}$ with $\tau_d = -\Delta t/\ln\alpha$.`],
             [T`$\alpha = \dfrac{${tau}}{${tau} + ${dts}} = ${tf(alpha, 6)}$.`, T`$e = \dfrac{\alpha b\Delta t}{1 - \alpha} = b\tau = ${tf(err)}^\circ$.`, T`$\sigma_y = \sigma\sqrt{\dfrac{1 - \alpha}{1 + \alpha}} = ${tf(sd)}^\circ$.`, T`$f_c = ${tf(fx)}\,\text{Hz}$.`, T`$\tau_d = -\Delta t/\ln\alpha = ${tf(tdisc, 6)}\,\text{s}$, slightly more than $\tau$.`],
             'A complementary filter trades gyro drift (worse for large τ) against accelerometer noise (worse for small τ); τ sets both, and a constant gyro bias always leaves an error of bτ.',
-            signalChain(['Gyro ω|+ bias b', 'Integrate|× α', 'Sum|θ̂', 'Accel θₐ|× (1 − α)'], 'Complementary filter: high-pass gyro plus low-pass accelerometer'),
+            tiltFilter(dts),
             'First-order filters; variance of filtered noise.');
     }
     if (li === 3) {
@@ -559,7 +619,7 @@ function makeRoboticsExercise(topic, date, level) {
             [T`Linearise: $\rho_i \approx \|\mathbf p_0 - \mathbf b_i\| + \mathbf u_i^{\mathsf T}\Delta\mathbf p$, with unit vectors $\mathbf u_i = (\mathbf p_0 - \mathbf b_i)/\|\mathbf p_0 - \mathbf b_i\|$ as the rows of $H$.`, T`Each step solves $H^{\mathsf T}H\,\Delta\mathbf p = H^{\mathsf T}\mathbf r$, where $\mathbf r$ holds the range residuals.`, T`Iterate until the step is negligible (a handful of iterations).`],
             [T`Gauss–Newton from $(${Lb / 2}, ${Lb / 2})$ converges to $\hat{\mathbf p} = (${tf(x[0], 6)}, ${tf(x[1], 6)})\,\text{m}$.`, T`Residuals: $${vecTex(res)}\,\text{m}$; RMS $= ${tf(rms)}\,\text{m}$.`, T`$H^{\mathsf T}H = ${mat2(A)}$, so $\text{HDOP} = \sqrt{\operatorname{tr}(H^{\mathsf T}H)^{-1}} = ${tf(hdop)}$.`],
             'Range-based positioning (GPS, UWB, acoustic beacons) is nonlinear least squares; HDOP turns range noise into position noise and depends only on the geometry.',
-            drawing([[0, 0], [Lb, 0], [Lb, Lb], [0, Lb]].map(([bx, by]) => { const X = 220 + bx / Lb * 280, Y = 220 - by / Lb * 190; return `<rect x="${X - 7}" y="${Y - 7}" width="14" height="14"/>` + wire(`M${X} ${Y}L${(220 + x[0] / Lb * 280).toFixed(1)} ${(220 - x[1] / Lb * 190).toFixed(1)}`); }).join('') + ring(+(220 + x[0] / Lb * 280).toFixed(1), +(220 - x[1] / Lb * 190).toFixed(1), 8) + dt(220, 246, '(0, 0)') + dt(500, 22, `(${Lb}, ${Lb})`) + dt(+(220 + x[0] / Lb * 280).toFixed(1), +(220 - x[1] / Lb * 190 - 16).toFixed(1), 'robot'), 'Four beacons at the corners of a square, with range lines to the robot', 250),
+            beaconRanges(B, rho, Lb, x),
             'Nonlinear least squares; linearisation; 2×2 matrices.');
     }
     // Mastery: steady-state alpha-beta-gamma gains from the discrete Riccati equation.
@@ -581,6 +641,6 @@ function makeRoboticsExercise(topic, date, level) {
         [T`Predict: $P^- = FPF^{\mathsf T} + Q$. Gain: $K = P^-H^{\mathsf T}/(HP^-H^{\mathsf T} + R)$. Update: $P = (I - KH)P^-$.`, T`Start from a large $P$ and iterate until nothing changes (a few hundred steps).`, T`The gains settle to constants: the steady-state Kalman filter is a fixed-gain α–β–γ filter.`],
         [T`$Q = ${tf(sa * sa)}\,\mathbf g\mathbf g^{\mathsf T}$ with $\mathbf g = (${tf(Gv[0])}, ${tf(Gv[1])}, 1)$.`, T`After convergence: $K = ${vecTex(K)}$.`, T`$\alpha = ${tf(al)}$, $\beta = ${tf(be)}$, $\gamma = ${tf(ga)}$.`, T`$\sqrt{P_{11}} = ${tf(Math.sqrt(P[0][0]))}\,\text{m}$ after the update, $\sqrt{P^-_{11}} = ${tf(Math.sqrt(Pm[0][0]))}\,\text{m}$ before.`],
         'Iterating the Riccati recursion gives the steady-state gains that radar and GNSS trackers hard-code; the ratio of process to measurement noise alone sets how much the filter trusts new fixes.',
-        signalChain(['Fix z|σz', 'Predict|F x̂', 'Correct|K (z − x̂)', 'x̂, v̂, â'], 'Steady-state α–β–γ tracker'),
+        estimatorDiagram('F z⁻¹', 'Position Hx̂⁻', 'Position, velocity, acceleration', `Fix every ${Tq} s · σz = ${sz} m`),
         'Kalman filtering; matrix algebra; fixed-point iteration.');
 }

@@ -194,12 +194,12 @@ main { max-width: 1244px; margin: 0 auto; padding: 0 32px 64px; }
 .diagram { padding: clamp(.3rem, 1vw, .9rem) 0; margin: 4px 0 14px; }
 .diagram svg { display: block; width: 100%; height: auto; max-height: 380px; font: 17px var(--sans); }
 .diagram.large { overflow-x: auto; }
-.diagram.large svg { min-width: 640px; max-height: none; }
+.diagram.large svg { min-width: 740px; max-height: none; }
 /* The figures are drawn for paper: re-ink them as white lines with red highlights. */
 .diagram svg [stroke="#315740"] { stroke: var(--line); }
 .diagram svg [fill="#315740"] { fill: var(--line); }
 .diagram svg text:not([fill]) { fill: var(--line); }
-.diagram svg [stroke="#aab9a0"] { stroke: #4a4a52; }
+.diagram svg [stroke="#aab9a0"] { stroke: #808089; }
 .diagram svg [stroke="#83968b"] { stroke: #6b6b73; }
 .diagram svg [stroke="#7a9a5d"] { stroke: #b8b8c0; }
 .diagram svg [stroke="#b5532d"], .diagram svg [stroke="#aa492a"] { stroke: var(--accent); }

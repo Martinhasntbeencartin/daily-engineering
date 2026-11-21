@@ -32,3 +32,31 @@ function braytonCycle() {
         wire('M218 169V110Q350 90 483 40V117Q350 159 218 169') + arrow(218, 151, 218, 125) + arrow(483, 69, 483, 94),
         [[89, 48, 'T'], [620, 201, 's'], [201, 177, '1'], [201, 113, '2'], [500, 42, '3'], [503, 124, '4']]);
 }
+
+function booleanLattice() {
+    // Words are ranked by Hamming weight. Each edge changes one zero to one.
+    const positions = [[360, 211], [204, 150], [360, 150], [204, 85], [516, 150], [360, 85], [516, 85], [360, 24]];
+    let edges = '', vertices = '';
+    positions.forEach(([x, y], n) => {
+        for (const mask of [1, 2, 4]) if (!(n & mask)) {
+            const [tx, ty] = positions[n | mask];
+            edges += wire(`M${x} ${y}L${tx} ${ty}`);
+        }
+        vertices += `<rect x="${x - 25}" y="${y - 13}" width="50" height="26" rx="8" fill="#fffdf7"/>` +
+            dt(x, y + 6, n.toString(2).padStart(3, '0'));
+    });
+    return drawing(edges + vertices + dt(360, 261, 'Upward edges change one 0 to 1'),
+        'Boolean lattice on three input bits. Each word is connected to every word obtained by changing exactly one zero to a one.', 282);
+}
+
+function fiveStageRegister() {
+    let b = '';
+    for (let i = 0; i < 5; i++) {
+        const x = 115 + 104 * i;
+        b += wire(`M${x} 105h58v46h-58z`) + dt(x + 29, 133, 'q' + '₀₁₂₃₄'[i]) + arrow(x + 58, 128, x + 104, 128);
+    }
+    return drawing(b + dot(393, 128) + dot(600, 128) + wire('M393 128V57H372M600 128V35H350v2') +
+        ring(350, 57, 20) + dt(350, 63, '+') + wire('M330 57H74v71') + arrow(74, 128, 115, 128) +
+        dt(360, 205, 'Example tap set · all five cells shift on the same clock'),
+        'Five-stage Fibonacci LFSR. Example feedback XORs q₂ and q₄ into q₀. The tap selection determines the feedback polynomial.', 230);
+}
