@@ -1,6 +1,6 @@
 /* Vector diagrams are drawn from the exercise parameters, never generated imagery. */
 const drawing = (body, label, h=260) => `<svg viewBox="-10 -8 740 ${h + 16}" role="img" aria-label="${label}"><g fill="none" stroke="#315740" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
-const dt = (x, y, t) => `<text x="${x}" y="${y}" stroke="none" text-anchor="middle">${t}</text>`;
+const dt = (x, y, t) => `<text x="${x}" y="${y}" fill="#315740" stroke="none" text-anchor="middle">${t}</text>`;
 const ground = (x, y) => `<path d="M${x} ${y}v8m-14 0h28m-23 6h18m-13 6h8"/>`;
 const rH = (x, y, label) => `<path d="M${x} ${y}h20m70 0h20"/><rect x="${x + 20}" y="${y - 9}" width="70" height="18"/>${dt(x + 55, y - 20, label)}`;
 const rV = (x, y, label) => `<path d="M${x} ${y}v15m0 50v15"/><rect x="${x - 9}" y="${y + 15}" width="18" height="50"/>${dt(x + 65, y + 46, label)}`;
