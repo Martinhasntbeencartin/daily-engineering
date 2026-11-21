@@ -2,12 +2,17 @@
 
 A static web app with a new engineering problem every day, in the spirit of dailyintegral.com.
 
-- **A minimal, dark layout with two clicks to a problem.**
-  - The home screen puts every discipline on a ring of orbs, with four dots under each showing today's solved levels.
-  - Picking one shows its four levels and the archive on a second ring; a level opens the problem.
-  - Every screen has its own address (`#/circuits`, `#/circuits/level-2`, `#/circuits/level-2/2026-11-20`, `#/circuits/archive`, `#/progress`). The browser's Back button, the "←" link and the Escape key all step back up a screen, and links can be shared or bookmarked.
-  - On a problem, the 1–4 circles switch level in place. The home screen offers to continue your last problem.
-  - On phones and short windows the rings become grids.
+- **A line-schematic layout: thin white lines on black, one red signal colour, one click to a problem.**
+  - **Home** draws the disciplines hanging off two buses, Electrical and Mechanical, like a wiring diagram. Four small squares under each node show today's solved levels. Hovering over or focusing a node previews it in the readout panel: its description and today's status per level. Clicking it opens the problem at the level you last used there (Level 1 the first time).
+  - **Problems** have a level track at the top (four nodes; solved ones filled red). The problem sits in a bracketed frame, with the answer panel beside it, which stays in view on wide screens. Once you finish, the answer panel offers the next level and the next unsolved discipline.
+  - **Shortcuts** (when not typing in an answer box):
+    - <kbd>1</kbd>–<kbd>4</kbd> switch level.
+    - <kbd>H</kbd> shows a hint.
+    - <kbd>Enter</kbd> jumps to the answer box.
+    - <kbd>Esc</kbd> goes back.
+    - On the home diagram, arrow keys move between disciplines.
+  - **Addresses:** every screen has one (`#/circuits/level-2`, `#/circuits/level-2/2026-11-20`, `#/circuits/archive`, `#/progress`; a bare `#/circuits` opens its remembered level). The browser's Back button works, and links can be shared or bookmarked.
+  - **Motion:** lines trace in and nodes drop onto the bus, unless the system asks for reduced motion. On phones the diagram becomes two columns and the readout moves below it.
 - **11 topics in two groups.** Electrical: circuits, electronics, signals, control, digital, electromagnetism, power, measurement. Mechanical & civil: statics/structures, dynamics/vibrations, thermo-fluids.
 - **Four levels.**
   - **Level 1 (Insight)** is a rotation of 44 hand-picked problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
@@ -52,7 +57,7 @@ node tests/exercises.test.js
 node tests/editor.test.js
 ```
 
-`editor.test.js` needs Playwright with Chromium. It walks the navigation (home → levels → problem, the level switch, Back, Escape, the archive, unknown addresses), types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces, then checks the worked solution after solving and after five wrong attempts.
+`editor.test.js` needs Playwright with Chromium. It walks the navigation (the diagram and its readout, one click to a problem, the level track, Back, the 1–4/H/Enter/Esc shortcuts, remembered levels, the archive, unknown addresses), types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces, then checks the worked solution after solving and after five wrong attempts.
 
 The suite checks:
 - Every topic × level, and every topic × tier, for 120 days: each exercise is complete and every answer is finite.
