@@ -154,23 +154,34 @@ function readField(i) {
         return {value: NaN, error: err.message, raw};
     }
 }
-let today = localDate(), date = today, topic = 'circuits', level = PRACTICE_LEVELS[0].id, group = 'electrical', view = 'today', hintCount = 0, solutionShown = false, exercise;
+let today = localDate(), date = today, topic = 'circuits', level = 'level-1', group = 'electrical', view = 'today', hintCount = 0, solutionShown = false, exercise;
 let progress = {}, attempts = {}, storageAvailable = true;
+/* key → the answers last checked for that problem, so a finished problem can show them beside the solution. */
+let submitted = {};
+/* Levels removed in the regrouping. Their solves stay in storage and still count in totals and streaks. */
+const RETIRED_LEVELS = ['foundations', 'applied'];
+/* date:topic:tier → date:topic:level-N; the oldest date:topic keys were Foundations. Keys already on a level stay. */
+const migrateKey = k => { const [d, t, l] = k.split(':'), to = l && levelOfTier(l); return !l ? `${d}:${t}:foundations` : to ? `${d}:${t}:${to.id}` : k; };
 try {
     const saved = JSON.parse(localStorage.getItem('daily-engineer-v1') || '{}');
     if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
         for (const [k, v] of Object.entries(saved)) {
             if (!v || !['solved', 'reviewed'].includes(v.status))
                 continue;
-            // Preserve the original records; old keys belong to Foundations.
-            progress[k.split(':').length === 2 ? k + ':foundations' : k] = v;
+            // Records saved before the levels were regrouped carry a tier id: file them under its level.
+            const k2 = migrateKey(k);
+            if (!progress[k2] || v.status === 'solved') progress[k2] = v;
         }
     }
     const a = JSON.parse(localStorage.getItem('daily-engineer-attempts') || '{}');
-    if (a && typeof a === 'object' && !Array.isArray(a)) attempts = a;
-    const preference = localStorage.getItem('daily-engineer-level');
-    if (PRACTICE_LEVELS.some(l => l.id === preference))
-        level = preference;
+    if (a && typeof a === 'object' && !Array.isArray(a))
+        for (const [k, n] of Object.entries(a)) attempts[migrateKey(k)] = Math.max(attempts[migrateKey(k)] || 0, n);
+    const sub = JSON.parse(localStorage.getItem('daily-engineer-answers') || '{}'), keepFrom = shifted(today, -31);
+    if (sub && typeof sub === 'object' && !Array.isArray(sub))
+        for (const [k, v] of Object.entries(sub)) if (Array.isArray(v) && k.split(':')[0] >= keepFrom) submitted[k] = v; // the archive reaches back 30 days
+    const preference = localStorage.getItem('daily-engineer-level'), chosen = LEVELS.find(l => l.id === preference) || levelOfTier(preference);
+    if (chosen)
+        level = chosen.id;
     const g = localStorage.getItem('daily-engineer-group');
     if (GROUPS.some(x => x.id === g)) {
         group = g;
@@ -181,16 +192,26 @@ try {
 }
 const remember = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 const key = (t=topic, l=level) => `${date}:${t}:${l}`;
-const activeRecords = () => Object.entries(progress).filter(([k]) => TOPICS.some(t => t.id === k.split(':')[1]) && LEVELS.some(l => l.id === k.split(':')[2]));
+const activeRecords = () => Object.entries(progress).filter(([k]) => TOPICS.some(t => t.id === k.split(':')[1]) && (LEVELS.some(l => l.id === k.split(':')[2]) || RETIRED_LEVELS.includes(k.split(':')[2])));
 /* Typeset $…$ and $$…$$ with KaTeX (no-op if KaTeX failed to load). */
 function renderMath(el) {
-    if (el && window.renderMathInElement)
-        renderMathInElement(el, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}], throwOnError: false, ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'option', 'svg']});
+    if (!el || !window.renderMathInElement) return;
+    renderMathInElement(el, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}], throwOnError: false, ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'option', 'svg']});
+    // An inline formula wider than its line (a long fraction on a phone) gets a line of its own that scrolls sideways.
+    el.querySelectorAll('.katex').forEach(k => {
+        if (k.closest('.katex-display')) return;
+        let box = k.parentElement; // the line it sits in: the nearest block, since inline wrappers have no width of their own
+        while (box && box !== el && getComputedStyle(box).display.startsWith('inline')) box = box.parentElement;
+        if (!box) return;
+        const cs = getComputedStyle(box), room = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        if (room > 0 && k.getBoundingClientRect().width > room + 1) k.classList.add('katex-wide');
+    });
 }
 function save() {
     try {
         localStorage.setItem('daily-engineer-v1', JSON.stringify(progress));
         localStorage.setItem('daily-engineer-attempts', JSON.stringify(attempts));
+        localStorage.setItem('daily-engineer-answers', JSON.stringify(submitted));
     } catch {
         storageAvailable = false;
     }
@@ -209,7 +230,7 @@ function streak() {
     return n;
 }
 function renderLevels() {
-    const buttons = PRACTICE_LEVELS.map(l => {
+    const buttons = LEVELS.map(l => {
         const status = progress[key(topic, l.id)]?.status;
         const completion = status === 'solved' ? '✓ Solved' : status === 'reviewed' ? 'Solution reviewed' : '';
         return `<button class="level-option ${level === l.id ? 'selected' : ''}" data-level="${l.id}" aria-pressed="${level === l.id}">
@@ -243,20 +264,23 @@ function renderTopics() {
 }
 const used = () => attempts[key()] || 0;
 const locked = () => progress[key()]?.status !== 'solved' && used() >= MAX_ATTEMPTS;
+/* Solved, or out of attempts: the full worked solution is then shown without asking. */
+const finished = () => progress[key()]?.status === 'solved' || locked();
+const solutionLabel = open => open ? 'Hide solution' : finished() || progress[key()]?.status === 'reviewed' ? 'Show solution' : 'Reveal solution';
 function attemptsLabel() {
     const s = progress[key()]?.status;
     return s === 'solved' ? 'Solved' : `Attempts ${used()}/${MAX_ATTEMPTS}`;
 }
 function renderChallenge() {
     hintCount = 0;
-    solutionShown = progress[key()]?.status === 'reviewed';
+    solutionShown = progress[key()]?.status === 'reviewed' || finished();
     exercise = makeExercise(topic, date, level);
-    const t = TOPICS.find(t => t.id === topic), e = exercise, record = progress[key()], curated = CURATED_LEVELS.includes(level);
+    const t = TOPICS.find(t => t.id === topic), e = exercise, record = progress[key()], curated = e.curated;
     group = t.group;
     renderTopics();
     renderLevels();
     const exactParts = e.parts.some(p => p.exact);
-    $('#challenge').innerHTML = `<div class="challenge-top"><div class="challenge-tags"><span class="tag">${t.name}</span><span class="tag level">${e.level}</span></div><span class="challenge-date">${date === today ? 'TODAY’S CHALLENGE' : 'FROM THE ARCHIVE'}</span></div><div class="challenge-body ${curated ? 'curated' : ''}"><div class="problem-meta"><span id="status-line">${record?.status === 'solved' ? '✓ COMPLETED' : record?.status === 'reviewed' ? 'SOLUTION REVIEWED' : e.parts.length > 1 ? `${e.parts.length} CONNECTED PARTS` : 'ONE KEY INSIGHT'}</span><span>${e.minutes}</span></div><h3>${e.title}</h3><div class="problem-text">${e.text}</div>${e.diagram ? `<div class="diagram-toolbar"><span>DIAGRAM</span><button type="button" id="enlarge-diagram" class="text-button" aria-haspopup="dialog">Enlarge</button></div><div class="diagram">${e.diagram}</div>` : ''}${e.givens?.length ? `<div class="givens">${e.givens.map(g => `<span class="given">${g}</span>`).join('')}</div>` : ''}<details class="prerequisites"><summary>What you’ll need</summary><p>${e.prerequisites}</p></details><form id="answer-form" novalidate><div class="answers">${e.parts.map((p, i) => `<div class="answer-part"><label class="answer-label" for="answer-${i}">${e.parts.length > 1 ? String.fromCharCode(65 + i) + '. ' : ''}${p.label}</label><div class="input-wrap">${fieldHTML(p, i)}${p.unit ? `<span>${p.unit}</span>` : ''}</div><div class="preview" id="preview-${i}" aria-hidden="true"></div><div id="part-feedback-${i}" class="part-feedback" role="status"></div></div>`).join('')}</div><p class="input-help" id="answer-help">${MATH_EDITOR ? 'Type maths naturally: <code>3/4</code> becomes a fraction, <code>sqrt</code> a root, <code>pi</code> π and <code>^</code> an exponent. Press <kbd>→</kbd> to leave a fraction, root or exponent, and <kbd>Enter</kbd> to check. ' : 'Type expressions such as <code>pi/4</code>, <code>ln(2)</code> or <code>sqrt(3)/2</code>. '}${exactParts ? 'Exact answers are best; decimals need 4 significant figures.' : 'Decimals and scientific notation (<code>2e-3</code>) work too. Tolerance: 1% unless stated; counts must be exact.'}</p>${typingGuideHTML()}<div class="submit-row"><button class="primary" type="submit" id="check">${e.parts.length > 1 ? 'Check all answers' : 'Check answer'}</button><span id="attempts">${attemptsLabel()}</span></div><div class="feedback ${record?.status === 'solved' ? 'success' : ''}" id="feedback" role="status">${record?.status === 'solved' ? 'You’ve solved this challenge. You can revisit your reasoning below.' : ''}</div></form></div><div class="challenge-actions"><button id="hint" class="text-button">☼ &nbsp; Get a hint <span id="hint-count">(0/${e.hints.length})</span></button><button id="solution" class="text-button" aria-expanded="${solutionShown}">${solutionShown ? 'Hide solution' : 'Reveal solution'}</button></div><div id="hints" class="hint-content" hidden></div><div id="solution-content" class="solution" ${solutionShown ? '' : 'hidden'}>${solutionHTML()}</div>${sourceHTML(e.source)}`;
+    $('#challenge').innerHTML = `<div class="challenge-top"><div class="challenge-tags"><span class="tag">${t.name}</span><span class="tag level">${e.level}</span></div><span class="challenge-date">${date === today ? 'TODAY’S CHALLENGE' : 'FROM THE ARCHIVE'}</span></div><div class="challenge-body ${curated ? 'curated' : ''}"><div class="problem-meta"><span id="status-line">${record?.status === 'solved' ? '✓ COMPLETED' : record?.status === 'reviewed' ? 'SOLUTION REVIEWED' : e.parts.length > 1 ? `${e.parts.length} CONNECTED PARTS` : 'ONE KEY INSIGHT'}</span><span>${e.minutes}</span></div><h3>${e.title}</h3><div class="problem-text">${e.text}</div>${e.diagram ? `<div class="diagram-toolbar"><span>DIAGRAM</span><button type="button" id="enlarge-diagram" class="text-button" aria-haspopup="dialog">Enlarge</button></div><div class="diagram">${e.diagram}</div>` : ''}${e.givens?.length ? `<div class="givens">${e.givens.map(g => `<span class="given">${g}</span>`).join('')}</div>` : ''}<details class="prerequisites"><summary>What you’ll need</summary><p>${e.prerequisites}</p></details><form id="answer-form" novalidate><div class="answers">${e.parts.map((p, i) => `<div class="answer-part"><label class="answer-label" for="answer-${i}">${e.parts.length > 1 ? String.fromCharCode(65 + i) + '. ' : ''}${p.label}</label><div class="input-wrap">${fieldHTML(p, i)}${p.unit ? `<span>${p.unit}</span>` : ''}</div><div class="preview" id="preview-${i}" aria-hidden="true"></div><div id="part-feedback-${i}" class="part-feedback" role="status"></div></div>`).join('')}</div><p class="input-help" id="answer-help">${MATH_EDITOR ? 'Type maths naturally: <code>3/4</code> becomes a fraction, <code>sqrt</code> a root, <code>pi</code> π and <code>^</code> an exponent. Press <kbd>→</kbd> to leave a fraction, root or exponent, and <kbd>Enter</kbd> to check. ' : 'Type expressions such as <code>pi/4</code>, <code>ln(2)</code> or <code>sqrt(3)/2</code>. '}${exactParts ? 'Exact answers are best; decimals need 4 significant figures.' : 'Decimals and scientific notation (<code>2e-3</code>) work too. Tolerance: 1% unless stated; counts must be exact.'}</p>${typingGuideHTML()}<div class="submit-row"><button class="primary" type="submit" id="check">${e.parts.length > 1 ? 'Check all answers' : 'Check answer'}</button><span id="attempts">${attemptsLabel()}</span></div><div class="feedback ${record?.status === 'solved' ? 'success' : ''}" id="feedback" role="status">${record?.status === 'solved' ? 'You’ve solved this challenge. You can revisit your reasoning below.' : ''}</div></form></div><div class="challenge-actions"><button id="hint" class="text-button">☼ &nbsp; Get a hint <span id="hint-count">(0/${e.hints.length})</span></button><button id="solution" class="text-button" aria-expanded="${solutionShown}">${solutionLabel(solutionShown)}</button></div><div id="hints" class="hint-content" hidden></div><div id="solution-content" class="solution" ${solutionShown ? '' : 'hidden'}>${solutionHTML()}</div>${sourceHTML(e.source)}`;
     renderMath($('#challenge'));
     if (e.diagram) {
         const dialog = $('#diagram-dialog');
@@ -307,6 +331,11 @@ function renderChallenge() {
             }
         }, {capture: true});
     });
+    const last = submitted[key()];
+    if (last) e.parts.forEach((p, i) => {
+        const el = $(`#answer-${i}`);
+        if (last[i]?.raw && last[i].math === isMath(el)) { el.value = last[i].raw; preview(i); }
+    });
     $('#answer-form').onsubmit = checkAnswer;
     $('#hint').onclick = showHint;
     $('#solution').onclick = showSolution;
@@ -318,7 +347,7 @@ function applyLock() {
     $('#check').disabled = on;
     if (on && !$('#feedback').textContent) {
         $('#feedback').className = 'feedback error';
-        $('#feedback').textContent = 'Out of attempts for this problem. Reveal the solution to see the reasoning, or come back tomorrow.';
+        $('#feedback').textContent = 'No attempts left. The full worked solution is below.';
     }
 }
 function preview(i) {
@@ -340,12 +369,30 @@ function sourceHTML(s) {
         return `<div class="source-credit"><span>ORIGINAL DAILY ENGINEER EXERCISE</span><p>Further reading (open textbook): <a href="${s.reading.url}" target="_blank" rel="noopener">${s.reading.title}</a>.</p></div>`;
     return s ? `<div class="source-credit"><span>ADAPTED OPEN EDUCATIONAL MATERIAL</span><p>Based on <a href="${s.url}" target="_blank" rel="noopener">${s.title}</a> by ${s.author || 'Tony R. Kuphaldt, All About Circuits'} · <a href="${s.licenseUrl || 'https://creativecommons.org/licenses/by/1.0/'}" target="_blank" rel="noopener">${s.license || 'CC BY 1.0'}</a>. ${s.changes || 'Wording and values changed; diagrams redrawn; guided steps added.'} Adapted exercise content uses the same license.</p></div>` : '';
 }
-function answerLine(p) {
-    const val = p.exact ? p.exact : tf(p.answer);
-    return `<li>${p.label}: $${val}$${p.unit ? ' ' + p.unit : ''}${p.exact && !/^-?\d+$/.test(p.exact) ? ` <span class="approx">(≈ ${tf(p.answer)})</span>` : ''}</li>`;
+const escapeHTML = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+/* The exact form (when there is one), its unit and its decimal value. */
+function correctHTML(p) {
+    const approx = p.exact && !/^-?\d+$/.test(p.exact) ? ` <span class="approx">(≈ $${tf(p.answer)}$)</span>` : '';
+    return `$${p.exact || tf(p.answer)}$${p.unit ? ' ' + escapeHTML(p.unit) : ''}${approx}`;
 }
+function yoursHTML(m) {
+    if (!m.tex) return `<code>${escapeHTML(m.raw)}</code>`;
+    const approx = m.value !== null && !/^-?\d+(\.\d+)?$/.test(m.tex) ? ` <span class="approx">(≈ $${tf(m.value)}$)</span>` : '';
+    return `$${m.tex}$${approx}`;
+}
+/* The full worked solution: every answer beside yours, the approach, each step of the working and the key idea. */
 function solutionHTML() {
-    return `<strong>The reasoning</strong><ol>${exercise.steps.map(s => `<li>${s}</li>`).join('')}</ol><strong>Answer</strong><ul class="answer-list">${exercise.parts.map(answerLine).join('')}</ul><strong>Take this with you</strong><p>${exercise.idea}</p>`;
+    const e = exercise, mine = submitted[key()], status = progress[key()]?.status;
+    const verdict = status === 'solved' ? `✓ Solved in ${used()} attempt${used() === 1 ? '' : 's'}. Here is the full working.` : locked() ? 'No attempts left. Here is the full working.' : '';
+    const review = e.parts.map((p, i) => {
+        const m = mine?.[i], ok = m && answerMatches(m.value, p);
+        const yours = m ? `<div class="review-row"><span class="review-key">${ok ? '✓ Yours' : '✗ Yours'}</span><span>${yoursHTML(m)}</span></div>` : '';
+        return `<li class="${m ? (ok ? 'ok' : 'miss') : ''}"><div class="review-label">${p.label}</div><div class="review-row"><span class="review-key">Correct</span><span>${correctHTML(p)}</span></div>${yours}</li>`;
+    }).join('');
+    return `${verdict ? `<p class="solution-verdict">${verdict}</p>` : ''}<h4>Answers</h4><ol class="answer-review">${review}</ol>` +
+        `<h4>How to approach it</h4><ul class="approach">${e.hints.map(h => `<li>${h}</li>`).join('')}</ul>` +
+        `<h4>Worked solution</h4><ol class="steps">${e.steps.map(st => `<li>${st}</li>`).join('')}</ol>` +
+        `<h4>Take this with you</h4><p>${e.idea}</p>`;
 }
 /* Explain why an answer could not be read: an unfinished box, a different unit, or unknown notation. */
 function unreadableHint(i, p) {
@@ -379,6 +426,11 @@ function checkAnswer(event) {
         out.textContent = ok ? '✓ Correct' : !Number.isFinite(value) ? unreadableHint(i, p) : 'Not quite. Check the sign, units and relationships in this part.';
     });
     const f = $('#feedback'), previous = progress[key()] || {};
+    if (!unreadable && previous.status !== 'solved')
+        submitted[key()] = exercise.parts.map((p, i) => {
+            const r = readField(i);
+            return {raw: r.raw || '', tex: r.latex || '', value: Number.isFinite(r.value) ? r.value : null, math: isMath($(`#answer-${i}`))};
+        });
     if (correct === exercise.parts.length) {
         const status = previous.status === 'solved' ? 'solved' : solutionShown || previous.status === 'reviewed' ? 'reviewed' : 'solved';
         progress[key()] = {status, daily: previous.daily || date === today, hints: Math.max(hintCount, previous.hints || 0), attempts: used() + 1};
@@ -387,8 +439,9 @@ function checkAnswer(event) {
         renderTopics();
         renderLevels();
         f.className = 'feedback success';
-        f.textContent = status === 'solved' ? `All correct. Solved at ${exercise.level} level in ${used()} attempt${used() === 1 ? '' : 's'}.` : 'All correct. Saved as reviewed because the solution was revealed.';
+        f.textContent = status === 'solved' ? `All correct. Solved at ${exercise.level} in ${used()} attempt${used() === 1 ? '' : 's'}. The full worked solution is below.` : 'All correct. Saved as reviewed because the solution was revealed.';
         $('#status-line').textContent = status === 'solved' ? '✓ COMPLETED' : 'SOLUTION REVIEWED';
+        openSolution(true);
     } else {
         if (previous.status !== 'solved' && !unreadable) {
             attempts[key()] = used() + 1;
@@ -396,8 +449,10 @@ function checkAnswer(event) {
         }
         f.className = 'feedback error';
         const left = MAX_ATTEMPTS - used();
-        f.textContent = previous.status === 'solved' ? `${correct} of ${exercise.parts.length} correct.` : unreadable ? 'Some answers could not be read, so no attempt was used.' : `${correct} of ${exercise.parts.length} correct. ${left > 0 ? `${left} attempt${left === 1 ? '' : 's'} left.` : ''}`;
+        f.textContent = previous.status === 'solved' ? `${correct} of ${exercise.parts.length} correct.` : unreadable ? 'Some answers could not be read, so no attempt was used.' : `${correct} of ${exercise.parts.length} correct. ${left > 0 ? `${left} attempt${left === 1 ? '' : 's'} left.` : 'No attempts left. The full worked solution is below.'}`;
         applyLock();
+        if (locked()) openSolution(true);
+        else if (!$('#solution-content').hidden) openSolution(); // already revealed: refresh it with these answers
     }
     $('#attempts').textContent = attemptsLabel();
 }
@@ -411,25 +466,34 @@ function showHint() {
     $('#hint-count').textContent = `(${hintCount}/${exercise.hints.length})`;
     $('#hint').disabled = hintCount === exercise.hints.length;
 }
+/* Fill and open the worked solution. Seeing it before solving marks the problem as reviewed. */
+function openSolution(scroll=false) {
+    const panel = $('#solution-content'), status = progress[key()]?.status;
+    solutionShown = true;
+    if (status !== 'solved' && status !== 'reviewed') {
+        progress[key()] = {status: 'reviewed', daily: date === today, hints: hintCount};
+        save();
+        renderLevels();
+        $('#status-line').textContent = 'SOLUTION REVIEWED';
+    }
+    panel.innerHTML = solutionHTML();
+    panel.hidden = false; // visible first, so formula widths can be measured
+    renderMath(panel);
+    $('#solution').textContent = solutionLabel(true);
+    $('#solution').setAttribute('aria-expanded', 'true');
+    if (scroll) $('#feedback').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
 function showSolution() {
     const panel = $('#solution-content');
-    panel.hidden = !panel.hidden;
-    $('#solution').textContent = panel.hidden ? 'Reveal solution' : 'Hide solution';
-    $('#solution').setAttribute('aria-expanded', String(!panel.hidden));
-    if (!panel.hidden) {
-        solutionShown = true;
-        if (progress[key()]?.status !== 'solved') {
-            progress[key()] = {status: 'reviewed', daily: date === today, hints: hintCount};
-            save();
-            renderLevels();
-            $('#status-line').textContent = 'SOLUTION REVIEWED';
-        }
-    }
+    if (panel.hidden) return openSolution();
+    panel.hidden = true;
+    $('#solution').textContent = solutionLabel(false);
+    $('#solution').setAttribute('aria-expanded', 'false');
 }
 function renderProgress() {
     const entries = activeRecords(), solved = entries.filter(([k, v]) => v.status === 'solved').length, reviewed = entries.filter(([k, v]) => v.status === 'reviewed').length;
-    const includesRetired = entries.some(([k]) => LEVELS.some(l => l.retired && l.id === k.split(':')[2]));
-    $('#progress-view').innerHTML = `<div class="stats"><div class="stat"><b>${solved}</b><span>Challenges solved</span></div><div class="stat"><b>${streak()}</b><span>Day streak</span></div><div class="stat"><b>${reviewed}</b><span>Solutions reviewed</span></div></div><div class="progress-topics"><h2>Solved by topic and difficulty</h2><div class="progress-table-wrap"><table class="progress-table"><thead><tr><th>Discipline</th>${PRACTICE_LEVELS.map(l => `<th>${l.name}</th>`).join('')}</tr></thead><tbody>${GROUPS.map(g => `<tr class="group-row"><th colspan="${PRACTICE_LEVELS.length + 1}">${g.name}</th></tr>` + TOPICS.filter(t => t.group === g.id).map(t => `<tr><th>${t.name}</th>${PRACTICE_LEVELS.map(l => `<td>${entries.filter(([k, v]) => k.split(':')[1] === t.id && k.split(':')[2] === l.id && v.status === 'solved').length} solved</td>`).join('')}</tr>`).join('')).join('')}</tbody></table></div></div><p class="progress-note">${includesRetired ? 'Totals and streaks include your earlier work on retired levels. ' : ''}Solve at least one of today’s challenges at any level to build your streak. Archive practice adds to your totals. Progress is stored in this browser; clearing browser data removes it.</p>`;
+    const includesRetired = entries.some(([k]) => RETIRED_LEVELS.includes(k.split(':')[2]));
+    $('#progress-view').innerHTML = `<div class="stats"><div class="stat"><b>${solved}</b><span>Challenges solved</span></div><div class="stat"><b>${streak()}</b><span>Day streak</span></div><div class="stat"><b>${reviewed}</b><span>Solutions reviewed</span></div></div><div class="progress-topics"><h2>Solved by topic and difficulty</h2><div class="progress-table-wrap"><table class="progress-table"><thead><tr><th>Discipline</th>${LEVELS.map(l => `<th>${l.name}</th>`).join('')}</tr></thead><tbody>${GROUPS.map(g => `<tr class="group-row"><th colspan="${LEVELS.length + 1}">${g.name}</th></tr>` + TOPICS.filter(t => t.group === g.id).map(t => `<tr><th>${t.name}</th>${LEVELS.map(l => `<td>${entries.filter(([k, v]) => k.split(':')[1] === t.id && k.split(':')[2] === l.id && v.status === 'solved').length} solved</td>`).join('')}</tr>`).join('')).join('')}</tbody></table></div></div><p class="progress-note">${includesRetired ? 'Totals and streaks include your earlier work on retired levels. ' : ''}Solve at least one of today’s challenges at any level to build your streak. Archive practice adds to your totals. Progress is stored in this browser; clearing browser data removes it.</p>`;
 }
 function setView(v) {
     view = v;

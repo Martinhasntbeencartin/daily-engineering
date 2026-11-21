@@ -1,4 +1,4 @@
-/* Level 6 (Expert) and Level 7 (Mastery) for the electrical disciplines.
+/* Level 4 for the electrical disciplines: the Expert and Mastery tiers, on alternate days.
    Each generator derives its reference answers numerically from the stated model. */
 Object.assign(OPEN_SOURCES, {
     threeSource: {
@@ -56,12 +56,11 @@ function arrayDiagram(n, d, th) {
 }
 
 function makeExpertExercise(topic, date, level) {
-    const meta = LEVELS.find(l => l.id === level);
-    if (!TOPICS.some(t => t.id === topic) || !meta)
+    if (!TOPICS.some(t => t.id === topic) || !['expert', 'mastery'].includes(level))
         throw Error('Unknown challenge selection');
     const v = dailyVariant(date, hashString(topic + level)), p = part, m = level === 'mastery';
     const q = (title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source) => ({
-        id: `${topic}-${level}-${v}`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source, level: meta.name, minutes: meta.time
+        id: `${topic}-${level}-${v}`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source
     });
     const ph = (mag, ang) => T`${mag}\angle ${ang}^\circ`;
 

@@ -10,7 +10,7 @@ const ctx = vm.createContext({console, Math, Number, Date, Object, Array, String
 for (const f of files)
     vm.runInContext(fs.readFileSync(path.join(root, 'js', f + '.js'), 'utf8'), ctx, {filename: f + '.js'});
 const run = code => vm.runInContext(code, ctx);
-const TOPICS = run('TOPICS'), LEVELS = run('LEVELS'), BANK = run('BANK'), makeExercise = run('makeExercise'), MathInput = run('MathInput');
+const TOPICS = run('TOPICS'), LEVELS = run('LEVELS'), TIERS = run('TIERS'), BANK = run('BANK'), makeExercise = run('makeExercise'), makeTierExercise = run('makeTierExercise'), MathInput = run('MathInput');
 let failures = 0, checks = 0;
 const fail = msg => { failures++; console.error('FAIL', msg); };
 const close = (a, b, tol, msg) => { checks++; if (!(Math.abs(a - b) <= Math.max(Math.abs(b) * tol, 1e-9))) fail(`${msg}: got ${a}, expected ${b}`); };
@@ -46,32 +46,53 @@ const texFields = (e, where) => {
 const start = Date.UTC(2026, 0, 1), seen = {};
 for (let d = 0; d < 120; d++) {
     const date = new Date(start + d * 86400000).toISOString().slice(0, 10);
-    for (const t of TOPICS) for (const l of LEVELS) {
+    // Public levels (what people pick) and every internal tier (so rotating levels can't hide a tier).
+    const selections = [...LEVELS.map(l => [l.id, t => makeExercise(t, date, l.id), l]), ...TIERS.map(tier => ['tier:' + tier, t => makeTierExercise(t, date, tier), null])];
+    for (const t of TOPICS) for (const [id, make, l] of selections) {
         let e;
-        try { e = makeExercise(t.id, date, l.id); } catch (err) { fail(`${t.id}/${l.id}/${date} threw ${err.stack}`); continue; }
+        try { e = make(t.id); } catch (err) { fail(`${t.id}/${id}/${date} threw ${err.stack}`); continue; }
         checks++;
-        const where = `${t.id}/${l.id}/${date}`;
-        for (const k of ['title', 'text', 'idea', 'prerequisites', 'level', 'minutes', 'diagram'])
+        const where = `${t.id}/${id}/${date}`;
+        for (const k of ['title', 'text', 'idea', 'prerequisites', 'diagram', ...(l ? ['level', 'minutes'] : [])])
             if (!e[k]) fail(`${where} missing ${k}`);
         if (!/<svg\b[^>]*aria-label="[^"]+"/.test(e.diagram) ||
             (!/<(?:path|circle|line|polyline|polygon)\b/.test(e.diagram) && (e.diagram.match(/<rect\b/g) || []).length < 2))
             fail(`${where} missing labelled diagram geometry: ${e.title}`);
         if (!e.parts?.length || !e.hints?.length || !e.steps?.length) fail(`${where} missing parts/hints/steps`);
-        if (e.level !== l.name) fail(`${where} level label ${e.level} ≠ ${l.name}`);
+        if (l && e.level !== `${l.tag} · ${l.name}`) fail(`${where} level label ${e.level} ≠ ${l.tag} · ${l.name}`);
         for (const p of e.parts) {
             if (!Number.isFinite(p.answer)) fail(`${where} non-finite answer for "${p.label}": ${p.answer}`);
             if (p.tolerance === 0 && !Number.isInteger(p.answer)) fail(`${where} exact answer not integer for "${p.label}"`);
         }
         if (/NaN|undefined|Infinity/.test(e.text + e.steps.join('') + (e.givens || []).join('') + e.diagram)) fail(`${where} NaN/undefined in text: ${e.title}`);
         texFields(e, where);
-        (seen[t.id + '/' + l.id] ||= new Set()).add(e.title + JSON.stringify(e.parts.map(p => p.answer)));
+        (seen[t.id + '/' + id] ||= new Set()).add(e.title + JSON.stringify(e.parts.map(p => p.answer)));
     }
 }
 for (const [k, s] of Object.entries(seen))
     if (s.size < 2) fail(`${k} never varies across 120 days`);
 
+/* ---- levels: 1–4, each tier served by exactly one level, Level 4 really mixes Expert and Mastery ---- */
+checks++;
+if (LEVELS.map(l => l.tag).join() !== 'Level 1,Level 2,Level 3,Level 4') fail(`levels are ${LEVELS.map(l => l.tag).join()}`);
+for (const tier of TIERS) {
+    checks++;
+    const owners = LEVELS.filter(l => l.tiers.includes(tier));
+    if (owners.length !== 1) fail(`tier ${tier} is served by ${owners.length} levels`);
+}
+{
+    const byTitle = tier => new Set(TOPICS.flatMap(t => Array.from({length: 30}, (_, d) => makeTierExercise(t.id, new Date(start + d * 86400000).toISOString().slice(0, 10), tier).title)));
+    const expert = byTitle('expert'), mastery = byTitle('mastery'), hit = {expert: 0, mastery: 0};
+    for (let d = 0; d < 30; d++) {
+        const date = new Date(start + d * 86400000).toISOString().slice(0, 10);
+        for (const t of TOPICS) { const title = makeExercise(t.id, date, 'level-4').title; if (expert.has(title)) hit.expert++; if (mastery.has(title)) hit.mastery++; }
+    }
+    checks++;
+    if (hit.expert < 100 || hit.mastery < 100) fail(`Level 4 tier mix over 30 days × 11 topics: ${JSON.stringify(hit)}`);
+}
+
 /* ---- curated bank: size, exact forms evaluate to the answer, independent verification ---- */
-for (const t of TOPICS) for (const l of run('CURATED_LEVELS')) {
+for (const t of TOPICS) for (const l of [run('CURATED_TIER')]) {
     const list = BANK[t.id + ':' + l] || [];
     if (list.length < 4) fail(`bank ${t.id}:${l} has only ${list.length} problems`);
     list.forEach((e, i) => {
@@ -137,7 +158,7 @@ for (const [text, unit, want] of [['2.5 mA', 'mA', '2.5'], ['2.5mA', 'mA', '2.5'
 const dates = ['2026-03-01', '2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06'];
 const c = run('({cx, ca, cs, cm, cd, cabs, cp})');
 for (const date of dates) { // Expert circuits: KCL residual at node b.
-    const e = makeExercise('circuits', date, 'expert'), va = c.cx(e.parts[0].answer, e.parts[1].answer), vb = c.cx(e.parts[2].answer, e.parts[3].answer);
+    const e = makeTierExercise('circuits', date, 'expert'), va = c.cx(e.parts[0].answer, e.parts[1].answer), vb = c.cx(e.parts[2].answer, e.parts[3].answer);
     const ve = c.cd(c.ca(c.cm(c.cx(1 / 200), va), c.cm(c.cx(0, -1 / 300), vb)), c.ca(c.cx(1 / 200), c.cx(0, -1 / 300)));
     const [E1, E2, I] = e.givens.slice(0, 3).map(g => { const m = g.match(/= ([\d.]+)\\angle (-?[\d.]+)\^\\circ/); return c.cp(+m[1], +m[2]); });
     const res = [c.cd(c.cs(vb, va), c.cx(0, -400)), c.cd(c.cs(vb, ve), c.cx(0, 300)), c.cd(vb, c.cx(0, 500)), c.cd(c.cs(vb, E2), c.cx(1000)), c.cm(c.cx(-1), I)].reduce((s, x) => c.ca(s, x), c.cx(0));
@@ -145,18 +166,18 @@ for (const date of dates) { // Expert circuits: KCL residual at node b.
     if (c.cabs(res) > 1e-6 * Math.max(1, c.cabs(I))) fail(`circuits/expert KCL residual ${c.cabs(res)} on ${date}`);
 }
 for (const date of dates) { // Expert control: Riccati residual.
-    const e = makeExercise('control', date, 'expert'), a = +e.text.match(/= -(\d+)x_2/)[1], q = e.givens[2].match(/diag\}\((\d+), (\d+)\)/).slice(1).map(Number);
+    const e = makeTierExercise('control', date, 'expert'), a = +e.text.match(/= -(\d+)x_2/)[1], q = e.givens[2].match(/diag\}\((\d+), (\d+)\)/).slice(1).map(Number);
     const p2 = e.parts[0].answer, p3 = e.parts[1].answer, p1 = e.parts[4].answer;
     close(q[0] - p2 * p2 + 1, 1, 1e-9, 'LQR (1,1)'); close(p1 - a * p2 - p2 * p3 + 1, 1, 1e-9, 'LQR (1,2)'); close(2 * (p2 - a * p3) - p3 * p3 + q[1] + 1, 1, 1e-9, 'LQR (2,2)');
     if (e.parts[5].answer < 60) fail('LQR phase margin below 60°');
 }
 for (const date of dates) { // Mastery measurement: Kalman gains equal the Kalata closed form.
-    const e = makeExercise('measurement', date, 'mastery'), num = g => +g.match(/= ([\d.]+)/)[1], sa = num(e.givens[1]), sz = num(e.givens[2]), dt = .1;
+    const e = makeTierExercise('measurement', date, 'mastery'), num = g => +g.match(/= ([\d.]+)/)[1], sa = num(e.givens[1]), sz = num(e.givens[2]), dt = .1;
     const lam = sa * dt * dt / sz, r = Math.sqrt(lam * lam + 8 * lam), alpha = -(lam * lam + 8 * lam - (lam + 4) * r) / 8, beta = (lam * lam + 4 * lam - lam * r) / 4;
     close(e.parts[0].answer, alpha, 1e-6, 'Kalman α'); close(e.parts[1].answer, beta / dt, 1e-6, 'Kalman β/Δt');
 }
 for (const date of dates) { // Mastery digital: CRC by long division; x^e ≡ 1.
-    const e = makeExercise('digital', date, 'mastery'), poly = parseInt(e.text.match(/\(0x([0-9A-F]{2})\)/)[1], 16), bytes = e.givens[1].match(/0x[0-9A-F]{2}/g).map(x => parseInt(x, 16)), g = 0x100 | poly;
+    const e = makeTierExercise('digital', date, 'mastery'), poly = parseInt(e.text.match(/\(0x([0-9A-F]{2})\)/)[1], 16), bytes = e.givens[1].match(/0x[0-9A-F]{2}/g).map(x => parseInt(x, 16)), g = 0x100 | poly;
     let rem = ((bytes[0] << 16) | (bytes[1] << 8)) >>> 0;
     for (let bit = 23; bit >= 8; bit--) if (rem & (1 << bit)) rem ^= g << (bit - 8);
     close(e.parts[0].answer, rem, 0, 'CRC long division');
@@ -164,25 +185,25 @@ for (const date of dates) { // Mastery digital: CRC by long division; x^e ≡ 1.
     close(r, 1, 0, 'x^e mod g = 1');
 }
 for (const date of dates) { // Mastery power: losses equal the sum of injections.
-    const e = makeExercise('power', date, 'mastery'), loss = e.parts[5].answer, p1 = e.parts[4].answer, p3 = -Number(e.text.match(/load of ([\d.]+) MW/)[1]);
+    const e = makeTierExercise('power', date, 'mastery'), loss = e.parts[5].answer, p1 = e.parts[4].answer, p3 = -Number(e.text.match(/load of ([\d.]+) MW/)[1]);
     close(loss, p1 + 40 + p3, 1e-6, 'load-flow loss balance');
 }
 for (const date of dates) { // Mastery circuits: underdamped with a peak above the final value.
-    const e = makeExercise('circuits', date, 'mastery');
+    const e = makeTierExercise('circuits', date, 'mastery');
     if (!(e.parts[5].answer > e.parts[3].answer)) fail('ladder peak not above final value');
 }
 for (const date of dates) { // Mastery thermo: shock inside the diverging section.
-    const e = makeExercise('thermo', date, 'mastery'), AR = +e.givens[2].match(/= ([\d.]+)/)[1], As = e.parts[5].answer;
+    const e = makeTierExercise('thermo', date, 'mastery'), AR = +e.givens[2].match(/= ([\d.]+)/)[1], As = e.parts[5].answer;
     if (!(As > 1 && As < AR) || !(e.parts[2].answer < 1)) fail(`nozzle shock check failed (${As} vs ${AR})`);
 }
 for (const date of dates) { // Mastery statics: joint equilibrium.
-    const e = makeExercise('statics', date, 'mastery'), F = e.givens[3].match(/\((\d+), (-?\d+)\)/).slice(1).map(Number), Tn = e.parts.slice(2, 5).map(p => p.answer), sup = [[-1.5, 2], [0, 2], [2, 2]];
+    const e = makeTierExercise('statics', date, 'mastery'), F = e.givens[3].match(/\((\d+), (-?\d+)\)/).slice(1).map(Number), Tn = e.parts.slice(2, 5).map(p => p.answer), sup = [[-1.5, 2], [0, 2], [2, 2]];
     const sx = Tn.reduce((s, t, i) => s + t * sup[i][0] / Math.hypot(...sup[i]), 0) + F[0], sy = Tn.reduce((s, t, i) => s + t * sup[i][1] / Math.hypot(...sup[i]), 0) + F[1];
     checks++;
     if (Math.abs(sx) > 1e-6 || Math.abs(sy) > 1e-6) fail(`truss equilibrium residual ${sx}, ${sy}`);
 }
 for (const date of dates) { // Expert signals: the reported zero is a zero.
-    const e = makeExercise('signals', date, 'expert'), wz = e.parts[4].answer, C = 1 / (2e3 * wz);
+    const e = makeTierExercise('signals', date, 'expert'), wz = e.parts[4].answer, C = 1 / (2e3 * wz);
     const H = run(`(w, C) => { const s = cx(0, w), y1 = cd(cm(s, cx(C)), ca(cx(1), cm(s, cx(2e3 * C)))); const [vb, vc] = complexSolve([[ca(ca(y1, cx(1/2e3 + 1/3e3)), cm(s, cx(C))), cx(-1/3e3)], [cx(-1/3e3), cx(1/3e3 + 1/10e3 + 1/5e3)]], [y1, cx(1/10e3)]); return cabs(cs(vb, vc)); }`);
     checks++;
     if (H(wz, C) > 1e-12) fail('RC network zero is not a zero');

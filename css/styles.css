@@ -182,8 +182,20 @@ dialog::backdrop { background: rgba(20, 26, 22, .55); }
 .preview { min-height: 1.9em; margin-top: .3rem; padding: .15rem .1rem; color: var(--muted); font-size: .98rem; overflow-x: auto; overflow-y: hidden; }
 .preview.invalid { color: var(--bad); font-family: "JetBrains Mono", ui-monospace, monospace; }
 code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .86em; background: var(--surface-2); padding: .05rem .35rem; border-radius: 5px; }
-.answer-list { padding-left: 1.2rem; margin: .4rem 0 1rem; }
-.answer-list li { margin: .25rem 0; }
+.solution h4 { font-family: Fraunces, Georgia, serif; font-size: 1.05rem; margin: 1.1rem 0 .4rem; }
+.solution > h4:first-child, .solution-verdict + h4 { margin-top: .3rem; }
+.solution-verdict { margin: 0 0 .5rem; font-weight: 600; color: var(--accent); }
+.solution .answer-review { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }
+.solution .answer-review li { margin: 0; padding: .55rem .8rem; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 10px; }
+.solution .answer-review li.ok { border-left-color: var(--accent); }
+.solution .answer-review li.miss { border-left-color: var(--warm); }
+.review-label { font-weight: 600; margin-bottom: .15rem; }
+.review-row { display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: .5rem; align-items: baseline; overflow-x: auto; overflow-y: hidden; }
+.review-key { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.answer-review li.ok .review-row + .review-row .review-key { color: var(--accent); }
+.answer-review li.miss .review-row + .review-row .review-key { color: var(--warm); }
+.solution .approach { padding-left: 1.2rem; }
+.katex.katex-wide { display: block; max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: .15rem 0; }
 .approx { color: var(--muted); font-size: .9em; }
 .solution .katex-display, .hint-content .katex-display { margin: .5rem 0; overflow-x: auto; overflow-y: hidden; }
 .solution li .katex, .hint-content p .katex { max-width: 100%; }
