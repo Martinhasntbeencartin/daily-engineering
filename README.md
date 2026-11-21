@@ -7,6 +7,7 @@ A static web app with a new engineering problem every day, in the spirit of dail
   - **Today:**
     - A "done today" progress bar, and a three-step explanation on the first visit that "Got it" dismisses for good.
     - "Continue where you left off".
+    - An **All / Electrical / Mechanical & civil** switch, showing how many are done in each, filters the cards. The choice is remembered.
     - A card per discipline, grouped into Electrical and Mechanical & civil. Each card shows its name, a description, a plain status ("Done today · 3-day streak", "Solve today to keep your 5-day streak"), the four level buttons, and a button that says what clicking does ("Start level 1 →"). The card opens the level you last used there.
   - **Problems:**
     - A breadcrumb ("← Today / Circuit analysis") with the discipline's streak status.
@@ -14,6 +15,7 @@ A static web app with a new engineering problem every day, in the spirit of dail
     - The problem, with the answer panel beside it ("Your answer", "4 attempts left"); it stays in view on wide screens.
     - Right under **Check answer**: **Show a hint**, which opens the hint in place, and **Reveal solution**.
     - Once you finish, the panel offers the next level and the next discipline not yet done today.
+  - **The swoosh:** opening a level from any level circle zooms into the orb you clicked. This covers the circles on the Today cards, the level tabs and the archive days; a whole card zooms from its level's circle. A circle grows from the orb to fill the screen with a red glow, the level number swells and fades, and the problem eases in. It is skipped when the system asks for reduced motion, and ctrl/⌘-click still opens a new tab.
   - **Archive** is its own tab: a coin summary, a discipline picker, then today and the last 30 days with unlock buttons.
   - **Shortcuts** (when not typing in an answer box; listed under Help):
     - <kbd>1</kbd>–<kbd>4</kbd> switch level.

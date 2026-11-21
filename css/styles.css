@@ -389,3 +389,16 @@ dialog::backdrop { background: rgba(0, 0, 0, .74); }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
   @keyframes fade-in { from { opacity: 0; } }
 }
+
+/* ---------- category filter on Today ---------- */
+.filter { display: inline-flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 6px; padding: 4px; border: 1px solid var(--dim); border-radius: 999px; }
+.seg { min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font: 500 14px/1 var(--sans); white-space: nowrap; transition: background .15s, color .15s; }
+.seg:hover { color: var(--ink); }
+.seg[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.seg-count { margin-left: 4px; font: 500 12px/1 var(--mono); opacity: .7; }
+@media (max-width: 560px) { .filter { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; border-radius: 10px; } .seg { padding: 0 6px; border-radius: 7px; } .seg-more { display: none; } }
+.filter + .group { margin-top: 18px; }
+
+/* ---------- the swoosh into a level orb ---------- */
+.swoosh { position: fixed; inset: 0; z-index: 60; background: radial-gradient(circle at var(--x) var(--y), rgba(255, 77, 77, .62) 0, rgba(255, 77, 77, .22) 14%, #050506 46%); }
+.swoosh-label { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); font: 500 20px/1 var(--mono); color: #fff; }
