@@ -5,9 +5,14 @@ const shifted = (date, days) => {
     d.setDate(d.getDate() + days);
     return localDate(d);
 };
-const GROUPS = [{id: 'electrical', name: 'Electrical'}, {id: 'mechanical', name: 'Mechanical & civil'}];
+const GROUPS = [
+    {id: 'electrical', name: 'Electrical', short: 'Electrical'},
+    {id: 'mechanical', name: 'Mechanical & civil', short: 'Mechanical'},
+    {id: 'robotics', name: 'Robotics & mechatronics', short: 'Robotics'},
+    {id: 'comms', name: 'Communications & RF', short: 'Comms & RF'}
+];
 /* Each discipline's symbol on the home screen, in LaTeX. */
-const GLYPHS = {circuits: '\\Omega', electronics: '\\beta', signals: '\\mathcal F', control: 'G(s)', digital: '\\mathtt{01}', fields: '\\nabla', power: '3\\phi', measurement: '\\sigma', statics: '\\Sigma F', dynamics: '\\omega', thermo: '\\Delta S'};
+const GLYPHS = {circuits: '\\Omega', electronics: '\\beta', signals: '\\mathcal F', control: 'G(s)', digital: '\\mathtt{01}', fields: '\\nabla', power: '3\\phi', measurement: '\\sigma', statics: '\\Sigma F', dynamics: '\\omega', thermo: '\\Delta S', kinematics: '\\theta', robotcontrol: '\\ddot q', motors: '\\tau', sensors: '\\hat x', infotheory: 'H', modulation: 'E_b', linkbudget: 'G', rfcircuits: '\\Gamma'};
 const MAX_ATTEMPTS = 5;
 /* MathLive turns each answer box into a WYSIWYG math editor (typing 3/4 makes a stacked fraction).
    It shares KaTeX's fonts; if it fails to load, plain text inputs are used instead. */
@@ -366,7 +371,7 @@ function renderHome() {
 /* A category: its disciplines as cards, with a switch to the other category. */
 function renderCategory() {
     const ts = TOPICS.filter(t => t.group === group), done = ts.filter(t => doneOn(t.id, today)).length;
-    const sw = GROUPS.map(g => `<a class="switch-opt ${g.id === group ? 'current' : ''}" href="#/${g.id}" ${g.id === group ? 'aria-current="page"' : ''}>${g.name}</a>`).join('');
+    const sw = GROUPS.map(g => `<a class="switch-opt ${g.id === group ? 'current' : ''}" href="#/${g.id}" ${g.id === group ? 'aria-current="page"' : ''} title="${g.name}">${g.short}</a>`).join('');
     $('#category').innerHTML = `<nav class="crumbs" aria-label="Breadcrumb"><a id="cat-back" href="#/">← Main menu</a><span aria-hidden="true">/</span><span class="crumb-here">${groupName(group)}</span></nav>`
         + `<header class="cat-head"><div><h1>${groupName(group)}</h1><p class="muted">${done} of ${ts.length} done today. Pick a discipline and a level; one solved level a day keeps its streak.</p></div><nav class="switch" aria-label="Category">${sw}</nav></header>`
         + `<div class="cards">${ts.map(cardHTML).join('')}</div>`;
@@ -529,7 +534,7 @@ function preview(i) {
 }
 function sourceHTML(s) {
     if (s?.reading)
-        return `<div class="source-credit"><span>ORIGINAL DAILY ENGINEER EXERCISE</span><p>Further reading (open textbook): <a href="${s.reading.url}" target="_blank" rel="noopener">${s.reading.title}</a>.</p></div>`;
+        return `<div class="source-credit"><span>ORIGINAL DAILY ENGINEER EXERCISE</span><p>Further reading (open material): <a href="${s.reading.url}" target="_blank" rel="noopener">${s.reading.title}</a>.</p></div>`;
     return s ? `<div class="source-credit"><span>ADAPTED OPEN EDUCATIONAL MATERIAL</span><p>Based on <a href="${s.url}" target="_blank" rel="noopener">${s.title}</a> by ${s.author || 'Tony R. Kuphaldt, All About Circuits'} · <a href="${s.licenseUrl || 'https://creativecommons.org/licenses/by/1.0/'}" target="_blank" rel="noopener">${s.license || 'CC BY 1.0'}</a>. ${s.changes || 'Wording and values changed; diagrams redrawn; guided steps added.'} Adapted exercise content uses the same license.</p></div>` : '';
 }
 const escapeHTML = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));

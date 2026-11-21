@@ -7,10 +7,10 @@ A static web app with a new engineering problem every day, in the spirit of dail
   - **Main menu (`#/`):**
     - Today at a glance: disciplines done (with a progress bar), coins and best current streak.
     - A three-step explanation on the first visit, which "Got it" dismisses for good.
-    - Two large category tiles, **Electrical** and **Mechanical & civil**, each listing its disciplines, how many are done today and its best streak.
+    - Four category tiles, **Electrical**, **Mechanical & civil**, **Robotics & mechatronics** and **Communications & RF**, each listing its disciplines, how many are done today and its best streak.
     - **Continue** (your last problem), **Archive**, **Progress** and **How it works**.
     - Arrow keys move through the menu; Enter opens.
-  - **Category pages (`#/electrical`, `#/mechanical`):** a breadcrumb back to the menu, a switch to the other category, and a card per discipline. Each card shows its name, a description, a plain status ("Done today · 3-day streak", "Solve today to keep your 5-day streak"), the four level buttons, and a button that says what clicking does ("Start level 1 →"). The card opens the level you last used there.
+  - **Category pages (`#/electrical`, `#/mechanical`, `#/robotics`, `#/comms`):** a breadcrumb back to the menu, a switch between the four categories, and a card per discipline. Each card shows its name, a description, a plain status ("Done today · 3-day streak", "Solve today to keep your 5-day streak"), the four level buttons, and a button that says what clicking does ("Start level 1 →"). The card opens the level you last used there.
   - **Problems:**
     - A breadcrumb ("← Electrical / Circuit analysis") with the discipline's streak status.
     - Labelled level tabs ("Level 2 · Advanced · 30–50 min", "✓ Solved").
@@ -23,15 +23,19 @@ A static web app with a new engineering problem every day, in the spirit of dail
     - <kbd>H</kbd> shows a hint.
     - <kbd>Enter</kbd> jumps to the answer box.
     - <kbd>Esc</kbd> goes back: problem, then category, then menu.
-  - **Addresses:** every screen has one (`#/`, `#/electrical`, `#/mechanical`, `#/circuits/level-2`, `#/circuits/level-2/2026-11-20`, `#/archive`, `#/circuits/archive`, `#/progress`; a bare `#/circuits` opens its remembered level). The browser's Back button works, and links can be shared or bookmarked.
+  - **Addresses:** every screen has one (`#/`, `#/electrical`, `#/robotics`, `#/circuits/level-2`, `#/circuits/level-2/2026-11-20`, `#/archive`, `#/circuits/archive`, `#/progress`; a bare `#/circuits` opens its remembered level). The browser's Back button works, and links can be shared or bookmarked.
 - **Streaks, coins and a locked archive.**
   - **Streaks per discipline:** solving any one level of a discipline counts it as done for the day and keeps that discipline's streak alive. Each discipline has its own streak, which stays alive through yesterday until midnight.
   - **Coin rewards:** streak milestones pay coins once per streak: 3 days +10, 7 +20, 10 +30, 15 +50, 1 month (30 days) +100, 2 months +200, 6 months +500, 1 year +1000. A broken streak can earn them again. Rewards are paid when you solve, or on the next visit for streaks reached earlier, and announced in a pop-up.
   - **Locked archive:** today is always open. Each past day of a discipline costs 10 coins and unlocks all four of its levels; days you already played stay open. A locked day's address shows an unlock screen. Archive solves count toward totals but not streaks.
   - **Where to see it:** the coin balance sits in the top line. The progress page lists each discipline's current and best streak and next reward, the reward ladder, and a coin log. The constants (`MILESTONES`, `UNLOCK_COST`) are at the top of the streak section in `js/app.js`.
-- **11 topics in two groups.** Electrical: circuits, electronics, signals, control, digital, electromagnetism, power, measurement. Mechanical & civil: statics/structures, dynamics/vibrations, thermo-fluids.
+- **19 topics in four groups.**
+  - **Electrical:** circuits, electronics, signals, control, digital, electromagnetism, power, measurement.
+  - **Mechanical & civil:** statics/structures, dynamics/vibrations, thermo-fluids.
+  - **Robotics & mechatronics:** robot kinematics (inverse kinematics, Jacobians, redundancy), robot dynamics & control (PD and computed torque, flexible joints, simulation), motors & drives (DC and brushless motors, field weakening), sensors & estimation (encoders, complementary and Kalman filters, trilateration).
+  - **Communications & RF:** information theory (entropy, Huffman, capacity, water-filling), modulation & coding (QAM, Hamming and convolutional codes, fading and diversity), antennas & link budgets (path loss, noise, two-ray, arrays), RF circuits & matching (transmission lines, stubs, amplifier stability, multisection transformers).
 - **Four levels.**
-  - **Level 1 (Insight)** is a rotation of 44 hand-picked problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
+  - **Level 1 (Insight)** is a rotation of 76 hand-picked problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
   - **Levels 2–4 (Advanced, Challenge, Expert)** are multi-part problems whose values change daily. Level 4 alternates between graduate-level problems and research-grade work that needs numerical methods.
   - Internally the generators work on five difficulty *tiers* (`TIERS` in `js/core.js`); each public level maps to one or more tiers, so the levels can be regrouped without changing any problem.
 - **The full working once you finish.** Solving a problem, or using all five attempts, opens its worked solution: each answer (exact form and decimal) beside the one you gave, the approach, every step of the working and the key idea. Your last answers are kept, so the comparison is still there when you come back (also in the Archive). Revealing the solution before finishing marks the problem as reviewed.
@@ -53,7 +57,7 @@ A static web app with a new engineering problem every day, in the spirit of dail
   - On phones a virtual maths keyboard appears.
   - The value of what you typed is shown underneath, and each problem allows 5 attempts.
   - If the editor fails to load, a plain text box that accepts `pi/4`, `ln(2)` or `sqrt(3)/2` is used instead.
-- **Open educational material.** Several problems adapt figures from MIT OpenCourseWare 6.002 and James M. Fiore's open textbooks on Engineering LibreTexts (CC BY-NC-SA 4.0). Each one carries its source credit and licence. See `assets/open-materials/`.
+- **Open educational material.** Several problems adapt figures from MIT OpenCourseWare 6.002 and James M. Fiore's open textbooks on Engineering LibreTexts (CC BY-NC-SA 4.0). Each one carries its source credit and licence. See `assets/open-materials/`. Generated problems link to open further reading (LibreTexts books, and MIT OpenCourseWare courses for robotics and communications).
 
 ## Run locally
 
@@ -91,10 +95,11 @@ The suite checks:
 - Every curated exact form evaluates to its stored answer, and each problem's `verify()` function independently reproduces that answer numerically.
 - The answer parser has unit tests.
 - Generated Level 4 answers (Expert and Mastery tiers) are cross-checked: KCL residuals, the Riccati equation, the Kalata closed form, CRC long division, load-flow balance, truss equilibrium and the bridge zero.
+- Robotics and communications answers are cross-checked by independent methods: forward kinematics and J·q̇ = v, the Euler–Lagrange equations by finite differences, a direct simulation of a motor start, both field-weakening limits, the least-squares gradient, Blahut–Arimoto, the water-filling budget, Viterbi by brute force, a second quadrature for fading, the closed-form array directivity, the stub match, and transducer gain = maximum available gain.
 
 ## Adding a curated problem
 
-Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, in `js/bank.js` (electrical) or `js/bank-mech.js` (mechanical & civil):
+Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, in `js/bank.js` (electrical), `js/bank-mech.js` (mechanical & civil), `js/robotics.js` or `js/comms.js`:
 
 ```js
 {
@@ -116,6 +121,8 @@ Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, i
 | `js/hard.js` | Electrical Levels 2–3, open-source credits, complex-number helpers |
 | `js/expert.js` | Electrical Level 4 |
 | `js/mechanical.js` | Mechanical & civil Levels 2–4 |
+| `js/robotics.js` | Robotics & mechatronics: curated Level 1 and generated Levels 2–4 |
+| `js/comms.js` | Communications & RF: curated Level 1 and generated Levels 2–4 |
 | `js/numerics.js` | Linear solve, matrix exponential, Jacobi eigenvalues, polynomial roots, bisection, Simpson |
 | `js/diagrams.js` | SVG drawing helpers |
 | `js/app.js` | Screens and hash routes, the answer editor, progress and attempts (localStorage), archive |

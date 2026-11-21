@@ -427,8 +427,9 @@ dialog::backdrop { background: rgba(0, 0, 0, .74); }
 .cat-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 24px; margin: 8px 0 22px; }
 .cat-head h1 { margin: 0 0 4px; font-size: clamp(2rem, 5vw, 2.8rem); font-weight: 300; }
 .cat-head .muted { margin: 0; max-width: 60ch; }
-.switch { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--dim); border-radius: 999px; }
+.switch { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid var(--dim); border-radius: 999px; }
 .switch-opt { padding: 9px 16px; border-radius: 999px; color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; white-space: nowrap; }
 .switch-opt:hover { color: var(--ink); }
 .switch-opt.current { background: var(--ink); color: var(--bg); }
+@media (max-width: 860px) { .switch { border-radius: 12px; } }
 @media (max-width: 560px) { .switch { display: grid; grid-template-columns: 1fr 1fr; width: 100%; border-radius: 10px; } .switch-opt { text-align: center; border-radius: 7px; padding: 9px 6px; } }

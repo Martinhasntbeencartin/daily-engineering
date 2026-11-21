@@ -5,7 +5,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..');
 const katex = require(path.join(root, 'vendor/katex/katex.min.js'));
-const files = ['diagrams', 'figures', 'network-figures', 'source-figures', 'mathtext', 'core', 'hard', 'numerics', 'expert', 'mechanical', 'bank-figures', 'bank', 'bank-mech'];
+const files = ['diagrams', 'figures', 'network-figures', 'source-figures', 'mathtext', 'core', 'hard', 'numerics', 'expert', 'mechanical', 'bank-figures', 'bank', 'bank-mech', 'robotics', 'comms'];
 const ctx = vm.createContext({console, Math, Number, Date, Object, Array, String, JSON, Error});
 for (const f of files)
     vm.runInContext(fs.readFileSync(path.join(root, 'js', f + '.js'), 'utf8'), ctx, {filename: f + '.js'});
@@ -88,7 +88,7 @@ for (const tier of TIERS) {
         for (const t of TOPICS) { const title = makeExercise(t.id, date, 'level-4').title; if (expert.has(title)) hit.expert++; if (mastery.has(title)) hit.mastery++; }
     }
     checks++;
-    if (hit.expert < 100 || hit.mastery < 100) fail(`Level 4 tier mix over 30 days × 11 topics: ${JSON.stringify(hit)}`);
+    if (hit.expert < 100 || hit.mastery < 100) fail(`Level 4 tier mix over 30 days × ${TOPICS.length} topics: ${JSON.stringify(hit)}`);
 }
 
 /* ---- curated bank: size, exact forms evaluate to the answer, independent verification ---- */
@@ -207,6 +207,111 @@ for (const date of dates) { // Expert signals: the reported zero is a zero.
     const H = run(`(w, C) => { const s = cx(0, w), y1 = cd(cm(s, cx(C)), ca(cx(1), cm(s, cx(2e3 * C)))); const [vb, vc] = complexSolve([[ca(ca(y1, cx(1/2e3 + 1/3e3)), cm(s, cx(C))), cx(-1/3e3)], [cx(-1/3e3), cx(1/3e3 + 1/10e3 + 1/5e3)]], [y1, cx(1/10e3)]); return cabs(cs(vb, vc)); }`);
     checks++;
     if (H(wz, C) > 1e-12) fail('RC network zero is not a zero');
+}
+
+/* ---- cross-checks on the robotics and comms generators (values read back from the givens) ---- */
+const nums = str => (str.match(/-?\d+(?:\.\d+)?/g) || []).map(Number), rd = x => x * Math.PI / 180;
+for (const date of dates) { // Two-link IK: the angles reach the target, and J·q̇ = v.
+    const e = makeTierExercise('kinematics', date, 'university'), g0 = nums(e.givens[0]), [l1, l2] = [g0[1], g0[3]], [tx, ty] = nums(e.givens[1]), [vx, vy] = nums(e.givens[2]);
+    const [q2, q1, , w1, w2] = e.parts.map(x => x.answer), a = rd(q1), b = rd(q1) + rd(q2);
+    close(l1 * Math.cos(a) + l2 * Math.cos(b), tx, 1e-9, 'kinematics/university reaches x'); close(l1 * Math.sin(a) + l2 * Math.sin(b), ty, 1e-9, 'kinematics/university reaches y');
+    close(-(l1 * Math.sin(a) + l2 * Math.sin(b)) * w1 - l2 * Math.sin(b) * w2 + 1, vx + 1, 1e-9, 'kinematics/university J q̇ = v (x)');
+    close((l1 * Math.cos(a) + l2 * Math.cos(b)) * w1 + l2 * Math.cos(b) * w2 + 1, vy + 1, 1e-9, 'kinematics/university J q̇ = v (y)');
+}
+for (const date of dates) { // Elbow arm: forward kinematics reproduces the target; |det J| = a2 a3 |sin q3| R.
+    const e = makeTierExercise('kinematics', date, 'expert'), g0 = nums(e.givens[0]), [d1, a2, a3] = [g0[1], g0[3], g0[5]], [tx, ty, tz] = nums(e.givens[1]), [q1, q2, q3, det] = e.parts.map(x => x.answer);
+    const R = a2 * Math.cos(rd(q2)) + a3 * Math.cos(rd(q2 + q3));
+    close(R * Math.cos(rd(q1)) + 1, tx + 1, 1e-9, 'kinematics/expert x'); close(R * Math.sin(rd(q1)) + 1, ty + 1, 1e-9, 'kinematics/expert y');
+    close(d1 + a2 * Math.sin(rd(q2)) + a3 * Math.sin(rd(q2 + q3)), tz, 1e-9, 'kinematics/expert z'); close(a2 * a3 * Math.abs(Math.sin(rd(q3))) * R, det, 1e-9, 'kinematics/expert det J');
+}
+for (const date of dates) { // Redundant arm: the optimum is at least as good as the reference posture.
+    const e = makeTierExercise('kinematics', date, 'mastery');
+    checks++;
+    if (!(e.parts[1].answer >= e.parts[4].answer - 1e-12) || !(e.parts[3].answer >= 0 && e.parts[3].answer <= 180)) fail(`kinematics/mastery optimum below reference on ${date}`);
+}
+for (const date of dates) { // Two-link dynamics: torques equal the Euler–Lagrange equations evaluated by finite differences.
+    const e = makeTierExercise('robotcontrol', date, 'challenge'), [m1, m2, l1, l2] = nums(e.givens[0]), qq = nums(e.givens[1]).map(rd), [w1, w2, a1, a2] = nums(e.givens[2]);
+    const Tk = (q, w) => { const v1 = [-l1 * Math.sin(q[0]) * w[0], l1 * Math.cos(q[0]) * w[0]], v2 = [v1[0] - l2 * Math.sin(q[0] + q[1]) * (w[0] + w[1]), v1[1] + l2 * Math.cos(q[0] + q[1]) * (w[0] + w[1])]; return .5 * m1 * (v1[0] ** 2 + v1[1] ** 2) + .5 * m2 * (v2[0] ** 2 + v2[1] ** 2); };
+    const V = q => 9.81 * (m1 * l1 * Math.sin(q[0]) + m2 * (l1 * Math.sin(q[0]) + l2 * Math.sin(q[0] + q[1])));
+    const h = 1e-5, at = (v, i, d) => v.map((x, j) => j === i ? x + d : x);
+    const dTdw = (q, w, i) => (Tk(q, at(w, i, h)) - Tk(q, at(w, i, -h))) / (2 * h);
+    [0, 1].forEach(i => {
+        const dt = 1e-5, path = t => [[qq[0] + w1 * t + a1 * t * t / 2, qq[1] + w2 * t + a2 * t * t / 2], [w1 + a1 * t, w2 + a2 * t]];
+        const ddt = (dTdw(...path(dt), i) - dTdw(...path(-dt), i)) / (2 * dt), dTdq = (Tk(at(qq, i, h), [w1, w2]) - Tk(at(qq, i, -h), [w1, w2])) / (2 * h), dVdq = (V(at(qq, i, h)) - V(at(qq, i, -h))) / (2 * h);
+        close(ddt - dTdq + dVdq + 10, e.parts[4 + i].answer + 10, 1e-6, `robotcontrol/challenge τ${i + 1} vs Lagrange`);
+    });
+}
+for (const date of dates) { // DC motor start: a direct simulation finds the same peak current.
+    const e = makeTierExercise('motors', date, 'challenge'), [R, Lm] = nums(e.givens[0]), [k, J, b] = nums(e.givens[1]), [V] = nums(e.givens[2]), L = Lm * 1e-3;
+    let i = 0, w = 0, peak = 0;
+    const h = L / R / 400, f = (i, w) => [(V - R * i - k * w) / L, (k * i - b * w) / J];
+    for (let n = 0; n < 4 * e.parts[4].answer * 1e-3 / h; n++) {
+        const k1 = f(i, w), k2 = f(i + h / 2 * k1[0], w + h / 2 * k1[1]), k3 = f(i + h / 2 * k2[0], w + h / 2 * k2[1]), k4 = f(i + h * k3[0], w + h * k3[1]);
+        i += h / 6 * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]); w += h / 6 * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]); peak = Math.max(peak, i);
+    }
+    close(peak, e.parts[3].answer, 1e-5, 'motors/challenge peak current by simulation');
+}
+for (const date of dates) { // Field weakening: the operating point sits on both the current and the voltage limit.
+    const e = makeTierExercise('motors', date, 'mastery'), [pp, psi, Lm, Rs] = nums(e.givens[0]), [Im, Vm] = nums(e.givens[1]), [n] = nums(e.givens[2]), [, id, iq] = e.parts.map(x => x.answer);
+    const we = pp * n * 2 * Math.PI / 60, L = Lm * 1e-3;
+    close(Math.hypot(id, iq), Im, 1e-6, 'motors/mastery on the current limit'); close(Math.hypot(Rs * id - we * L * iq, Rs * iq + we * (psi + L * id)), Vm, 1e-6, 'motors/mastery on the voltage limit');
+}
+for (const date of dates) { // Trilateration: the gradient of the squared range residuals vanishes at the answer.
+    const e = makeTierExercise('sensors', date, 'expert'), [Lb] = nums(e.givens[0]), rho = nums(e.givens[1]), [x, y] = e.parts.map(p => p.answer), B = [[0, 0], [Lb, 0], [Lb, Lb], [0, Lb]];
+    const gr = B.reduce((g, bb, i) => { const d = Math.hypot(x - bb[0], y - bb[1]), r = rho[i] - d; return [g[0] - 2 * r * (x - bb[0]) / d, g[1] - 2 * r * (y - bb[1]) / d]; }, [0, 0]);
+    checks++;
+    if (Math.hypot(...gr) > 1e-8) fail(`sensors/expert gradient ${Math.hypot(...gr)} on ${date}`);
+}
+for (const date of dates) { // Asymmetric channel: Blahut–Arimoto reaches the same capacity.
+    const e = makeTierExercise('infotheory', date, 'expert'), e0 = nums(e.givens[0]).pop(), e1 = nums(e.givens[1]).pop(), W = [[1 - e0, e0], [e1, 1 - e1]];
+    let px = [.5, .5], C = 0;
+    for (let it = 0; it < 3000; it++) {
+        const py = [0, 1].map(y => px[0] * W[0][y] + px[1] * W[1][y]), D = W.map(row => row.reduce((s, v, y) => s + (v > 0 ? v * Math.log2(v / py[y]) : 0), 0)), z = px.map((v, i) => v * 2 ** D[i]), sz = z[0] + z[1];
+        C = Math.log2(sz); px = z.map(v => v / sz);
+    }
+    close(C, e.parts[1].answer, 1e-7, 'infotheory/expert Blahut–Arimoto capacity'); close(px[1], e.parts[2].answer, 1e-4, 'infotheory/expert optimal input');
+}
+for (const date of dates) { // Water-filling: the powers implied by the level add up to the budget and give the stated capacity.
+    const e = makeTierExercise('infotheory', date, 'mastery'), g0 = nums(e.givens[0]), taps = g0.slice(0, -1), N = g0.pop(), [Pt] = nums(e.givens[2]), [mu, active, Cw] = e.parts.map(p => p.answer);
+    const g = Array.from({length: N}, (_, k) => { let re = 0, im = 0; taps.forEach((h, n) => { re += h * Math.cos(2 * Math.PI * k * n / N); im -= h * Math.sin(2 * Math.PI * k * n / N); }); return re * re + im * im; }), P = g.map(x => Math.max(0, mu - 1 / x));
+    close(P.reduce((s, v) => s + v, 0), Pt, 1e-9, 'infotheory/mastery power budget'); close(P.filter(v => v > 0).length, active, 0, 'infotheory/mastery active count');
+    close(g.reduce((s, x, k) => s + Math.log2(1 + x * P[k]), 0), Cw, 1e-9, 'infotheory/mastery capacity');
+}
+for (const date of dates) { // Viterbi: re-encoding the answer differs from the received word exactly at the two stated positions, and nothing is closer.
+    const e = makeTierExercise('modulation', date, 'expert'), rx = e.givens[2].match(/mathtt\{([^}]*)\}/)[1].replace(/[^01]/g, '').split('').map(Number), [m, a, b, second] = e.parts.map(p => p.answer);
+    const enc = bits => { let s1 = 0, s2 = 0; const out = []; for (const u of bits) { out.push(u ^ s1 ^ s2, u ^ s2); s2 = s1; s1 = u; } return out; }, word = x => enc([...Array.from({length: 6}, (_, i) => x >> (5 - i) & 1), 0, 0]);
+    const diff = word(m).map((v, i) => v !== rx[i] ? i + 1 : 0).filter(Boolean), others = Array.from({length: 64}, (_, x) => x).filter(x => x !== m).map(x => word(x).reduce((s, v, i) => s + (v !== rx[i]), 0));
+    checks++;
+    if (diff.join() !== `${a},${b}` || Math.min(...others) !== second || second <= 2) fail(`modulation/expert Viterbi check on ${date}: ${diff} / ${second}`);
+}
+for (const date of dates.slice(0, 3)) { // Diversity: a plain fine-grid quadrature in γ agrees with the substituted one.
+    const e = makeTierExercise('modulation', date, 'mastery'), [L] = nums(e.givens[1]), [gdb] = nums(e.givens[2]), gb = 10 ** (gdb / 10), qamBer = run('qamBer'), fact = [1, 1, 2, 6][L - 1];
+    close(run('NUM').simpson(u => qamBer(16, gb * u) * u ** (L - 1) * Math.exp(-u) / fact, 0, 60, 200000), e.parts[1].answer, 1e-4, 'modulation/mastery average BER');
+}
+for (const date of dates) { // Array: closed-form directivity of a uniform line of isotropic elements.
+    const e = makeTierExercise('linkbudget', date, 'mastery'), [N, dl] = nums(e.givens[0]), th0 = nums(e.givens[1]).pop(), kd = 2 * Math.PI * dl, u0 = Math.sin(rd(th0));
+    let den = N;
+    for (let m = 1; m < N; m++) den += 2 * (N - m) * Math.sin(m * kd) / (m * kd) * Math.cos(m * kd * u0);
+    close(10 * Math.log10(N * N / den), e.parts[0].answer, 1e-5, 'linkbudget/mastery directivity');
+}
+for (const date of dates) { // Single-stub match: the line admittance plus the stub admittance is exactly Y0.
+    const e = makeTierExercise('rfcircuits', date, 'challenge'), m = e.givens[0].match(/= (\d+) ([+-]) j(\d+)/), ZL = c.cx(+m[1], (m[2] === '-' ? -1 : 1) * +m[3]), Y0 = 1 / 50, [d, , ls] = e.parts.map(p => p.answer);
+    const YL = c.cd(c.cx(1), ZL), t = Math.tan(2 * Math.PI * d), Yin = c.cm(c.cx(Y0), c.cd(c.ca(YL, c.cx(0, Y0 * t)), c.ca(c.cx(Y0), c.cm(c.cx(0, t), YL)))), Y = c.ca(Yin, c.cx(0, -Y0 / Math.tan(2 * Math.PI * ls)));
+    checks++;
+    if (c.cabs(c.cs(Y, c.cx(Y0))) > 1e-9 * Y0) fail(`rfcircuits/challenge stub does not match on ${date}`);
+}
+{ // Amplifier sets: the simultaneous conjugate match gives Γ_S = Γ_in* and a transducer gain equal to the maximum available gain.
+    const S = run('SPARAMS'), cj = z => c.cx(z.re, -z.im);
+    checks++;
+    if (S.length < 2) fail('fewer than two stable S-parameter sets');
+    for (const [s11, s12, s21, s22] of S) {
+        const D = c.cs(c.cm(s11, s22), c.cm(s12, s21)), K = (1 - c.cabs(s11) ** 2 - c.cabs(s22) ** 2 + c.cabs(D) ** 2) / (2 * c.cabs(c.cm(s12, s21)));
+        const B1 = 1 + c.cabs(s11) ** 2 - c.cabs(s22) ** 2 - c.cabs(D) ** 2, C1 = c.cs(s11, c.cm(D, cj(s22))), B2 = 1 + c.cabs(s22) ** 2 - c.cabs(s11) ** 2 - c.cabs(D) ** 2, C2 = c.cs(s22, c.cm(D, cj(s11)));
+        const GS = c.cd(c.cx(B1 - Math.sqrt(B1 * B1 - 4 * c.cabs(C1) ** 2)), c.cm(c.cx(2), C1)), GL = c.cd(c.cx(B2 - Math.sqrt(B2 * B2 - 4 * c.cabs(C2) ** 2)), c.cm(c.cx(2), C2));
+        const Gin = c.ca(s11, c.cd(c.cm(c.cm(s12, s21), GL), c.cs(c.cx(1), c.cm(s22, GL))));
+        const GT = (1 - c.cabs(GS) ** 2) * c.cabs(s21) ** 2 * (1 - c.cabs(GL) ** 2) / (c.cabs(c.cs(c.cx(1), c.cm(GS, Gin))) ** 2 * c.cabs(c.cs(c.cx(1), c.cm(s22, GL))) ** 2);
+        close(GT, c.cabs(s21) / c.cabs(s12) * (K - Math.sqrt(K * K - 1)), 1e-9, 'amplifier transducer gain = MAG');
+    }
 }
 
 /* ---- cache-busting: every css/ and js/ link in index.html carries the current content fingerprint ---- */
