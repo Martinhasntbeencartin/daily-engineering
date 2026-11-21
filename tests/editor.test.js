@@ -48,6 +48,7 @@ server.listen(0, async () => {
     try {
         // A fixed date keeps the run reproducible.
         await page.clock.setFixedTime(new Date(2026, 1, 1, 12));
+        await page.emulateMedia({reducedMotion: 'reduce'}); // navigation is instant; the swoosh gets its own checks below
         const step = (name, ok, detail='') => { if (!ok) failures++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail ? ': ' + detail : ''}`); };
         const go = async hash => { await page.evaluate(h => { location.hash = h; }, hash); await page.waitForTimeout(150); };
         const shown = id => page.evaluate(i => !document.getElementById(i).hidden, id);
@@ -61,8 +62,27 @@ server.listen(0, async () => {
         step('a first visit explains how it works', await page.locator('#home .intro').count() === 1);
         await page.click('#dismiss-intro'); await page.reload(); await page.waitForTimeout(400);
         step('“Got it” hides the explanation for good', await page.locator('#home .intro').count() === 0);
-        await page.click('#home .card[data-topic="electronics"] .lvl:nth-of-type(3)'); await page.waitForTimeout(150);
-        step('a level button on a card opens that level', await page.evaluate(() => location.hash) === '#/electronics/level-3');
+        // Category filter: All, Electrical or Mechanical & civil, remembered between visits.
+        const visibleCards = () => page.evaluate(() => [...document.querySelectorAll('#home .card')].filter(c => c.offsetParent).map(c => c.dataset.topic));
+        await page.click('[data-filter="mechanical"]'); await page.waitForTimeout(100);
+        step('the Mechanical & civil filter shows only its 3 disciplines', (await visibleCards()).join() === 'statics,dynamics,thermo' && await page.getAttribute('[data-filter="mechanical"]', 'aria-pressed') === 'true');
+        await page.reload(); await page.waitForTimeout(400);
+        step('the chosen category is remembered', (await visibleCards()).length === 3);
+        await page.click('[data-filter="electrical"]'); await page.waitForTimeout(100);
+        step('the Electrical filter shows its 8 disciplines', (await visibleCards()).length === 8 && !(await visibleCards()).includes('thermo'));
+        await page.click('[data-filter="all"]'); await page.waitForTimeout(100);
+        step('All shows every discipline again', (await visibleCards()).length === 11);
+        // The swoosh: clicking a level orb zooms into it before the problem opens.
+        await page.emulateMedia({reducedMotion: 'no-preference'});
+        await page.click('#home .card[data-topic="electronics"] .lvl:nth-of-type(3)'); await page.waitForTimeout(60);
+        const mid = await page.evaluate(() => ({veils: document.querySelectorAll('.swoosh').length, label: document.querySelector('.swoosh-label')?.textContent, hash: location.hash}));
+        step('clicking a level orb starts the swoosh from that orb', mid.veils === 1 && mid.label === '3' && mid.hash !== '#/electronics/level-3', JSON.stringify(mid));
+        await page.waitForFunction(() => location.hash === '#/electronics/level-3' && !document.querySelector('.swoosh'), null, {timeout: 4000});
+        step('a level button on a card opens that level once the swoosh ends', await page.locator('#problem math-field').count() > 0);
+        await page.emulateMedia({reducedMotion: 'reduce'});
+        await page.goBack(); await page.waitForTimeout(400);
+        await page.click('#home .card[data-topic="signals"] .lvl:nth-of-type(2)'); await page.waitForTimeout(60);
+        step('with reduced motion a level opens at once, without the swoosh', await page.evaluate(() => location.hash === '#/signals/level-2' && !document.querySelector('.swoosh')));
         await page.goBack(); await page.waitForTimeout(400);
         await page.click('#home .card[data-topic="circuits"] .card-cta', {force: true});
         await page.waitForSelector('#problem math-field');
