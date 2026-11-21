@@ -11,17 +11,17 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/katex/katex.min.css">
-<link rel="stylesheet" href="css/styles.css?v=de23cf44ac">
+<link rel="stylesheet" href="css/styles.css?v=5577f57cb6">
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="topbar">
-  <a class="brand" href="#/" aria-label="Daily Engineer, today’s problems">
+  <a class="brand" href="#/" aria-label="Daily Engineer, main menu">
     <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><path d="M3 11h26M9 11v7M16 11v7M23 11v7" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="20" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="20" r="2.8" fill="#ff4d4d"/><circle cx="23" cy="20" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
     <span>Daily Engineer</span>
   </a>
   <nav class="tabs" aria-label="Main">
-    <a href="#/" data-tab="today">Today</a>
+    <a href="#/" data-tab="menu">Menu</a>
     <a href="#/archive" data-tab="archive">Archive</a>
     <a href="#/progress" data-tab="progress">Progress</a>
   </nav>
@@ -32,7 +32,8 @@
 </header>
 
 <main id="main">
-  <section id="home" class="screen" aria-label="Today’s problems" hidden></section>
+  <section id="home" class="screen" aria-label="Main menu" hidden></section>
+  <section id="category" class="screen" aria-label="Category" hidden></section>
   <section id="problem" class="screen" hidden>
     <div id="problem-bar" class="problem-bar"></div>
     <article id="challenge" class="challenge" aria-live="polite"></article>
@@ -43,7 +44,7 @@
 </main>
 
 <nav class="bottom-tabs" aria-label="Main">
-  <a href="#/" data-tab="today"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg><span>Today</span></a>
+  <a href="#/" data-tab="menu"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg><span>Menu</span></a>
   <a href="#/archive" data-tab="archive"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Archive</span></a>
   <a href="#/progress" data-tab="progress"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9M3 20h18"/></svg><span>Progress</span></a>
   <button type="button" id="about-bottom"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.5v.6M12 16.8v.4"/></svg><span>Help</span></button>
@@ -55,7 +56,7 @@
   <div class="dialog-body frame">
     <h2 id="about-title">How it works</h2>
     <ol class="how">
-      <li><b>Pick a discipline</b> on the Today page. Each one has a new problem every day, the same for everyone.</li>
+      <li><b>Choose a category</b> in the main menu, Electrical or Mechanical &amp; civil, then <b>a discipline</b>. Each one has a new problem every day, the same for everyone.</li>
       <li><b>Choose a level</b> from 1 (Insight) to 4 (Expert) with the level buttons. You only need one level a day.</li>
       <li><b>Type your answer</b> as maths: <code>3/4</code> becomes a fraction, <code>sqrt</code> a root, <code>pi</code> π. Exact forms and decimals both work.</li>
       <li><b>You get five attempts.</b> Stuck? Show a hint. Solve it, or use all five attempts, and the full worked solution opens. Showing the solution earlier marks the problem as reviewed.</li>
@@ -84,19 +85,19 @@
 <script src="vendor/katex/katex.min.js"></script>
 <script src="vendor/katex/auto-render.min.js"></script>
 <script src="vendor/mathlive/mathlive.min.js"></script>
-<script src="js/diagrams.js?v=de23cf44ac"></script>
-<script src="js/figures.js?v=de23cf44ac"></script>
-<script src="js/network-figures.js?v=de23cf44ac"></script>
-<script src="js/source-figures.js?v=de23cf44ac"></script>
-<script src="js/mathtext.js?v=de23cf44ac"></script>
-<script src="js/core.js?v=de23cf44ac"></script>
-<script src="js/hard.js?v=de23cf44ac"></script>
-<script src="js/numerics.js?v=de23cf44ac"></script>
-<script src="js/expert.js?v=de23cf44ac"></script>
-<script src="js/mechanical.js?v=de23cf44ac"></script>
-<script src="js/bank-figures.js?v=de23cf44ac"></script>
-<script src="js/bank.js?v=de23cf44ac"></script>
-<script src="js/bank-mech.js?v=de23cf44ac"></script>
-<script src="js/app.js?v=de23cf44ac"></script>
+<script src="js/diagrams.js?v=5577f57cb6"></script>
+<script src="js/figures.js?v=5577f57cb6"></script>
+<script src="js/network-figures.js?v=5577f57cb6"></script>
+<script src="js/source-figures.js?v=5577f57cb6"></script>
+<script src="js/mathtext.js?v=5577f57cb6"></script>
+<script src="js/core.js?v=5577f57cb6"></script>
+<script src="js/hard.js?v=5577f57cb6"></script>
+<script src="js/numerics.js?v=5577f57cb6"></script>
+<script src="js/expert.js?v=5577f57cb6"></script>
+<script src="js/mechanical.js?v=5577f57cb6"></script>
+<script src="js/bank-figures.js?v=5577f57cb6"></script>
+<script src="js/bank.js?v=5577f57cb6"></script>
+<script src="js/bank-mech.js?v=5577f57cb6"></script>
+<script src="js/app.js?v=5577f57cb6"></script>
 </body>
 </html>
