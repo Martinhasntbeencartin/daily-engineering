@@ -467,7 +467,8 @@ dialog::backdrop { background: rgba(0, 0, 0, .74); }
 .fig svg .solid-bg { fill: var(--bg); }
 .fig svg text { fill: var(--soft); font: 12px var(--mono); stroke: none; }
 .explore > .muted { margin: 0 0 10px; }
-.explore-stage { position: relative; max-width: 520px; user-select: none; -webkit-user-select: none; }
+.explore-stage { position: relative; max-width: 760px; user-select: none; -webkit-user-select: none; }
+.explore[data-type="array"] .explore-stage { max-width: 520px; }
 .explore-track { position: relative; max-width: 520px; height: 22px; margin: 12px 0 4px; border-radius: 11px; background: var(--dim); }
 .knob { position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 5px var(--accent-wash); cursor: grab; touch-action: none; }
 .knob:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
@@ -494,3 +495,18 @@ dialog::backdrop { background: rgba(0, 0, 0, .74); }
 .slider3d input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
 .slider3d output { font-family: var(--mono); color: var(--ink); }
 .view3d-views { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---------- electrical explore figures (js/explore-ee.js) ---------- */
+.fig-title { margin: 0 0 4px; font: 500 15px/1.3 var(--sans, inherit); color: var(--ink); }
+.explore + .explore, .concept + .concept, .view3d + .view3d { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--dim); }
+.ex-area { position: absolute; }
+.knob-pole, .knob-zero { width: 22px; height: 22px; background: transparent; box-shadow: none; border-radius: 4px; }
+.knob-pole::before, .knob-pole::after { content: ""; position: absolute; left: 2px; top: 10px; width: 18px; height: 2.5px; background: var(--accent); border-radius: 2px; transform: rotate(45deg); }
+.knob-pole::after { transform: rotate(-45deg); }
+.knob-zero { border: 2.5px solid var(--accent); border-radius: 50%; box-sizing: border-box; }
+.knob-pole:hover, .knob-zero:hover, .knob-pole:focus-visible, .knob-zero:focus-visible { background: var(--accent-wash); }
+.fig svg .joint { fill: var(--bg); }
+.fig svg .fillwash { fill: var(--accent-wash); stroke: none; }
+.fig svg .trace { stroke-width: 1; stroke-opacity: .28; }
+.fig svg .small-label { font-size: 10px; }
+.fig svg .accent-label { fill: var(--accent); }

@@ -176,19 +176,38 @@ function startWalk(panel, e) {
     bar.querySelector('[data-walk-next]').focus();
 }
 
-/* ---------- explore figure: steer an antenna array (drag the knob, or use the arrow keys) ---------- */
-const EXPLORE_DEFAULT = {linkbudget: {type: 'array', N: 8, d: .5, theta0: 0}};
-const exploreSpec = e => hasAnime() ? (e.explore || EXPLORE_DEFAULT[topic] || null) : null;
+/* ---------- explore figures (you drag or slide; nothing moves on its own) ----------
+   Each discipline lists its figures; a problem can override one with its own numbers (e.explore of the same type).
+   The figure types live in EXPLORE_TYPES (the antenna array here, the rest in js/explore-ee.js). */
+const EXPLORES_BY_TOPIC = {
+    linkbudget: [{type: 'array', N: 8, d: .5, theta0: 0}], control: [{type: 'polezero'}], signals: [{type: 'sampling'}, {type: 'polezero'}],
+    digital: [{type: 'logic'}], circuits: [{type: 'rc'}], electronics: [{type: 'opamp'}], measurement: [{type: 'averaging'}], power: [{type: 'powerfactor'}]
+};
+const EXPLORE_INTRO = {array: 'Drag the knob to steer the beam. Watch the main lobe widen away from broadside, and see where grating lobes appear. Change the element count and spacing too.'};
+const EXPLORE_TITLE = {array: 'Steer an antenna array'};
+const EXPLORE_TYPES = {};
+const exploreList = e => hasAnime() ? (EXPLORES_BY_TOPIC[topic] || []).map(d => e.explore?.type === d.type ? e.explore : d).filter(d => EXPLORE_TYPES[d.type]) : [];
 function exploreHTML(e) {
-    if (!exploreSpec(e)) return '';
-    return '<h4>Explore</h4><div class="explore fig" data-type="array"><p class="muted">Drag the knob to steer the beam. Watch the main lobe widen away from broadside, and see where grating lobes appear. Change the element count and spacing too.</p>'
-        + '<div class="explore-stage"></div><div class="explore-track"><div class="knob" tabindex="0" role="slider" aria-label="Steering angle: drag, or use the arrow keys"></div></div>'
-        + '<div class="explore-controls"></div><dl class="readouts" aria-live="polite"></dl></div>';
+    const list = exploreList(e);
+    if (!list.length) return '';
+    return '<h4>Explore</h4>' + list.map(d => `<div class="explore fig" data-type="${d.type}"><h5 class="fig-title">${EXPLORE_TITLE[d.type]}</h5><p class="muted">${EXPLORE_INTRO[d.type]}</p>`
+        + '<div class="explore-stage"></div><div class="explore-controls"></div><dl class="readouts" aria-live="polite"></dl></div>').join('');
 }
 function mountExplore(panel, e) {
-    const box = panel.querySelector('.explore');
-    if (!box) return;
-    const s = exploreSpec(e), stage = box.querySelector('.explore-stage'), track = box.querySelector('.explore-track'), knob = box.querySelector('.knob'), out = box.querySelector('.readouts'), controls = box.querySelector('.explore-controls');
+    const list = exploreList(e);
+    panel.querySelectorAll('.explore').forEach((box, i) => { if (list[i]) EXPLORE_TYPES[list[i].type](box, list[i], panel); });
+}
+/* The antenna array: drag the knob along its track to steer; buttons change the element count and spacing. */
+EXPLORE_TYPES.array = (box, s) => {
+    const stage = box.querySelector('.explore-stage'), out = box.querySelector('.readouts'), controls = box.querySelector('.explore-controls');
+    const track = document.createElement('div'), knob = document.createElement('div');
+    track.className = 'explore-track';
+    knob.className = 'knob';
+    knob.tabIndex = 0;
+    knob.setAttribute('role', 'slider');
+    knob.setAttribute('aria-label', 'Steering angle: drag, or use the arrow keys');
+    track.append(knob);
+    stage.after(track);
     const W = 360, H = 220, half = 11, lo = -75, hi = 75, span = () => track.clientWidth - 2 * half, st = {N: s.N, d: s.d};
     let value = s.theta0 || 0;
     const svg = svgEl('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Array power pattern against angle from broadside'});
@@ -236,10 +255,10 @@ function mountExplore(panel, e) {
     keep(ro, 'solution');
     place();
     render();
-}
+};
 
 /* ---------- concept animations (they only play when Play is pressed) ---------- */
-const CONCEPT_BY_TOPIC = {power: 'phasor', signals: 'phasor', circuits: 'loop', rfcircuits: 'smith', modulation: 'qam', control: 'damping'};
+const CONCEPTS_BY_TOPIC = {power: ['phasor'], signals: ['phasor', 'fourier'], circuits: ['loop'], rfcircuits: ['smith'], modulation: ['qam', 'eye'], control: ['damping'], sensors: ['kalman'], infotheory: ['huffman']};
 const CONCEPT_CAPTION = {
     phasor: 'A phasor turns at ω; its height traces the sine wave v(t) = V sin ωt.',
     loop: 'In a series loop the same current flows everywhere: charge leaves the source, passes the resistor and returns.',
@@ -247,11 +266,12 @@ const CONCEPT_CAPTION = {
     qam: 'Each step quadruples the points and adds 2 bits per symbol, but at the same peak power the points crowd closer.',
     damping: 'The same second-order system with more and more damping: ringing, a quick overshoot, critical damping, then a slow crawl.'
 };
-const conceptSpec = e => hasAnime() && CONCEPT_BY_TOPIC[topic] ? {type: CONCEPT_BY_TOPIC[topic], ...(e.concept || {})} : null;
+/* A problem's own settings (e.concept) apply to the concept of its type, or to the first one when it names none. */
+const conceptList = e => !hasAnime() ? [] : (CONCEPTS_BY_TOPIC[topic] || []).map((type, i) => ({type, ...(e.concept && (e.concept.type ? e.concept.type === type : i === 0) ? e.concept : {})})).filter(c => CONCEPT_SCENES[c.type]);
 function conceptHTML(e) {
-    const c = conceptSpec(e);
-    if (!c) return '';
-    return `<h4>See it move</h4><div class="concept fig" data-type="${c.type}"><div class="concept-stage"></div><div class="concept-bar"><button type="button" class="ghost small concept-play">▶ Play</button><span class="concept-caption">${CONCEPT_CAPTION[c.type]}</span></div></div>`;
+    const list = conceptList(e);
+    if (!list.length) return '';
+    return '<h4>See it move</h4>' + list.map(c => `<div class="concept fig" data-type="${c.type}"><div class="concept-stage"></div><div class="concept-bar"><button type="button" class="ghost small concept-play">▶ Play</button><span class="concept-caption">${CONCEPT_CAPTION[c.type]}</span></div></div>`).join('');
 }
 const CONCEPT_SCENES = {
     phasor(svg) {
@@ -353,24 +373,28 @@ const CONCEPT_SCENES = {
     }
 };
 function mountConcept(panel, e) {
-    const box = panel.querySelector('.concept');
-    if (!box) return;
-    const c = conceptSpec(e), svg = svgEl('svg', {viewBox: '0 0 360 200', role: 'img', 'aria-label': CONCEPT_CAPTION[c.type]});
-    box.querySelector('.concept-stage').append(svg);
-    const play = CONCEPT_SCENES[c.type](svg, c), btn = box.querySelector('.concept-play');
-    let running = null;
-    btn.addEventListener('click', () => {
-        running?.pause();
-        running = keep(play(), 'solution');
-        btn.textContent = '■ Playing…';
-        btn.disabled = true;
-        running.then(() => { btn.disabled = false; btn.textContent = '↺ Replay'; });
+    const list = conceptList(e);
+    panel.querySelectorAll('.concept').forEach((box, i) => {
+        const c = list[i];
+        if (!c) return;
+        const svg = svgEl('svg', {viewBox: '0 0 360 200', role: 'img', 'aria-label': CONCEPT_CAPTION[c.type]});
+        box.querySelector('.concept-stage').append(svg);
+        const play = CONCEPT_SCENES[c.type](svg, c), btn = box.querySelector('.concept-play');
+        let running = null;
+        btn.addEventListener('click', () => {
+            running?.pause();
+            running = keep(play(), 'solution');
+            btn.textContent = '■ Playing…';
+            btn.disabled = true;
+            running.then(() => { btn.disabled = false; btn.textContent = '↺ Replay'; });
+        });
     });
 }
 
 /* Everything interactive inside a freshly rendered worked solution. */
 function mountSolution(panel, e) {
     release('solution');
+    panel.pz = null; // the pole–zero state shared by the explorer and the 3D |H(s)| view starts afresh
     panel.querySelector('[data-walk]')?.addEventListener('click', () => startWalk(panel, e));
     mountConcept(panel, e);
     mountExplore(panel, e);

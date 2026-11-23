@@ -372,6 +372,51 @@ server.listen(0, async () => {
             }
             await mp.close();
         }
+        // Every figure in every discipline: explore figures react to their controls, Play animations change the drawing,
+        // 3D views open (and Play where offered). Every discipline has at least one figure.
+        {
+            const fp = await browser.newPage({viewport: {width: 1280, height: 900}}), seen = {explore: 0, concept: 0, view3d: 0}, problems = [], bare = [];
+            fp.on('pageerror', e => errors.push(`figures: ${e.message}`));
+            await fp.goto(url); await fp.evaluate(() => localStorage.setItem('daily-engineer-intro', 'done'));
+            for (const t of await fp.evaluate(() => TOPICS.map(x => x.id))) {
+                await fp.goto(url + `#/${t}/level-3`); await fp.waitForSelector('#problem math-field'); await fp.click('#solution'); await fp.waitForTimeout(250);
+                const counts = await fp.evaluate(() => ['explore', 'concept', 'view3d'].map(c => document.querySelectorAll(`#solution-content .${c}`).length));
+                if (!counts.some(Boolean)) bare.push(t);
+                for (let i = 0; i < counts[0]; i++) {
+                    const box = fp.locator('#solution-content .explore').nth(i), type = await box.getAttribute('data-type');
+                    await box.scrollIntoViewIfNeeded();
+                    const before = await box.locator('.readouts').textContent(), knob = box.locator('.knob:visible'), range = box.locator('input[type=range]'), btn = box.locator('.explore-controls button');
+                    if (await knob.count()) { const b = await knob.first().boundingBox(); await fp.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await fp.mouse.down(); await fp.mouse.move(b.x + b.width / 2 - 40, b.y + b.height / 2 - 20, {steps: 6}); await fp.mouse.up(); }
+                    else if (await range.count()) await range.first().evaluate(el => { el.value = String(Number(el.min) + (Number(el.max) - Number(el.min)) / 3); el.dispatchEvent(new Event('input')); });
+                    else await btn.first().click();
+                    await fp.waitForTimeout(type === 'logic' ? 2200 : 400);
+                    if (before === await box.locator('.readouts').textContent()) problems.push(`${t} ${type} did not react`);
+                    seen.explore++;
+                }
+                for (let i = 0; i < counts[1]; i++) {
+                    const box = fp.locator('#solution-content .concept').nth(i), type = await box.getAttribute('data-type'), before = await box.locator('svg').innerHTML();
+                    await box.locator('.concept-play').click(); await fp.waitForTimeout(900);
+                    if (before === await box.locator('svg').innerHTML()) problems.push(`${t} ${type} did not play`);
+                    seen.concept++;
+                }
+                for (let i = 0; i < counts[2]; i++) {
+                    const box = fp.locator('#solution-content .view3d').nth(i), type = await box.getAttribute('data-type');
+                    await box.locator('.view3d-open').click(); await box.locator('.view3d-stage canvas').waitFor({timeout: 20000});
+                    const play = box.locator('.view3d-controls button:has-text("Play")');
+                    if (await play.count()) { await play.click(); await fp.waitForTimeout(400); if (!await play.isDisabled()) problems.push(`${t} ${type} 3D Play did not start`); }
+                    if (!(await box.locator('.readouts').textContent()).trim()) problems.push(`${t} ${type} 3D view has no readouts`);
+                    seen.view3d++;
+                }
+            }
+            step(`every discipline has figures, and all ${seen.explore} explore figures, ${seen.concept} Play animations and ${seen.view3d} 3D views respond`, !bare.length && !problems.length && seen.explore >= 9 && seen.concept >= 10 && seen.view3d >= 10, JSON.stringify({seen, bare, problems}));
+            // The 3D |H(s)| landscape follows the pole–zero explorer.
+            await fp.goto(url + '#/control/level-2'); await fp.waitForSelector('#problem math-field'); await fp.click('#solution'); await fp.waitForTimeout(200);
+            await fp.locator('.view3d-open').click(); await fp.locator('.view3d canvas').waitFor();
+            const h0 = await fp.locator('.view3d .readouts').textContent(), k = await fp.locator('.explore .knob-pole').first().boundingBox();
+            await fp.mouse.move(k.x + 11, k.y + 11); await fp.mouse.down(); await fp.mouse.move(k.x + 50, k.y - 15, {steps: 6}); await fp.mouse.up(); await fp.waitForTimeout(300);
+            step('the 3D |H(s)| landscape follows the poles dragged in the explorer', h0 !== await fp.locator('.view3d .readouts').textContent());
+            await fp.close();
+        }
         // 3D views (three.js): nothing downloads until a view is opened; the antenna patterns; leaving frees WebGL.
         {
             const tp = await browser.newPage(), bundle = [];
