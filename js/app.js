@@ -375,7 +375,40 @@ function renderCategory() {
     $('#category').innerHTML = `<nav class="crumbs" aria-label="Breadcrumb"><a id="cat-back" href="#/">← Main menu</a><span aria-hidden="true">/</span><span class="crumb-here">${groupName(group)}</span></nav>`
         + `<header class="cat-head"><div><h1>${groupName(group)}</h1><p class="muted">${done} of ${ts.length} done today. Pick a discipline and a level; one solved level a day keeps its streak.</p></div><nav class="switch" aria-label="Category">${sw}</nav></header>`
         + `<div class="cards">${ts.map(cardHTML).join('')}</div>`;
+    cascade([...document.querySelectorAll('#category .card')]);
 }
+/* ---------- Motion (anime.js, vendor/animejs): diagrams draw themselves and category cards cascade in.
+   Nothing moves when the system asks for reduced motion, or if the library did not load. ---------- */
+const calm = () => typeof anime !== 'object' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+/* Clears the inline styles an animation leaves behind (anime.js's own clean-up would restore the hidden start state). */
+const unstyle = els => els.forEach(el => { el.style.removeProperty('opacity'); el.style.removeProperty('transform'); });
+/* Each line of a diagram is drawn in order, as if sketched; dashed guides, filled dots and labels fade in.
+   Afterwards the drawing attributes are removed, so the figure is exactly as it was authored. */
+function drawDiagram(svg) {
+    if (!svg || calm()) return;
+    const shapes = [...svg.querySelectorAll('path, line, polyline, polygon, rect, circle, ellipse')];
+    const lines = shapes.filter(el => !el.hasAttribute('stroke-dasharray') && getComputedStyle(el).fill === 'none');
+    const rest = [...shapes.filter(el => !lines.includes(el)), ...svg.querySelectorAll('text')];
+    const step = Math.min(30, 600 / Math.max(lines.length, 1)), total = 600 + step * lines.length;
+    if (lines.length) anime.animate(anime.createDrawable(lines), {
+        draw: ['0 0', '0 1'], duration: 600, delay: anime.stagger(step), ease: 'inOutSine',
+        onComplete: () => lines.forEach(el => {
+            for (const a of ['pathLength', 'stroke-dasharray', 'stroke-dashoffset', 'draw']) el.removeAttribute(a);
+            el.style.removeProperty('stroke-linecap');
+        })
+    });
+    if (rest.length) {
+        anime.utils.set(rest, {opacity: 0});
+        anime.animate(rest, {opacity: 1, duration: 400, delay: total * .45, ease: 'outQuad', onComplete: () => unstyle(rest)});
+    }
+}
+/* Cards fade up one after another; inline styles are cleared at the end so hover effects work as before. */
+function cascade(els) {
+    if (!els.length || calm()) return;
+    anime.utils.set(els, {opacity: 0, y: 10});
+    anime.animate(els, {opacity: 1, y: 0, duration: 380, delay: anime.stagger(45), ease: 'outQuad', onComplete: () => unstyle(els)});
+}
+
 /* Where Back and Esc lead: problem → its category (or the archive for a past day) → main menu. */
 const backHref = () => view === 'problem' ? (date !== today ? `#/${topic}/archive` : `#/${topicOf(topic).group}`) : '#/';
 /* Above a problem: a breadcrumb with this discipline's streak, and the four levels as labelled tabs. */
@@ -444,6 +477,7 @@ function renderChallenge() {
     const exactParts = e.parts.some(p => p.exact);
     $('#challenge').innerHTML = `<div class="task"><div class="frame problem-frame challenge-body ${curated ? 'curated' : ''}"><div class="problem-meta mono"><span id="status-line">${record?.status === 'solved' ? '✓ COMPLETED' : record?.status === 'reviewed' ? 'SOLUTION REVIEWED' : e.parts.length > 1 ? `${e.parts.length} CONNECTED PARTS` : 'ONE KEY INSIGHT'}</span><span>${e.level} · ${e.minutes}${date === today ? '' : ' · From the archive'}</span></div><h1 class="problem-title">${e.title}</h1><div class="problem-text">${e.text}</div>${e.diagram ? `<div class="diagram-toolbar"><span>Diagram</span><button type="button" id="enlarge-diagram" class="ghost small" aria-haspopup="dialog">Enlarge</button></div><div class="diagram">${e.diagram}</div>` : ''}${e.givens?.length ? `<div class="givens">${e.givens.map(g => `<span class="given">${g}</span>`).join('')}</div>` : ''}<details class="prerequisites"><summary>What you’ll need</summary><p>${e.prerequisites}</p></details></div><aside class="answer-panel" aria-label="Your answers"><div class="panel-head"><h2 class="panel-title">Your answer${e.parts.length > 1 ? 's' : ''}</h2><span id="attempts">${attemptsLabel()}</span></div><form id="answer-form" novalidate><div class="answers">${e.parts.map((p, i) => `<div class="answer-part"><label class="answer-label" for="answer-${i}">${e.parts.length > 1 ? String.fromCharCode(65 + i) + '. ' : ''}${p.label}</label><div class="input-wrap">${fieldHTML(p, i)}${p.unit ? `<span>${p.unit}</span>` : ''}</div><div class="preview" id="preview-${i}" aria-hidden="true"></div><div id="part-feedback-${i}" class="part-feedback" role="status"></div></div>`).join('')}</div><p class="input-help" id="answer-help">${MATH_EDITOR ? 'Type maths: <code>3/4</code> makes a fraction, <code>sqrt</code> a root, <code>pi</code> π; <kbd>→</kbd> steps out. ' : 'Type expressions such as <code>pi/4</code> or <code>sqrt(3)/2</code>. '}${exactParts ? 'Exact answers or 4 significant figures.' : 'Decimals and <code>2e-3</code> work; within 1% unless stated.'}</p>${typingGuideHTML()}<button class="primary" type="submit" id="check">${e.parts.length > 1 ? 'Check all answers' : 'Check answer'}</button><div class="feedback ${record?.status === 'solved' ? 'success' : ''}" id="feedback" role="status">${record?.status === 'solved' ? 'You’ve solved this one. The full working is below.' : ''}</div><div id="next-steps" class="next-steps mono">${nextStepsHTML()}</div></form><div class="help-row"><p class="help-k">Stuck?</p><button id="hint" class="ghost" type="button">Show a hint <span id="hint-count">0/${e.hints.length}</span></button><button id="solution" class="ghost" type="button" aria-expanded="${solutionShown}">${solutionLabel(solutionShown)}</button></div><div id="hints" class="hint-content" hidden></div></aside></div><div id="solution-content" class="solution frame" ${solutionShown ? '' : 'hidden'}>${solutionHTML()}</div>${sourceHTML(e.source)}`;
     renderMath($('#challenge'));
+    drawDiagram($('#challenge .diagram svg'));
     if (e.diagram) {
         const dialog = $('#diagram-dialog');
         const updateDiagram = () => {
