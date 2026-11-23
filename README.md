@@ -39,6 +39,7 @@ A static web app with a new engineering problem every day, in the spirit of dail
   - **Levels 2–4 (Advanced, Challenge, Expert)** are multi-part problems whose values change daily. Level 4 alternates between graduate-level problems and research-grade work that needs numerical methods.
   - Internally the generators work on five difficulty *tiers* (`TIERS` in `js/core.js`); each public level maps to one or more tiers, so the levels can be regrouped without changing any problem.
 - **The full working once you finish.** Solving a problem, or using all five attempts, opens its worked solution: each answer (exact form and decimal) beside the one you gave, the approach, every step of the working and the key idea. Your last answers are kept, so the comparison is still there when you come back (also in the Archive). Revealing the solution before finishing marks the problem as reviewed.
+- **Gentle motion (anime.js).** When a problem opens, its diagram draws itself line by line in under a second, with dashed guides, dots and labels fading in; afterwards the figure is exactly as authored. On category pages the discipline cards fade up one after another. Nothing moves when the system's "reduce motion" setting is on. The library (anime.js 4.5.0, MIT licence) is bundled in `vendor/animejs/`; the code is the Motion section of `js/app.js` (`drawDiagram`, `cascade`).
 - **LaTeX everywhere.** All problem text, hints and solutions are typeset with KaTeX, which is bundled in `vendor/katex/` (MIT licence), so the site needs no CDN.
 - **A real maths editor for answers.** The answer box is a MathLive field (bundled in `vendor/mathlive/`, MIT licence; it shares KaTeX's fonts), so maths becomes typeset as you type:
   - `3/4` becomes a stacked fraction, `sqrt` a root, `pi` gives π, and `^` starts an exponent.
@@ -87,7 +88,7 @@ node tests/exercises.test.js
 node tests/editor.test.js
 ```
 
-`editor.test.js` needs Playwright with Chromium. It walks the navigation (the main menu and first-visit intro, both category pages and their switch, level buttons, the breadcrumbs and level tabs, the tabs, the archive picker, Back, the 1–4/H/Enter/Esc and arrow-key shortcuts, remembered levels, unknown addresses), types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces, then checks the worked solution after solving and after five wrong attempts.
+`editor.test.js` needs Playwright with Chromium. It walks the navigation (the main menu and first-visit intro, both category pages and their switch, level buttons, the breadcrumbs and level tabs, the tabs, the archive picker, Back, the 1–4/H/Enter/Esc and arrow-key shortcuts, remembered levels, unknown addresses), checks the motion on pages with a running clock (a diagram draws and then matches its source, cards cascade and leave no styles behind, and with reduced motion nothing animates), types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces, then checks the worked solution after solving and after five wrong attempts.
 
 The suite checks:
 - Every topic × level, and every topic × tier, for 120 days: each exercise is complete and every answer is finite.

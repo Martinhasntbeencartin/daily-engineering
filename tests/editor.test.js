@@ -249,6 +249,36 @@ server.listen(0, async () => {
         await go('#/progress');
         step('progress lists streaks, the reward ladder and the coin log', await page.locator('.progress-table.streaks').count() === 1 && await page.locator('.ladder li').count() === 8 && await page.locator('.coin-log li').count() === 2);
         await page.evaluate(() => localStorage.clear());
+        // Motion, on fresh pages with a running clock: diagrams draw themselves, cards cascade, reduced motion stays still.
+        for (const reducedMotion of ['no-preference', 'reduce']) {
+            const mp = await browser.newPage({reducedMotion});
+            mp.on('pageerror', e => errors.push(`motion: ${e.message}`));
+            await mp.goto(url + '#/linkbudget/level-2'); await mp.waitForSelector('#problem .diagram svg');
+            const probe = () => mp.evaluate(() => {
+                const svg = document.querySelector('#challenge .diagram svg'), lines = [...svg.querySelectorAll('path, line, polyline, polygon, rect, circle, ellipse')];
+                return {loaded: typeof anime === 'object', drawing: lines.filter(el => el.hasAttribute('pathLength') || el.hasAttribute('draw')).length, hidden: [...svg.querySelectorAll('text')].filter(t => t.style.opacity !== '').length,
+                    guides: [...svg.querySelectorAll('[stroke-dasharray]')].map(el => el.getAttribute('stroke-dasharray')).join('|') === (exercise.diagram.match(/stroke-dasharray="[^"]*"/g) || []).map(m => m.slice(18, -1)).join('|'), authored: (exercise.diagram.match(/stroke-dasharray/g) || []).length};
+            });
+            const early = await probe();
+            await mp.waitForTimeout(2500);
+            const late = await probe();
+            if (reducedMotion === 'reduce') step('reduced motion: the diagram appears at once, nothing animates', early.loaded && early.drawing === 0 && early.hidden === 0, JSON.stringify(early));
+            else {
+                step('a diagram draws itself when the problem opens', early.loaded && early.drawing > 0 && early.hidden > 0, JSON.stringify(early));
+                step('after drawing, the diagram is exactly as authored (dashed guides intact)', late.drawing === 0 && late.hidden === 0 && late.guides && late.authored > 0, JSON.stringify(late));
+            }
+            await mp.evaluate(() => { location.hash = '#/robotics'; }); await mp.waitForTimeout(60);
+            const cards = () => mp.evaluate(() => [...document.querySelectorAll('#category .card')].map(c => c.style.opacity));
+            const c0 = await cards();
+            await mp.waitForTimeout(1200);
+            const c1 = await cards();
+            if (reducedMotion === 'reduce') step('reduced motion: the cards appear at once', c0.every(o => o === ''), JSON.stringify(c0));
+            else {
+                step('category cards fade in one after another', c0.length === 4 && Number(c0[3]) < 1, JSON.stringify(c0));
+                step('the cascade leaves no inline styles behind, so hover still works', c1.every(o => o === '') && await mp.evaluate(() => [...document.querySelectorAll('#category .card')].every(c => !c.style.transform)), JSON.stringify(c1));
+            }
+            await mp.close();
+        }
         if (errors.length) { failures++; console.log('FAIL page errors', errors); }
     } finally {
         await browser.close();
