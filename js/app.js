@@ -571,7 +571,7 @@ function solutionHTML() {
     return `${verdict ? `<p class="solution-verdict">${verdict}</p>` : ''}<h4>Answers</h4><ol class="answer-review">${review}</ol>` +
         `<h4>How to approach it</h4><ul class="approach">${e.hints.map(h => `<li>${h}</li>`).join('')}</ul>` +
         `<h4>Worked solution</h4>${e.steps.length > 1 ? '<div class="walk-bar"><button type="button" class="ghost small" data-walk>Walk through it step by step</button></div>' : ''}<ol class="steps">${e.steps.map(st => `<li>${st}</li>`).join('')}</ol>` +
-        `<h4>Take this with you</h4><p>${e.idea}</p>` + conceptHTML(e) + exploreHTML(e);
+        `<h4>Take this with you</h4><p>${e.idea}</p>` + conceptHTML(e) + exploreHTML(e) + scene3dHTML(e);
 }
 /* Explain why an answer could not be read: an unfinished box, a different unit, or unknown notation. */
 function unreadableHint(i, p) {

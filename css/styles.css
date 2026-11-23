@@ -485,3 +485,15 @@ dialog::backdrop { background: rgba(0, 0, 0, .74); }
 .concept-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; }
 .concept-caption { color: var(--soft); font-size: 14px; flex: 1 1 260px; }
 .primary.small { min-height: 36px; padding: 0 14px; font-size: 13px; }
+
+/* ---------- 3D views (js/scenes3d.js, three.js loaded on demand) ---------- */
+.view3d > .muted { margin: 0 0 10px; }
+.view3d-size { color: var(--muted); font-weight: 400; }
+.view3d-stage { max-width: 680px; }
+.view3d-stage canvas { display: block; width: 100%; border: 1px solid var(--dim); border-radius: 6px; touch-action: none; cursor: grab; }
+.view3d-stage canvas:active { cursor: grabbing; }
+.view3d-controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 18px; max-width: 680px; margin: 12px 0; }
+.slider3d { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px; font-size: 13px; color: var(--soft); }
+.slider3d input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.slider3d output { font-family: var(--mono); color: var(--ink); }
+.view3d-views { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }

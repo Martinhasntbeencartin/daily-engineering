@@ -189,6 +189,7 @@ bank('kinematics', 'advanced', [{
     }
 }, {
     title: 'Counting the freedoms of a hexapod',
+    view3d: {type: 'hexapod'},
     diagram: sketch('Stewart platform: a fixed base and a moving top plate joined by six extensible legs.',
         wire('M170 205H550') + wire('M270 70H450') + wire('M200 205L290 70M250 205L280 70M330 205L320 70M390 205L400 70M470 205L440 70M520 205L430 70') +
         [200, 250, 330, 390, 470, 520].map(x => ring(x, 205, 5)).join('') + [290, 280, 320, 400, 440, 430].map(x => ring(x, 70, 5)).join(''),
@@ -420,6 +421,7 @@ function makeRoboticsExercise(topic, date, level) {
             const S = a2 * Math.sin(q2) + a3 * Math.sin(q2 + q3), R = a2 * Math.cos(q2) + a3 * Math.cos(q2 + q3), c1 = Math.cos(q1), s1 = Math.sin(q1), s23 = Math.sin(q2 + q3), c23 = Math.cos(q2 + q3);
             const J = [[-R * s1, -S * c1, -a3 * s23 * c1], [R * c1, -S * s1, -a3 * s23 * s1], [0, R, a3 * c23]], det = Math.abs(det3(J)), qd = NUM.solve(J, v);
             extra.explore = {type: 'arm2', l1: a2, l2: a3, target: [r, s]};
+            extra.view3d = {type: 'arm3', d1, a2, a3, target: [x, y, z], q: [q1, q2, q3]};
             return q('An elbow arm in three dimensions', T`An elbow (anthropomorphic) arm has a base joint $q_1$ about the vertical axis, a shoulder at height $d_1 = ${d1}\,\text{m}$, and shoulder and elbow joints $q_2$, $q_3$ in the vertical plane, with links $a_2 = ${a2}\,\text{m}$ and $a_3 = ${a3}\,\text{m}$. $q_2$ is measured up from the horizontal and $q_3$ relative to the upper arm. The hand must reach $(${x}, ${y}, ${z})\,\text{m}$ with the arm facing the target and the elbow up ($q_3 < 0$). Find the joint angles and $|\det J|$. Then find the joint rates for a hand velocity $\mathbf v = (${v.join(', ')})\,\text{m/s}$.`,
                 [T`$d_1 = ${d1}\,\text{m}$, $a_2 = ${a2}\,\text{m}$, $a_3 = ${a3}\,\text{m}$`, T`Target $(${x}, ${y}, ${z})\,\text{m}$`, T`$\mathbf v = (${v.join(', ')})\,\text{m/s}$`],
                 [p(T`$q_1$`, deg(q1), '°', .01, .05), p(T`$q_2$`, deg(q2), '°', .01, .05), p(T`$q_3$`, deg(q3), '°', .01, .05), p(T`$|\det J|$`, det, 'm³'), p(T`$\dot q_1$`, qd[0], 'rad/s', .01, .002), p(T`$\dot q_2$`, qd[1], 'rad/s', .01, .002), p(T`$\dot q_3$`, qd[2], 'rad/s', .01, .002)],

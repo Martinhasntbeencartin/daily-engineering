@@ -372,6 +372,30 @@ server.listen(0, async () => {
             }
             await mp.close();
         }
+        // 3D views (three.js): nothing downloads until a view is opened; the elbow arm starts on its target; leaving frees WebGL.
+        {
+            const tp = await browser.newPage(), bundle = [];
+            tp.on('pageerror', e => errors.push(`3d: ${e.message}`));
+            tp.on('request', r => { if (r.url().includes('three-lite')) bundle.push(r.url()); });
+            await tp.goto(url + '#/kinematics/level-4'); await tp.waitForSelector('#problem math-field');
+            await tp.evaluate(() => { exercise = {...makeTierExercise('kinematics', '2026-03-02', 'expert'), level: exercise.level, minutes: exercise.minutes}; openSolution(); });
+            const before = bundle.length;
+            await tp.click('.view3d-open'); await tp.waitForSelector('.view3d-stage canvas', {timeout: 20000}); await tp.waitForTimeout(300);
+            const arm = await tp.textContent('.view3d .readouts');
+            await tp.fill('.view3d-controls input >> nth=0', '0'); await tp.dispatchEvent('.view3d-controls input >> nth=0', 'input');
+            const moved = await tp.textContent('.view3d .readouts');
+            step('a 3D view downloads three.js only when opened, and the elbow arm starts on its target', before === 0 && bundle.length === 1 && /Distance to target\s*0\.0 mm/.test(arm) && moved !== arm, arm.replace(/\s+/g, ' ').slice(0, 90));
+            await tp.goto(url + '#/linkbudget/level-4'); await tp.waitForSelector('#problem math-field');
+            await tp.click('#solution'); await tp.click('.view3d-open'); await tp.waitForSelector('.view3d-stage canvas'); await tp.waitForTimeout(200);
+            await tp.fill('.view3d-controls input >> nth=2', '40'); await tp.dispatchEvent('.view3d-controls input >> nth=2', 'input');
+            const pat = await tp.textContent('.view3d .readouts');
+            await tp.click('.view3d-views button:has-text("Short dipole")');
+            const dip = await tp.textContent('.view3d .readouts');
+            step('the antenna pattern view shows a steered array as a cone and the dipole as a doughnut', /cone 50° from the array axis/.test(pat) && /doughnut/.test(dip) && bundle.length === 1, pat.replace(/\s+/g, ' ').slice(0, 120));
+            await tp.goto(url + '#/'); await tp.waitForTimeout(200);
+            step('leaving a problem frees its 3D view', await tp.evaluate(() => document.querySelectorAll('canvas').length) === 0);
+            await tp.close();
+        }
         if (errors.length) { failures++; console.log('FAIL page errors', errors); }
     } finally {
         await browser.close();

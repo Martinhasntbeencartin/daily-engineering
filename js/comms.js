@@ -282,6 +282,7 @@ bank('modulation', 'advanced', [{
 
 bank('linkbudget', 'advanced', [{
     title: 'The directivity of the simplest antenna',
+    view3d: {type: 'pattern', mode: 'dipole'},
     diagram: sketch('Short dipole on a vertical axis with its doughnut-shaped sin-squared radiation pattern.',
         wire('M360 40V210') + `<path d="${Array.from({length: 181}, (_, i) => { const t = i * Math.PI / 180, r = 110 * Math.sin(t) ** 2; return (i ? 'L' : 'M') + (360 + r * Math.sin(t)).toFixed(1) + ' ' + (125 - r * Math.cos(t)).toFixed(1); }).join('')}${Array.from({length: 181}, (_, i) => { const t = i * Math.PI / 180, r = 110 * Math.sin(t) ** 2; return 'L' + (360 - r * Math.sin(t)).toFixed(1) + ' ' + (125 + r * Math.cos(t)).toFixed(1); }).join('')}" stroke="#b5532d"/>` + guide('M360 125L460 60'),
         [[360, 28, 'dipole axis'], [520, 130, 'sin²θ'], [400, 84, 'θ']]),
@@ -564,6 +565,7 @@ function makeCommsExercise(topic, date, level) {
         for (let i = 0; i <= 8000; i++) { const u = -1 + i / 4000; if (Math.abs(u - u0) > nullU) psl = Math.max(psl, af(u)); }
         const gmax = 1 / dl - 1 >= 1 ? 90 : deg(Math.asin(1 / dl - 1));
         extra.explore = {type: 'array', N, d: dl, theta0: th0};
+        extra.view3d = {type: 'pattern', mode: 'array', N, d: dl, theta0: th0};
         return q('Steering a uniform linear array', T`A uniform linear array has $N = ${N}$ isotropic elements spaced $d = ${dl}\lambda$ along a line, with equal amplitudes and a progressive phase that steers the main beam to $\theta_0 = ${th0}^\circ$ from broadside. With $u = \sin\theta$, the normalised power pattern is $\left|\dfrac{\sin(N\psi/2)}{N\sin(\psi/2)}\right|^2$ with $\psi = kd(u - u_0)$. Find the directivity by integrating the pattern over all directions, the half-power beamwidth, the peak sidelobe level, and the largest steering angle this spacing allows without grating lobes.`,
             [T`$N = ${N}$, $d = ${dl}\lambda$`, T`$\theta_0 = ${th0}^\circ$ from broadside`, 'Isotropic elements, uniform amplitudes'],
             [p('Directivity', dB(D), 'dBi', .005), p('Half-power beamwidth', hpbw, '°'), p('Peak sidelobe level', 10 * Math.log10(psl), 'dB', .01), p('Largest grating-lobe-free steering angle', gmax, '°')],

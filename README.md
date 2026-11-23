@@ -54,6 +54,11 @@ A static web app with a new engineering problem every day, in the spirit of dail
     - **Walk through it step by step:** the worked solution one step at a time (Next, Back, Show all), beside a copy of the diagram whose labels light up when the step names them (for example R₁, q₂, I₀). With reduced motion the steps change without animation.
     - **See it move (Play):** a rotating phasor tracing a sine wave (power, signals), charge flowing round a series loop (circuits), Γ turning on a Smith chart as the line lengthens, using the problem's own load (RF circuits), a constellation growing from QPSK to 16- and 64-QAM (modulation), and a step response morphing as damping grows (control, robot dynamics).
     - **Explore (drag):** a two-link robot arm that solves its own inverse kinematics as you drag the hand (robot kinematics, with the problem's link lengths and target), a steerable antenna array with live beamwidth, directivity and grating-lobe readouts (antennas & link budgets), and a simply supported beam whose reactions and bending moment follow the load (statics). The knobs also move with the arrow keys.
+- **3D views (three.js 0.187.0, MIT, in `vendor/three/`; code in `js/scenes3d.js`).** An **Explore in 3D** section in the worked solution, loaded only when you press **Open the 3D view** (about 140 KB, once per visit). Orbit with the mouse or a finger; nothing moves on its own.
+  - **Elbow robot arm** (robot kinematics): turn the base, shoulder and elbow; on the 3D-arm problem it starts on the problem's target, with the distance to the target and |det J|.
+  - **Stewart platform** (the hexapod problem): six pose sliders (x, y, height, roll, pitch, yaw) set all six leg lengths, and legs outside their stroke turn red.
+  - **Antenna radiation pattern** (antennas & link budgets, electromagnetism): the short dipole's doughnut, and a line array whose steered beam is a cone around the array axis; change the element count, spacing and steering.
+  - The bundle is tree-shaken to the parts in `tools/three-entry.js`. To rebuild it, in any folder run `npm install --no-save three@0.187.0 esbuild`, then `node /path/to/daily-engineering/tools/build-three.mjs`.
 - **LaTeX everywhere.** All problem text, hints and solutions are typeset with KaTeX, which is bundled in `vendor/katex/` (MIT licence), so the site needs no CDN.
 - **A real maths editor for answers.** The answer box is a MathLive field (bundled in `vendor/mathlive/`, MIT licence; it shares KaTeX's fonts), so maths becomes typeset as you type:
   - `3/4` becomes a stacked fraction, `sqrt` a root, `pi` gives π, and `^` starts an exponent.
@@ -102,7 +107,7 @@ node tests/exercises.test.js
 node tests/editor.test.js
 ```
 
-`editor.test.js` needs Playwright with Chromium. It walks the navigation (the main menu and first-visit intro, both category pages and their switch, level buttons, the breadcrumbs and level tabs, the tabs, the archive picker, Back, the 1–4/H/Enter/Esc and arrow-key shortcuts, remembered levels, unknown addresses), checks every motion feature on pages with a running clock (the diagram draw, card cascade, decoding verdict and drawn ticks, walk-through, dragging and arrow keys on an explore figure, Play, the switch glide, counting coins and the reward toast, the growing bars), and again with reduced motion, where nothing animates but the walk-through and explore figures still work. The main run freezes the clock (anime.js times itself with `Date.now`), so it runs with reduced motion; types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces, then checks the worked solution after solving and after five wrong attempts.
+`editor.test.js` needs Playwright with Chromium. It walks the navigation (the main menu and first-visit intro, both category pages and their switch, level buttons, the breadcrumbs and level tabs, the tabs, the archive picker, Back, the 1–4/H/Enter/Esc and arrow-key shortcuts, remembered levels, unknown addresses), checks every motion feature on pages with a running clock (the diagram draw, card cascade, decoding verdict and drawn ticks, walk-through, dragging and arrow keys on an explore figure, Play, the switch glide, counting coins and the reward toast, the growing bars), and again with reduced motion, where nothing animates but the walk-through and explore figures still work. It also opens the 3D views: three.js downloads only when a view is opened, the elbow arm starts on its target, the antenna view shows a cone and a doughnut, and leaving the page frees WebGL. The main run freezes the clock (anime.js times itself with `Date.now`), so it runs with reduced motion; types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces, then checks the worked solution after solving and after five wrong attempts.
 
 The suite checks:
 - Every topic × level, and every topic × tier, for 120 days: each exercise is complete and every answer is finite.
@@ -141,6 +146,8 @@ Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, i
 | `js/numerics.js` | Linear solve, matrix exponential, Jacobi eigenvalues, polynomial roots, bisection, Simpson |
 | `js/diagrams.js` | SVG drawing helpers |
 | `js/motion.js` | Motion (anime.js): diagram drawing, cascades, counters, ticks, toast, glides; the walk-through, concept animations and explore figures |
+| `js/scenes3d.js` | 3D views with three.js (elbow arm, Stewart platform, radiation patterns), loaded on demand |
+| `tools/build-three.mjs`, `tools/three-entry.js` | Build the tree-shaken three.js bundle in `vendor/three/` |
 | `js/app.js` | Screens and hash routes, the answer editor, progress and attempts (localStorage), archive |
 
 ## Licence note

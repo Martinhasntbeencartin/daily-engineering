@@ -434,4 +434,5 @@ function mountSolution(panel, e) {
     panel.querySelector('[data-walk]')?.addEventListener('click', () => startWalk(panel, e));
     mountConcept(panel, e);
     mountExplore(panel, e);
+    if (typeof mount3D === 'function') mount3D(panel, e); // js/scenes3d.js
 }
