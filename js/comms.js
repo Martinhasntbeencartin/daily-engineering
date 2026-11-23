@@ -36,24 +36,148 @@ const czin = (Z0, ZL, t) => cm(cx(Z0), cd(ca(ZL, cx(0, Z0 * t)), ca(cx(Z0), cm(c
 const cconj = a => cx(a.re, -a.im);
 
 /* ---------- diagrams ---------- */
-function constellationDiagram(pts, caption) {
-    const s = 95 / Math.max(...pts.flatMap(p => [Math.abs(p[0]), Math.abs(p[1])]));
-    let b = guide('M200 120H520') + guide('M360 18V222') + dt(536, 125, 'I') + dt(360, 12, 'Q');
-    pts.forEach(([i, qv]) => { b += `<circle cx="${(360 + s * i).toFixed(1)}" cy="${(120 - s * qv).toFixed(1)}" r="5" fill="#315740"/>`; });
-    return drawing(b + dt(360, 250, caption), 'Signal constellation in the I–Q plane. ' + caption, 255);
+function constellationDiagram(pts, caption, psk=false) {
+    const peak = Math.max(...pts.flatMap(([i, q]) => [Math.abs(i), Math.abs(q)])), s = 90 / peak;
+    let b = arrow(184, 122, 527, 122) + arrow(360, 224, 360, 15) + dt(546, 128, 'I') + dt(380, 21, 'Q');
+    if (psk) {
+        b += '<circle cx="360" cy="122" r="90" stroke="#83968b" stroke-dasharray="5 5"/>' +
+            `<path d="M450 122L${360 + s * pts[1][0]} ${122 - s * pts[1][1]}" stroke="#b5532d"/>` +
+            note(462, 92, 'dₘᵢₙ');
+    } else {
+        for (const sign of [-1, 1]) {
+            const x = 360 + sign * 90;
+            b += wire(`M${x} 118v8`) + dt(x + sign * 19, 145, sign * peak);
+        }
+    }
+    pts.forEach(([i, q]) => { b += `<circle cx="${(360 + s * i).toFixed(1)}" cy="${(122 - s * q).toFixed(1)}" r="4.5" fill="#315740"/>`; });
+    return drawing(b + dt(360, 254, caption), 'Signal constellation in the I–Q plane. ' + caption +
+        (psk ? '. The chord joins two adjacent symbols.' : `. The outer coordinate on each axis is ±${peak}.`), 265);
 }
-function tlineDiagram(caption, load, length='ℓ') {
-    return drawing(element('AC', 90, 70, 90, 190, '') + dt(50, 134, 'Vs') + wire('M90 70H560M90 190H560') + element('R', 560, 70, 560, 190, load) +
-        guide('M180 214H560') + dt(370, 236, length) + dt(330, 56, 'Z₀') + dt(180, 130, 'Z_in →'), 'Transmission line driven at one end and terminated in a load. ' + caption, 250);
+function tlineDiagram(z0, load, length) {
+    return drawing(ring(102, 83, 5) + ring(102, 181, 5) + wire('M107 83H502M107 181H502') +
+        element('R', 502, 83, 502, 181, load) + dt(128, 55, 'Input port') +
+        arrow(119, 121, 182, 121) + dt(150, 152, 'Zᵢₙ') + dt(317, 64, `Z₀ = ${z0} Ω`) +
+        wire('M107 207v12m0 -6h395m0 -6v12') + dt(305, 245, length),
+        `Two-conductor line with characteristic impedance ${z0} ohms, terminated in ${load}. ${length}.`, 265);
 }
-function towerLink(caption, ht='h_t', hr='h_r') {
-    return drawing(wire('M60 220H660') + wire('M120 220V60M610 220V140') + `<path d="M108 60h24l-12 -18z"/><path d="M598 140h24l-12 -18z"/>` +
-        wire('M120 60L610 140') + guide('M120 60L420 220L610 140') + dt(90, 140, ht) + dt(640, 180, hr) + dt(420, 240, 'ground reflection') + dt(365, 84, 'direct') + dt(360, 22, caption),
-        'Two antennas on towers over flat ground, with the direct ray and the ground-reflected ray. ' + caption, 250);
+
+function towerLink(ht, hr, caption) {
+    const left = 148, right = 565, groundY = 198, scale = 140 / ht;
+    const tx = groundY - ht * scale, rx = groundY - hr * scale;
+    const reflection = left + (right - left) * ht / (ht + hr);
+    return drawing(wire(`M75 ${groundY}H660M${left} ${groundY}V${tx}M${right} ${groundY}V${rx}`) +
+        wire(`M${left} ${tx}L${right} ${rx}`) + guide(`M${left} ${tx}L${reflection} ${groundY}L${right} ${rx}`) +
+        dot(left, tx) + dot(right, rx) + dt(left - 63, tx + 5, `Tx · ${ht} m`) + note(right + 14, rx - 7, `Rx · ${hr} m`) +
+        wire('M134 235h35') + note(182, 241, 'Direct ray') + guide('M354 235h35') + note(404, 241, 'Ground reflection') +
+        dt(360, 25, caption), `Direct and reflected paths over level ground, transmitter ${ht} m and receiver ${hr} m high. ${caption}`, 263);
+}
+
+function freeSpaceLink(f, distance, pt, gt, gr, loss) {
+    return drawing(wire('M130 176V82l-22 -25m22 25 22 -25M583 176V82l-22 -25m22 25 22 -25') +
+        arrow(160, 83, 551, 83) + dt(357, 62, `${distance} km · ${f} GHz`) +
+        dt(130, 207, `Tx · ${pt} dBm`) + dt(583, 207, 'Receiver') +
+        note(157, 147, `${gt} dBi`) + dt(513, 147, `${gr} dBi`) + dt(360, 244, `Total cable and connector loss ${loss} dB`),
+        `Free-space path of ${distance} km between antennas with gains of ${gt} and ${gr} dBi.`, 263);
+}
+
+function sourceProbabilities(ps) {
+    const y = p => 195 - 300 * p;
+    let b = wire('M105 38V195H620') + dt(80, 55, '0.5') + dt(82, 201, '0') +
+        guide('M105 45H620') + note(350, 24, 'Probability');
+    ps.forEach((p, i) => {
+        const x = 161 + i * 98;
+        b += `<rect x="${x - 26}" y="${y(p)}" width="52" height="${195 - y(p)}" fill="#d5e0d8"/>` +
+            dt(x, y(p) + (p > .38 ? 24 : -9), p) + dt(x, 225, 'ABCDE'[i]);
+    });
+    return drawing(b + dt(360, 259, 'Source symbol'), 'Distribution of the five source symbols A to E. Probabilities: ' + ps.join(', '), 277);
+}
+
+function diversityDiagram(count, snr) {
+    const cy = 58 + (count - 1) * 28;
+    let b = '';
+    for (let i = 0; i < count; i++) {
+        const y = 42 + 56 * i;
+        const angle = ((i / (count - 1)) - .5) * Math.PI / 2;
+        b += wire(`M140 ${y + 16}v-15l-14 -13m14 13 14 -13`) + arrow(140, y + 16, 292, y + 16) +
+            dt(221, y + 5, `Branch ${i + 1}`) + wire(`M292 ${y - 3}h75v38h-75z`) + dt(330, y + 21, `w${'₁₂₃₄'[i]}`) +
+            arrow(367, y + 16, 510 - 23 * Math.cos(angle), cy + 23 * Math.sin(angle));
+    }
+    return drawing(b + ring(510, cy, 23) + dt(510, cy + 6, 'Σ') + arrow(533, cy, 631, cy) + dt(606, cy - 16, 'Detector') +
+        dt(360, 49 + 56 * count, `Independent Rayleigh branches · ${snr} dB per branch`),
+        `${count} independent receive antennas feed separate channel weights. The weighted samples are summed before 16-QAM detection.`, 69 + 56 * count);
+}
+
+function convolutionalEncoder() {
+    return drawing(wire('M140 122H200M200 100h74v44h-74zM274 122h91M365 100h74v44h-74zM439 122h41') +
+        arrow(59, 122, 140, 122) + dt(84, 103, 'u') + dt(237, 128, 'z⁻¹') + dt(402, 128, 'z⁻¹') +
+        dot(154, 122) + dot(311, 122) + dot(480, 122) +
+        wire('M154 122V49H293M311 122V67M329 49H462M480 122V67M154 122V199H462M480 122V181') +
+        [ [311, 49], [480, 49], [480, 199] ].map(([x,y]) => ring(x, y, 18) + dt(x, y + 6, '+')).join('') +
+        arrow(498, 49, 598, 49) + arrow(498, 199, 598, 199) + dt(628, 55, 'c₁') + dt(628, 205, 'c₂') +
+        dt(360, 255, 'One shift per input bit · sums are modulo 2'),
+        'Two unit delays. The first output XORs the input with both delayed bits (111). The second XORs the input with the twice-delayed bit (101).', 275);
+}
+
+function shuntStub(R, X) {
+    return drawing(ring(90, 75, 5) + wire('M95 75H569') + dt(115, 50, 'Input') + dot(310, 75) +
+        wire('M299 91h22v82h-22zM310 75v16m0 82v14') + ground(310, 187) + dt(229, 136, '50 Ω stub') +
+        note(335, 150, 'ℓ') + element('R', 569, 75, 569, 169) + ground(569, 169) +
+        dt(581, 50, `${R} ${X < 0 ? '−' : '+'} j${Math.abs(X)} Ω`) +
+        wire('M310 18v12m0 -6h259m0 -6v12') + dt(440, 52, 'd') +
+        dt(360, 255, '50 Ω main line · common RF ground'),
+        'RF single-line representation. The shunt stub is connected at distance d from the load and shorted to the return at its far end.', 275);
+}
+
+function quarterWaveSections(count, load) {
+    const x0 = 128, pitch = 420 / count;
+    let b = ring(70, 84, 5) + ring(70, 164, 5) + wire('M75 84H598M75 164H598') + dt(87, 60, '50 Ω');
+    for (let i = 0; i <= count; i++) {
+        const x = x0 + i * pitch;
+        b += guide(`M${x} 68v111`);
+        if (i < count) b += dt(x + pitch / 2, 130, 'Z' + '₁₂₃₄'[i]) + dt(x + pitch / 2, 202, 'λ₀/4');
+    }
+    return drawing(b + element('R', 598, 84, 598, 164, load + ' Ω') + dt(359, 246, 'Dashed lines mark section boundaries'),
+        `Two continuous conductors through ${count} quarter-wave sections, between a 50 ohm port and a ${load} ohm load.`, 268);
+}
+
+function matchedAmplifier(f) {
+    return drawing(wire('M263 72h198v92H263z') + dt(362, 123, 'Transistor  [S]') +
+        arrow(87, 95, 263, 95) + arrow(263, 143, 87, 143) + arrow(461, 95, 633, 95) + arrow(633, 143, 461, 143) +
+        dt(172, 85, 'a₁') + dt(172, 170, 'b₁') + dt(553, 85, 'b₂') + dt(553, 170, 'a₂') +
+        dt(159, 44, 'Source match Γₛ') + dt(552, 44, 'Load match Γʟ') + dt(360, 225, `50 Ω reference ports · ${f} GHz`),
+        'Transistor scattering two-port. The incident waves enter ports one and two, and the reflected waves leave towards their respective matching networks.', 250);
+}
+function waterFilling(gains, level) {
+    const top = 54, bottom = 203, ceiling = 1.6 * level;
+    const y = p => bottom - (bottom - top) * Math.min(p / ceiling, 1);
+    let bars = '', clipped = false;
+    gains.forEach((gain, k) => {
+        const floor = 1 / gain, x = 90 + 34 * k, h = y(floor);
+        bars += `<rect x="${x}" y="${h}" width="25" height="${bottom - h}" fill="#d5e0d8"/>`;
+        if (floor < level) bars += `<rect x="${x}" y="${y(level)}" width="25" height="${h - y(level)}" fill="#b5532d" fill-opacity=".35"/>`;
+        if (floor > ceiling) {
+            bars += arrow(x + 12.5, h + 14, x + 12.5, h - 10);
+            clipped = true;
+        }
+    });
+    return drawing(bars + guide(`M80 ${y(level)}H640`) + dt(658, y(level) + 6, 'μ') +
+        wire('M79 203H639') + dt(103, 227, '0') + dt(612, 227, '15') + dt(360, 227, 'Subcarrier k') +
+        dt(360, 22, 'Noise floor 1/gₖ and allocated power above it') +
+        (clipped ? dt(360, 259, '↑ Noise floor exceeds the plotted range') : ''),
+        'Water-filling across the 16 subcarriers. Power fills the gap between each low floor and the common level μ. Floors above μ receive no power.', 275);
+}
+
+function downlinkDiagram(diameter, range, eirp) {
+    return drawing(wire('M103 105Q80 229 231 203M103 105L174 147L231 203M139 192l-12 30m-35 0h74') +
+        dot(174, 147) + wire('M555 49h53v39h-53zM555 68h-12m65 0h12') +
+        wire('M487 54h56v28h-56zM620 54h56v28h-56zM515 54v28m133 -28v28') +
+        guide('M575 89L177 147') + dt(375, 96, `${range} km`) + dt(575, 30, `EIRP ${eirp} dBW`) +
+        dt(161, 251, `Receiving dish · ${diameter} m`),
+        `Satellite downlink over ${range} km to a ${diameter} metre ground-station dish, with its feed at the focus.`, 275);
 }
 function bscDiagram(p) {
     return drawing(ring(170, 70, 8) + ring(170, 190, 8) + ring(550, 70, 8) + ring(550, 190, 8) + arrow(180, 70, 540, 70) + arrow(180, 190, 540, 190) + arrow(180, 76, 540, 184) + arrow(180, 184, 540, 76) +
-        dt(140, 76, '0') + dt(140, 196, '1') + dt(580, 76, '0') + dt(580, 196, '1') + dt(360, 58, '1 − p') + dt(360, 214, '1 − p') + dt(300, 112, 'p') + dt(300, 160, 'p') + dt(360, 246, 'p = ' + p),
+        dt(140, 76, '0') + dt(140, 196, '1') + dt(580, 76, '0') + dt(580, 196, '1') + dt(360, 58, '1 − p') + dt(360, 214, '1 − p') + dt(288, 97, 'p') + dt(288, 175, 'p') + dt(360, 246, 'p = ' + p),
         'Binary symmetric channel: each bit arrives correctly with probability 1 − p and flipped with probability p', 255);
 }
 
@@ -119,7 +243,7 @@ bank('modulation', 'advanced', [{
     verify: () => { const e = QAM16.map(([i, qv]) => i * i + qv * qv); return [Math.max(...e) / (e.reduce((s, v) => s + v, 0) / e.length)]; }
 }, {
     title: 'How close are the points of 8-PSK?',
-    diagram: constellationDiagram(Array.from({length: 8}, (_, k) => [Math.cos(k * Math.PI / 4), Math.sin(k * Math.PI / 4)]), '8-PSK on the unit circle'),
+    diagram: constellationDiagram(Array.from({length: 8}, (_, k) => [Math.cos(k * Math.PI / 4), Math.sin(k * Math.PI / 4)]), '8-PSK on the unit circle', true),
     text: T`An 8-PSK constellation places 8 points evenly on a circle, with unit symbol energy. What is the minimum distance between points?`,
     parts: [ex(T`$d_{\min}$`, Math.sqrt(2 - Math.SQRT2), T`\sqrt{2-\sqrt2}`)],
     hints: [T`Neighbours are $45^\circ$ apart on a unit circle: $d = 2\sin(\pi/8)$.`],
@@ -129,7 +253,14 @@ bank('modulation', 'advanced', [{
     verify: () => { const pts = Array.from({length: 8}, (_, k) => [Math.cos(k * Math.PI / 4), Math.sin(k * Math.PI / 4)]); let d = Infinity; for (const a of pts) for (const b of pts) if (a !== b) d = Math.min(d, Math.hypot(a[0] - b[0], a[1] - b[1])); return [d]; }
 }, {
     title: 'Say it three times',
-    diagram: signalChain(['Bit b', 'Repeat|b b b', 'BSC|p = 0.1', 'Majority|vote'], 'Three-fold repetition code'),
+    diagram: sketch('One example of majority decoding. Three copies of a one are sent. One flips to zero, so the two surviving ones win the vote.',
+        [0, 1, 2].map(i => {
+            const y = 67 + 51 * i;
+            return dt(171, y + 6, '1') + arrow(193, y, 322, y) + dt(346, y + 6, i === 1 ? '0' : '1') +
+                arrow(369, y, 458, 106 + i * 12);
+        }).join('') + wire('M458 88h89v60h-89z') + arrow(547, 118, 608, 118),
+        [[171, 34, 'Sent'], [346, 34, 'Received'], [503, 124, 'Majority'], [627, 124, '1'],
+         [360, 218, 'One possible reception · independent flip probability 0.1 per bit']]),
     text: T`Each bit is sent three times over a binary symmetric channel with crossover probability $p = 0.1$, and the receiver takes a majority vote. What is the probability that the decoded bit is wrong?`,
     parts: [ex('Error probability', .028, T`\dfrac{7}{250}`)],
     hints: [T`The vote fails if two or three of the copies are flipped.`],
@@ -163,7 +294,7 @@ bank('linkbudget', 'advanced', [{
     verify: () => [1 / (NUM.simpson(t => Math.sin(t) ** 3, 0, Math.PI) / 2)]
 }, {
     title: 'Where the ground starts to bite',
-    diagram: towerLink('h_t = 10 m, h_r = 2 m, λ = 0.5 m', 'h_t', 'h_r'),
+    diagram: towerLink(10, 2, 'λ = 0.5 m'),
     text: T`Over flat ground, the two-ray model predicts that beyond a crossover distance the received power falls as $(h_th_r/d^2)^2$ instead of the free-space $(\lambda/4\pi d)^2$. For antenna heights $h_t = 10\,\text{m}$ and $h_r = 2\,\text{m}$ at $\lambda = 0.5\,\text{m}$ ($600\,\text{MHz}$), at what distance do the two laws give the same power?`,
     parts: [ex('Crossover distance', 160 * Math.PI, T`160\pi`, 'm')],
     hints: [T`Set $\dfrac{\lambda}{4\pi d} = \dfrac{h_th_r}{d^2}$.`],
@@ -173,7 +304,7 @@ bank('linkbudget', 'advanced', [{
     verify: () => [NUM.bisect(d => .5 / (4 * Math.PI * d) - 20 / (d * d), 10, 1e5)]
 }, {
     title: 'The first stage decides the noise',
-    diagram: signalChain(['Antenna', 'LNA|G = 20 dB|T = 50 K', 'Receiver|T = 1000 K'], 'Noise temperatures in cascade'),
+    diagram: noiseCascade('LNA · 50 K', 'G = 20 dB', 'Receiver · 1000 K', 'Antenna'),
     text: T`A low-noise amplifier with gain $20\,\text{dB}$ and noise temperature $50\,\text{K}$ feeds a receiver with noise temperature $1000\,\text{K}$. What is the noise temperature of the cascade?`,
     parts: [ex('Noise temperature', 60, '60', 'K')],
     hints: [T`Friis: $T = T_1 + \dfrac{T_2}{G_1} + \dfrac{T_3}{G_1G_2} + \cdots$, with gains as ratios.`],
@@ -183,7 +314,7 @@ bank('linkbudget', 'advanced', [{
     verify: () => { const G1 = 10 ** 2, out = 50 * G1 + 1000; return [out / G1]; } // output noise referred back to the input
 }, {
     title: 'Clearance for a microwave hop',
-    diagram: drawing(wire('M60 220H660') + wire('M100 220V80M620 220V80') + wire('M100 80L620 80') + `<ellipse cx="360" cy="80" rx="260" ry="46" stroke="#b5532d"/>` + guide('M360 80V126') + dt(380, 108, 'r₁') + dt(360, 40, '10 km at 3 GHz') + dt(230, 74, 'd₁') + dt(490, 74, 'd₂'), 'Microwave link between two towers with the first Fresnel zone drawn as an ellipse around the line of sight', 240),
+    diagram: drawing(wire('M60 220H660') + wire('M100 220V80M620 220V80') + wire('M100 80L620 80') + `<ellipse cx="360" cy="80" rx="260" ry="46" stroke="#b5532d"/>` + guide('M360 80V126') + dt(380, 108, 'r₁') + dt(360, 21, '10 km at 3 GHz') + dt(230, 74, 'd₁') + dt(490, 74, 'd₂'), 'Microwave link between two towers with the first Fresnel zone drawn as an ellipse around the line of sight', 240),
     text: T`A $10\,\text{km}$ microwave link runs at $3\,\text{GHz}$ ($\lambda = 0.1\,\text{m}$). What is the radius of the first Fresnel zone at mid-path, the clearance to keep free of obstacles?`,
     parts: [ex(T`$r_1$`, 5 * Math.sqrt(10), T`5\sqrt{10}`, 'm')],
     hints: [T`On the zone's edge the bent path is half a wavelength longer: $r_1 = \sqrt{\dfrac{\lambda d_1d_2}{d_1 + d_2}}$.`],
@@ -209,7 +340,7 @@ bank('rfcircuits', 'advanced', [{
     }
 }, {
     title: 'A 75 Ω antenna on a 50 Ω line',
-    diagram: tlineDiagram('A 50 Ω line ending in a 75 Ω antenna', '75 Ω', 'any length'),
+    diagram: tlineDiagram(50, '75 Ω', 'Any line length'),
     text: T`A $75\,\Omega$ antenna is connected to a $50\,\Omega$ line. What is the return loss, in dB?`,
     parts: [ex('Return loss', 20 * Math.log10(5), T`20\log_{10}5`, 'dB')],
     hints: [T`$\Gamma = \dfrac{Z_L - Z_0}{Z_L + Z_0}$ and $\text{RL} = -20\log_{10}|\Gamma|$.`],
@@ -229,7 +360,7 @@ bank('rfcircuits', 'advanced', [{
     verify: () => [NUM.bisect(l => czin(1, cx(1e9), Math.tan(2 * Math.PI * l)).im + 1 / Math.sqrt(3), .01, .24, 60)]
 }, {
     title: 'The Q of an L-network',
-    diagram: drawing(element('AC', 90, 70, 90, 190, '') + dt(48, 134, '50 Ω') + element('L', 90, 70, 330, 70, 'X_s') + element('C', 330, 70, 330, 190, 'X_p') + wire('M330 70H520M90 190H520') + element('R', 520, 70, 520, 190, '200 Ω') + dot(330, 70), 'L-section matching network: series reactance from the 50 ohm source, shunt reactance across the 200 ohm load', 230),
+    diagram: drawing(element('AC', 90, 70, 90, 190, '') + element('R', 90, 70, 204, 70, '50 Ω') + element('L', 204, 70, 330, 70, 'Xₛ') + element('C', 330, 70, 330, 190, 'Xₚ') + wire('M330 70H520M90 190H520') + element('R', 520, 70, 520, 190, '200 Ω') + dot(330, 70), 'L-section matching network: series reactance from the 50 ohm source, shunt reactance across the 200 ohm load', 230),
     text: T`An L-section network (one series and one shunt reactance) matches a $50\,\Omega$ source to a $200\,\Omega$ load at one frequency. What is the loaded Q of its elements?`,
     parts: [ex('Q', Math.sqrt(3), T`\sqrt3`)],
     hints: [T`The shunt element sits across the larger resistance. Converted to series form, the parallel $R$–$X$ pair must leave $50\,\Omega$ of resistance.`],
@@ -266,14 +397,14 @@ function makeCommsExercise(topic, date, level) {
     if (topic === 'infotheory') {
         if (li === 1) {
             const ps = pick([[.4, .2, .2, .1, .1], [.35, .25, .2, .15, .05], [.3, .3, .2, .1, .1], [.5, .2, .15, .1, .05], [.25, .25, .2, .15, .15], [.45, .25, .15, .1, .05]]);
-            const H = -ps.reduce((s, v) => s + v * Math.log2(v), 0), {L, merges} = huffman(ps), L2 = huffLen(ps.flatMap(a => ps.map(b => a * b))) / 2, names = 'ABCDE';
+            const H = -ps.reduce((s, v) => s + v * Math.log2(v), 0), {L, merges} = huffman(ps), L2 = huffLen(ps.flatMap(a => ps.map(b => a * b))) / 2;
             return q('Entropy and Huffman coding of a source', T`A memoryless source emits five symbols $A$–$E$ with probabilities $${ps.join(',\\ ')}$. Find its entropy and the average length of a Huffman code for single symbols, and the coding efficiency. Then find the average length per symbol of a Huffman code for pairs of symbols, and how many bits the single-symbol code saves per 1000 symbols compared with a fixed 3-bit code.`,
                 [T`$P = (${ps.join(', ')})$ for $A$–$E$`, 'Memoryless source', 'Fixed-length code: 3 bits'],
                 [p(T`$H$`, H, 'bit'), p(T`$\bar L$`, L, 'bit', .001), p('Efficiency', 100 * H / L, '%'), p('Pair code, per symbol', L2, 'bit', .001), p('Bits saved per 1000 symbols', 1000 * (3 - L), 'bit', .001)],
                 [T`$H = -\sum p_i\log_2p_i$.`, T`Huffman: repeatedly merge the two least likely entries. The average length equals the sum of the merged probabilities.`, T`For pairs, the 25 probabilities are $p_ip_j$; divide the average length by 2.`],
                 [T`$H = ${tf(H)}\,\text{bit/symbol}$.`, T`Merges: $${merges.map(m => tf(m)).join(',\\ ')}$, so $\bar L = ${tf(L)}\,\text{bit/symbol}$.`, T`Efficiency $= H/\bar L = ${tf(100 * H / L)}\%$.`, T`Huffman on the 25 pairs gives $${tf(2 * L2)}$ bits per pair, i.e. $${tf(L2)}$ per symbol, closer to $H$.`, T`Saving: $1000\,(3 - ${tf(L)}) = ${tf(1000 * (3 - L))}\,\text{bits}$.`],
                 'Huffman codes are optimal for single symbols but can waste up to a bit; coding blocks of symbols brings the average length towards the entropy, as the source coding theorem promises.',
-                signalChain([`Source|${names}`, 'Huffman|encoder', 'Bits|L̄ per symbol'], 'P = ' + ps.join(', ')),
+                sourceProbabilities(ps),
                 'Logarithms; prefix codes.');
         }
         if (li === 2) {
@@ -286,7 +417,7 @@ function makeCommsExercise(topic, date, level) {
                 [T`$N = N_0 + 10\log_{10}B$ in dBm. $C = B\log_2(1 + \text{SNR})$.`, T`$E_b/N_0 = \dfrac{P_r/N_0}{C}$, and $C_\infty = \dfrac{P_r}{N_0\ln2}$.`, T`$B\log_2\left(1 + \dfrac{P_r}{N_0B}\right) = R$ increases with $B$: solve numerically.`],
                 [T`$N = ${N0} + 10\log_{10}(${tf(B)}) = ${tf(N)}\,\text{dBm}$, so $\text{SNR} = ${tf(snr)}\,\text{dB}$.`, T`$C = ${tf(B)}\log_2(1 + ${tf(unDB(snr))}) = ${tf(C / 1e6)}\,\text{Mbit/s}$, i.e. $${tf(C / B)}\,\text{bit/s/Hz}$.`, T`$P_r/N_0 = 10^{(${Pr} - (${N0}))/10} = ${tf(PN)}\,\text{Hz}$, so $E_b/N_0 = ${tf(PN / C)}$ $(${tf(dB(PN / C))}\,\text{dB})$.`, T`$C_\infty = ${tf(Cinf / 1e6)}\,\text{Mbit/s}$.`, T`Bisection on $B$ gives $${tf(BR / 1e6)}\,\text{MHz}$.`],
                 'Capacity grows only logarithmically with power but nearly linearly with bandwidth until SNR becomes small; beyond that more bandwidth barely helps, because the limit is Pr/(N0 ln 2).',
-                signalChain(['Transmitter', 'AWGN|N₀ + NF', 'Receiver|B'], `Pr = ${Pr} dBm`),
+                curve('Bandwidth (MHz)', 'Capacity (Mbit/s)', [0, 4 * B / 1e6], [0, Math.ceil(Cinf / 1e6)], b => b ? b * Math.log2(1 + PN / (b * 1e6)) : 0),
                 'Decibels; logarithms; root finding.');
         }
         if (li === 3) {
@@ -301,7 +432,7 @@ function makeCommsExercise(topic, date, level) {
                 [T`$I(q) = H\big(P(Y = 1)\big) - \big[(1 - q)H(\varepsilon_0) + qH(\varepsilon_1)\big]$ with $P(Y = 1) = (1 - q)\varepsilon_0 + q(1 - \varepsilon_1)$.`, T`$I(q)$ is concave: maximise it numerically (golden section, or the Blahut–Arimoto iteration).`, T`The channel is not symmetric, so the best input is not uniform.`],
                 [T`$H(\varepsilon_0) = ${tf(H2(e0))}$ and $H(\varepsilon_1) = ${tf(H2(e1))}$ bits.`, T`At $q = \tfrac12$: $P(Y = 1) = ${tf(py1(.5))}$ and $I = ${tf(Iu)}\,\text{bit}$.`, T`Maximising: $q^* = ${tf(qs)}$, $P(Y = 1) = ${tf(py1(qs))}$, $C = ${tf(C)}\,\text{bit/use}$.`, T`Gain: $${tf(100 * (C / Iu - 1))}\%$ over the uniform input.`],
                 'Capacity is a maximum over input distributions; for asymmetric channels the optimum favours the more reliable symbol, and Blahut–Arimoto finds it for any discrete channel.',
-                drawing(ring(170, 70, 8) + ring(170, 190, 8) + ring(550, 70, 8) + ring(550, 190, 8) + arrow(180, 70, 540, 70) + arrow(180, 190, 540, 190) + arrow(180, 76, 540, 184) + arrow(180, 184, 540, 76) + dt(140, 76, '0') + dt(140, 196, '1') + dt(580, 76, '0') + dt(580, 196, '1') + dt(360, 58, `1 − ${e0}`) + dt(360, 214, `1 − ${e1}`) + dt(290, 112, `ε₀ = ${e0}`) + dt(290, 166, `ε₁ = ${e1}`), 'Binary asymmetric channel with different flip probabilities for 0 and 1', 240),
+                drawing(ring(170, 70, 8) + ring(170, 190, 8) + ring(550, 70, 8) + ring(550, 190, 8) + arrow(180, 70, 540, 70) + arrow(180, 190, 540, 190) + arrow(180, 76, 540, 184) + arrow(180, 184, 540, 76) + dt(140, 76, '0') + dt(140, 196, '1') + dt(580, 76, '0') + dt(580, 196, '1') + dt(360, 58, `1 − ${e0}`) + dt(360, 214, `1 − ${e1}`) + dt(285, 97, `ε₀ = ${e0}`) + dt(285, 179, `ε₁ = ${e1}`), 'Binary asymmetric channel with different flip probabilities for 0 and 1', 240),
                 'Entropy; mutual information; optimisation.');
         }
         // Mastery: water-filling over the subcarriers of an OFDM symbol.
@@ -317,7 +448,7 @@ function makeCommsExercise(topic, date, level) {
             [T`Compute the 16 gains $g_k$ (a 16-point DFT of the taps).`, T`Water-filling: $P_k = \max(0,\ \mu - 1/g_k)$ with $\sum P_k = ${Pt}$. Sort $1/g_k$ and grow the active set until the level stops rising above the next floor.`, T`Capacity $\sum_k\log_2(1 + g_kP_k)$.`],
             [T`Gains: $g = (${g.map(x => tf(x, 3)).join(',\\ ')})$.`, T`With the $${m}$ best subcarriers active: $\mu = \dfrac{${Pt} + \sum 1/g_k}{${m}} = ${tf(mu)}$${m < N ? T`, below the next floor $1/g = ${tf(inv[m])}$` : ''}.`, T`Water-filling: $C = ${tf(Cw)}\,\text{bit}$; equal power: $${tf(Ce)}\,\text{bit}$; gain $${tf(100 * (Cw / Ce - 1))}\%$.`, T`The strongest subcarrier ($k = ${best}$, $g = ${tf(g[best])}$) gets $P = ${tf(P[best])}$.`],
             'Water-filling skips deep fades and spends power where it buys the most bits; its gain is largest at low SNR and on channels with deep notches.',
-            drawing(g.map((x, k) => { const hgt = Math.min(150, 150 * (1 / x) / (mu * 1.6)); return `<rect x="${110 + k * 32}" y="${(210 - hgt).toFixed(1)}" width="24" height="${hgt.toFixed(1)}"/>`; }).join('') + guide(`M100 ${(210 - 150 / 1.6).toFixed(1)}H630`) + wire('M100 210H630') + dt(370, 240, 'subcarrier k: floors 1/g_k, water level μ') + dt(660, (215 - 150 / 1.6).toFixed(1), 'μ'), 'Water-filling over 16 subcarriers: bars show the noise-to-gain floors and the dashed line the water level', 250),
+            waterFilling(g, mu),
             'DFT; Lagrange multipliers; capacity.');
     }
 
@@ -367,7 +498,7 @@ function makeCommsExercise(topic, date, level) {
                 [T`The trellis has 4 states $(u_{k-1}u_{k-2})$; each step adds the Hamming distance between the received pair and each branch's output.`, T`Keep the best path into each state; after 8 steps, trace back from state 00.`, T`Re-encode the decoded message and compare with the received bits to find the errors.`],
                 [T`Running the Viterbi recursion, the survivor ending in state 00 has metric $${best}$.`, T`Trace-back gives the input $\mathtt{${toBits(m, 6).join('')}\,00}$, so the message is $\mathtt{${toBits(m, 6).join('')}}_2 = ${m}$.`, T`Re-encoded: $\mathtt{${enc([...toBits(m, 6), 0, 0]).join('')}}$; it differs from the received bits at positions $${a}$ and $${b}$.`, T`The next-best valid codeword is at distance $${second}$. The free distance of this code is 5, so any two errors this far apart are corrected.`],
                 'Viterbi decoding finds the most likely path through the trellis with work that grows linearly with the message length; the (7,5) code corrects two scattered errors.',
-                drawing(arrow(60, 125, 150, 125) + `<rect x="190" y="100" width="70" height="50"/><rect x="310" y="100" width="70" height="50"/>` + wire('M150 125h40M260 125h50M170 125V50h300M285 125V50M405 125h-25M405 125V200h65M170 125v75h300') + ring(490, 50, 18) + ring(490, 200, 18) + arrow(508, 50, 600, 50) + arrow(508, 200, 600, 200) + dt(225, 130, 'D') + dt(345, 130, 'D') + dt(490, 56, '+') + dt(490, 206, '+') + dt(80, 110, 'u') + dt(630, 56, 'c₁') + dt(630, 206, 'c₂'), 'Rate one-half convolutional encoder with two delay cells and two modulo-2 adders for generators 111 and 101', 240),
+                convolutionalEncoder(),
                 'Finite-state machines; dynamic programming.');
         }
         // Mastery: 16-QAM over Rayleigh fading with L-branch maximal-ratio combining.
@@ -381,7 +512,7 @@ function makeCommsExercise(topic, date, level) {
             [T`$\bar P_b = \int_0^\infty P_b(\gamma)f(\gamma)\,d\gamma$. Substitute $u = \gamma/\bar\gamma$, then $u = e^t$, so the integrand is smooth for numerical quadrature.`, T`Solve $\bar P_b(\bar\gamma) = 10^{-3}$ by bisection on $\bar\gamma$ in dB (work with $\log\bar P_b$).`, T`Without fading, solve $\tfrac34Q(\sqrt{0.8\gamma}) = 10^{-3}$. Compare like with like: $L$ branches collect $L$ times the energy of one.`],
             [T`BPSK, no diversity, at $${gb}\,\text{dB}$: $${tf(bpsk1, 4)}$ — the slow $1/(4\bar\gamma)$ decay of a single fading branch.`, T`Simpson's rule on $t \in [-25, \ln60]$: $\bar P_b = ${tf(ber, 4)}$ for 16-QAM with $L = ${L}$.`, T`Bisection: $\bar P_b = 10^{-3}$ at $${tf(need)}\,\text{dB}$ per branch.`, T`AWGN: $10^{-3}$ at $${tf(awgn)}\,\text{dB}$.`, T`Total combined $E_b/N_0 = ${tf(need)} + 10\log_{10}${L} = ${tf(need + dB(L))}\,\text{dB}$, so the penalty is $${tf(pen)}\,\text{dB}$; with diversity order $L$ the error rate falls as $\bar\gamma^{-${L}}$.`],
             'Fading makes errors decay only as 1/SNR on one branch; combining L independent branches restores a steep slope (SNR^−L), which is why MIMO and multi-antenna receivers are standard.',
-            signalChain(['16-QAM|transmitter', `Rayleigh|× ${L} branches`, 'MRC|combiner', 'Detector'], `L = ${L}, ${gb} dB per branch`),
+            diversityDiagram(L, gb),
             'Probability densities; numerical integration; root finding.');
     }
 
@@ -395,7 +526,7 @@ function makeCommsExercise(topic, date, level) {
                 [T`$\text{FSPL} = 20\log_{10}\dfrac{4\pi d}{\lambda}$.`, T`$P_r = P_t + G_t + G_r - L - \text{FSPL}$; noise floor $-174 + 10\log_{10}B + \text{NF}$ dBm.`, T`Free-space loss grows $6\,\text{dB}$ per doubling of distance: $d_{\max} = d\cdot10^{\text{margin}/20}$.`],
                 [T`$\lambda = ${tf(lam)}\,\text{m}$, $\text{FSPL} = ${tf(fspl)}\,\text{dB}$.`, T`$P_r = ${Pt} + ${Gt} + ${Gr} - ${Lc} - ${tf(fspl)} = ${tf(Pr)}\,\text{dBm}$.`, T`$N = -174 + ${tf(dB(B))} + ${NF} = ${tf(N)}\,\text{dBm}$.`, T`$\text{SNR} = ${tf(snr)}\,\text{dB}$, margin $${tf(margin)}\,\text{dB}$.`, T`$d_{\max} = ${dkm}\times10^{${tf(margin)}/20} = ${tf(dmax)}\,\text{km}$.`],
                 'A link budget is bookkeeping in decibels: add gains, subtract losses, compare with the noise floor. The margin covers fading and everything the model leaves out.',
-                towerLink(`${f / 1e9} GHz, ${dkm} km`, `Gt = ${Gt} dBi`, `Gr = ${Gr} dBi`),
+                freeSpaceLink(f / 1e9, dkm, Pt, Gt, Gr, Lc),
                 'Decibels; free-space propagation; thermal noise.');
         }
         if (li === 2) {
@@ -407,7 +538,7 @@ function makeCommsExercise(topic, date, level) {
                 [T`$G = \eta\left(\dfrac{\pi D}{\lambda}\right)^2$.`, T`$T_{\text{sys}} = T_a + T_{\text{LNA}} + \dfrac{T_{\text{rx}}}{G_{\text{LNA}}}$.`, T`$C/N_0 = \text{EIRP} - \text{FSPL} - L_a + G/T - 10\log_{10}k$, and $R_b = 10^{(C/N_0 - E_b/N_0)/10}$.`],
                 [T`$\lambda = ${tf(lam)}\,\text{m}$; $G = 10\log_{10}\left[${eta}\left(\dfrac{\pi\cdot${D}}{${tf(lam)}}\right)^2\right] = ${tf(G)}\,\text{dBi}$.`, T`$T_{\text{sys}} = ${Ta} + ${Tl} + 1000/1000 = ${tf(Ts)}\,\text{K}$; $G/T = ${tf(G)} - ${tf(dB(Ts))} = ${tf(GT)}\,\text{dB/K}$.`, T`$\text{FSPL} = ${tf(fspl)}\,\text{dB}$.`, T`$C/N_0 = ${eirp} - ${tf(fspl)} - ${La} + ${tf(GT)} + ${tf(-kdb)} = ${tf(cn0)}\,\text{dB-Hz}$.`, T`$R_b = 10^{(${tf(cn0)} - ${ebreq})/10} = ${tf(Rb / 1e6)}\,\text{Mbit/s}$.`],
                 'G/T captures a ground station in one number: antenna gain against the noise it collects. C/N0 then fixes the bit rate for any required Eb/N0.',
-                drawing(`<rect x="560" y="30" width="60" height="34"/>` + wire('M540 47h20M620 47h20') + `<path d="M120 200a70 70 0 0 1 100 -90" />` + wire('M170 155L200 130M120 200h120') + guide('M590 64L180 150') + dt(590, 90, 'satellite, EIRP') + dt(160, 225, `dish ${D} m`) + dt(400, 90, `${dkm} km`), 'Geostationary satellite beaming to a ground-station dish', 240),
+                downlinkDiagram(D, dkm, eirp),
                 'Antenna gain; noise temperature; decibels.');
         }
         if (li === 3) {
@@ -421,7 +552,7 @@ function makeCommsExercise(topic, date, level) {
                 [T`Sum the two phasors directly; $k = 2\pi/\lambda$.`, T`$d_2 - d_1$ shrinks with distance; beyond the point where it equals $\lambda/2$ the rays drift towards cancellation.`, T`Beyond the breakpoint the power falls monotonically, so bisect for the sensitivity.`],
                 [T`$\lambda = ${tf(lam)}\,\text{m}$. At $${d0}\,\text{m}$: $d_1 = ${tf(Math.hypot(d0, ht - hr), 8)}$, $d_2 = ${tf(Math.hypot(d0, ht + hr), 8)}\,\text{m}$; exact loss $${tf(pl0)}\,\text{dB}$.`, T`Free space: $${tf(fs0)}\,\text{dB}$; asymptote: $${tf(pl4)}\,\text{dB}$.`, T`$d_2 - d_1 = \lambda/2$ at $d = ${tf(db_)}\,\text{m}$ (close to $4h_th_r/\lambda = ${tf(4 * ht * hr / lam)}\,\text{m}$).`, T`Bisection beyond the breakpoint: $P_r = ${sens}\,\text{dBm}$ at $${tf(dmax / 1e3)}\,\text{km}$.`],
                 'Close in, the two rays beat and the power swings around the free-space line; beyond the breakpoint they cancel steadily and the loss grows at 40 dB per decade, independent of frequency.',
-                towerLink(`${f / 1e9} GHz over flat ground`, `h_t = ${ht} m`, `h_r = ${hr} m`),
+                towerLink(ht, hr, `${f / 1e9} GHz over flat ground`),
                 'Complex phasors; logarithms; root finding.');
         }
         // Mastery: a uniform linear array, steered.
@@ -454,7 +585,7 @@ function makeCommsExercise(topic, date, level) {
             [T`$\Gamma_L = \dfrac{Z_L - Z_0}{Z_L + Z_0}$; $\text{VSWR} = \dfrac{1 + |\Gamma|}{1 - |\Gamma|}$; $\text{RL} = -20\log_{10}|\Gamma|$.`, T`$Z_{\text{in}} = Z_0\dfrac{Z_L + jZ_0\tan\beta\ell}{Z_0 + jZ_L\tan\beta\ell}$ with $\beta\ell = 2\pi\ell/\lambda$.`],
             [T`$\Gamma_L = \dfrac{${tc(cs(ZL, cx(Z0)))}}{${tc(ca(ZL, cx(Z0)))}} = ${tc(G)}$, so $|\Gamma_L| = ${tf(g)}$ at $${tf(cphase(G))}^\circ$.`, T`$\text{VSWR} = ${tf(vswr)}$ and $\text{RL} = ${tf(-20 * Math.log10(g))}\,\text{dB}$.`, T`$\beta\ell = ${tf(360 * l)}^\circ$, $\tan\beta\ell = ${tf(Math.tan(2 * Math.PI * l))}$.`, T`$Z_{\text{in}} = ${tc(Zin)}\,\Omega$.`],
             'A line transforms impedance with position: |Γ| stays fixed while its angle rotates by 2βℓ, which is exactly a turn around the centre of the Smith chart.',
-            tlineDiagram(`Z₀ = ${Z0} Ω, Z_L = ${R} ${X < 0 ? '−' : '+'} j${Math.abs(X)} Ω`, 'Z_L', `ℓ = ${l}λ`),
+            tlineDiagram(Z0, `${R} ${X < 0 ? '−' : '+'} j${Math.abs(X)} Ω`, `ℓ = ${l}λ`),
             'Complex numbers; transmission lines.');
     }
     if (li === 2) {
@@ -472,7 +603,7 @@ function makeCommsExercise(topic, date, level) {
             [T`Move along the line: $Y_{\text{in}}(d) = Y_0\dfrac{Y_L + jY_0\tan\beta d}{Y_0 + jY_L\tan\beta d}$. Find the first $d$ with $\operatorname{Re}Y_{\text{in}} = Y_0$.`, T`There $Y_{\text{in}} = Y_0 + jB$. A shorted stub gives $-jY_0\cot\beta\ell$: set $\cot\beta\ell = B/Y_0$.`, T`At $1.1f_0$ every electrical length grows by 10%: recompute both admittances and $\Gamma = \dfrac{Y_0 - Y}{Y_0 + Y}$.`],
             [T`$Y_L = ${tc(cm(YL, cx(1e3)))}\,\text{mS}$.`, T`Scanning and bisecting: $\operatorname{Re}Y_{\text{in}} = Y_0$ first at $d = ${tf(d)}\lambda$.`, T`There $Y_{\text{in}}/Y_0 = 1 ${Bn < 0 ? '-' : '+'} j${tf(Math.abs(Bn))}$.`, T`$\beta\ell = \dfrac\pi2 - \arctan(B/Y_0) = ${tf(2 * Math.PI * ls)}\,\text{rad}$, so $\ell = ${tf(ls)}\lambda$.`, T`$|\Gamma_L| = ${tf(gL)}$, VSWR $${tf((1 + gL) / (1 - gL))}$. At $1.1f_0$: $|\Gamma| = ${tf(g11)}$.`],
             'A single stub matches any load at one frequency by first moving to the unit-conductance circle and then cancelling the leftover susceptance; the match degrades as frequency moves.',
-            drawing(element('AC', 70, 70, 70, 190, '') + wire('M70 70H600M70 190H600') + element('R', 600, 70, 600, 190, 'Z_L') + wire('M330 70V20M330 190V240') + wire('M330 20h-60M330 240h-60') + wire('M270 20V240') + guide('M330 214H600') + dt(465, 232, 'd') + dt(250, 130, 'ℓ (short)') + dt(200, 56, 'Z₀ = 50 Ω'), 'Transmission line with a short-circuited shunt stub at distance d from the load', 255),
+            shuntStub(R, X),
             'Admittance; transmission lines; root finding.');
     }
     if (li === 3) {
@@ -487,7 +618,7 @@ function makeCommsExercise(topic, date, level) {
             [T`$\Delta = S_{11}S_{22} - S_{12}S_{21}$ and $K = \dfrac{1 - |S_{11}|^2 - |S_{22}|^2 + |\Delta|^2}{2|S_{12}S_{21}|}$. Unconditionally stable if $K > 1$ and $|\Delta| < 1$.`, T`$G_{\max} = \dfrac{|S_{21}|}{|S_{12}|}\left(K - \sqrt{K^2 - 1}\right)$.`, T`$\Gamma_S = \dfrac{B_1 - \sqrt{B_1^2 - 4|C_1|^2}}{2C_1}$ with $B_1 = 1 + |S_{11}|^2 - |S_{22}|^2 - |\Delta|^2$, $C_1 = S_{11} - \Delta S_{22}^*$; swap $1 \leftrightarrow 2$ for $\Gamma_L$.`],
             [T`$\Delta = ${tc(D)}$, $|\Delta| = ${tf(cabs(D))}$.`, T`$K = ${tf(K)} > 1$: unconditionally stable.`, T`$G_{\max} = ${tf(cabs(s21) / cabs(s12))}\times(${tf(K)} - ${tf(Math.sqrt(K * K - 1))}) = ${tf(10 ** (mag / 10))}$, i.e. $${tf(mag)}\,\text{dB}$.`, T`$B_1 = ${tf(B1)}$, $|C_1| = ${tf(cabs(C1))}$: $|\Gamma_S| = ${tf(gs)}$. $B_2 = ${tf(B2)}$, $|C_2| = ${tf(cabs(C2))}$: $|\Gamma_L| = ${tf(gl)}$.`],
             'An unconditionally stable transistor can be conjugate-matched at both ports at once, giving the maximum available gain; the reverse transmission S12 is what couples the two matches.',
-            signalChain(['Source|50 Ω', 'Input match|Γ_S', 'Transistor|[S]', 'Output match|Γ_L', 'Load|50 Ω'], `Amplifier design at ${fG} GHz`),
+            matchedAmplifier(fG),
             'Complex arithmetic; S-parameters.');
     }
     // Mastery: a binomial multisection quarter-wave transformer, analysed exactly.
@@ -504,6 +635,6 @@ function makeCommsExercise(topic, date, level) {
         [T`Each section multiplies the impedance by $\exp\!\left[2^{-N}\binom Nn\ln(Z_L/Z_0)\right]$.`, T`Start at the load: $Z_{\text{in}} = Z_n\dfrac{Z + jZ_n\tan\beta\ell}{Z_n + jZ\tan\beta\ell}$ for each section towards the source, then $\Gamma = \dfrac{Z_{\text{in}} - Z_0}{Z_{\text{in}} + Z_0}$.`, T`$|\Gamma|$ rises steadily away from $f_0$ and is symmetric about it: bisect for the lower edge $f_m$, and the bandwidth is $2(1 - f_m/f_0)$.`],
         [T`Sections: $${Zs.map((z, i) => `Z_${i + 1} = ${tf(z)}`).join(',\\ ')}\,\Omega$.`, T`Bisection: $|\Gamma| = ${Gm}$ at $f = ${tf(fm)}f_0$, so the exact bandwidth is $${tf(bwExact)}\%$.`, T`$|A| = ${tf(A)}$; the formula gives $${tf(bwF)}\%$.`, T`At $0.8f_0$: $|\Gamma| = ${tf(gam(.8))}$.`],
         'Binomial transformers give a maximally flat response; more sections widen the band, and the textbook bandwidth formula is close to the exact cascade.',
-        drawing(element('AC', 60, 80, 60, 180, '') + wire('M60 80h40M60 180h40') + Array.from({length: N}, (_, i) => { const x = 100 + i * 460 / N, w = 460 / N, h = 30 + 25 * i; return `<rect x="${x.toFixed(1)}" y="${130 - h}" width="${w.toFixed(1)}" height="${2 * h}"/>` + dt(+(x + w / 2).toFixed(1), 136, `Z${'₁₂₃₄'[i]}`); }).join('') + element('R', 600, 80, 600, 180, `${ZLr} Ω`) + wire('M560 80h40M560 180h40') + dt(330, 232, `${N} quarter-wave sections`), 'Multisection quarter-wave transformer between a 50 ohm source and the load', 250),
+        quarterWaveSections(N, ZLr),
         'Transmission lines; complex arithmetic; root finding.');
 }

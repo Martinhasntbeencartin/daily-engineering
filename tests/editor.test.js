@@ -40,6 +40,38 @@ async function typeKeys(page, keys) {
         await page.waitForTimeout(15);
     }
 }
+/* Check real browser text metrics. Exercise generators vary both the geometry
+   and the printed values, including between tiers within the same level. */
+function checkFigureLayouts() {
+    const host = document.createElement('div'), seen = new Set(), issues = new Set();
+    host.className = 'diagram';
+    document.body.append(host);
+    try {
+        for (let day = 0; day < 32; day++) {
+            const date = new Date(Date.UTC(2026, 0, 1 + day)).toISOString().slice(0, 10);
+            for (const topic of TOPICS) for (const tier of TIERS) {
+                const {diagram, title} = makeTierExercise(topic.id, date, tier);
+                if (seen.has(diagram)) continue;
+                seen.add(diagram);
+                host.innerHTML = diagram;
+                const svg = host.querySelector('svg'), view = svg.viewBox.baseVal, bounds = svg.getBBox();
+                if (bounds.x < view.x - 1 || bounds.y < view.y - 1 ||
+                    bounds.x + bounds.width > view.x + view.width + 1 || bounds.y + bounds.height > view.y + view.height + 1)
+                    issues.add(`${topic.id}: ${title} extends past the viewBox`);
+                const labels = [...svg.querySelectorAll('text')].filter(el => el.textContent)
+                    .map(el => ({name: el.textContent, box: el.getBoundingClientRect()}));
+                const scale = svg.getScreenCTM().a;
+                for (const [i, a] of labels.entries()) for (const b of labels.slice(i + 1)) {
+                    const w = Math.min(a.box.right, b.box.right) - Math.max(a.box.left, b.box.left);
+                    const h = Math.min(a.box.bottom, b.box.bottom) - Math.max(a.box.top, b.box.top);
+                    if (w > 2 * scale && h > 3 * scale) issues.add(`${title}: labels “${a.name}” and “${b.name}” overlap`);
+                }
+            }
+        }
+    } finally { host.remove(); }
+    return {count: seen.size, issues: [...issues]};
+}
+
 server.listen(0, async () => {
     // The main run freezes the clock; anime.js times itself with Date.now, so this page asks for reduced motion
     // (nothing animates and the logic is checked). The motion itself is checked further down on pages with a running clock.
@@ -56,6 +88,8 @@ server.listen(0, async () => {
         // Navigation: the main menu, a category, one click to a problem, the level tabs, shortcuts, and back again.
         await page.goto(url);
         await page.waitForTimeout(600);
+        const figures = await page.evaluate(checkFigureLayouts);
+        step(`${figures.count} exercise diagrams fit their viewBox and have distinct labels`, !figures.issues.length, figures.issues.join(' / '));
         const menu = await page.evaluate(() => [...document.querySelectorAll('#home [data-menu]')].map(a => a.dataset.menu));
         step('the main menu offers all four categories, the archive, progress and help', menu.join() === 'electrical,mechanical,robotics,comms,archive,progress,help', menu.join());
         step('the Menu tab is marked as the current page', await page.getAttribute('.tabs a[data-tab="menu"]', 'aria-current') === 'page');
@@ -255,7 +289,7 @@ server.listen(0, async () => {
         for (const reducedMotion of ['no-preference', 'reduce']) {
             const mp = await browser.newPage({reducedMotion});
             mp.on('pageerror', e => errors.push(`motion: ${e.message}`));
-            await mp.goto(url + '#/linkbudget/level-2'); await mp.waitForSelector('#problem .diagram svg');
+            await mp.goto(url + '#/linkbudget/level-3'); await mp.waitForSelector('#problem .diagram svg');
             const probe = () => mp.evaluate(() => {
                 const svg = document.querySelector('#challenge .diagram svg'), lines = [...svg.querySelectorAll('path, line, polyline, polygon, rect, circle, ellipse')];
                 return {loaded: typeof anime === 'object', drawing: lines.filter(el => el.hasAttribute('pathLength') || el.hasAttribute('draw')).length, hidden: [...svg.querySelectorAll('text')].filter(t => t.style.opacity !== '').length,
@@ -280,7 +314,7 @@ server.listen(0, async () => {
                 step('the cascade leaves no inline styles behind, so hover still works', c1.every(o => o === '') && await mp.evaluate(() => [...document.querySelectorAll('#category .card')].every(c => !c.style.transform)), JSON.stringify(c1));
             }
             // Solving: "All correct." decodes and ticks draw (or appear at once with reduced motion).
-            await mp.goto(url + '#/linkbudget/level-2'); await mp.waitForSelector('#problem math-field'); await mp.waitForTimeout(200);
+            await mp.goto(url + '#/linkbudget/level-3'); await mp.waitForSelector('#problem math-field'); await mp.waitForTimeout(200);
             await mp.evaluate(() => exercise.parts.forEach((p, i) => { document.getElementById(`answer-${i}`).value = String(p.answer); }));
             await mp.click('#check'); await mp.waitForTimeout(80);
             const sol0 = await mp.evaluate(() => ({verdict: document.querySelector('.verdict-word')?.textContent, ticks: document.querySelectorAll('.part-feedback .tick').length, drawing: document.querySelectorAll('.part-feedback .tick [pathLength]').length}));
