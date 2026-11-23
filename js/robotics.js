@@ -79,6 +79,7 @@ function encoderDisc(caption) {
 /* ---------- Level 1: curated ---------- */
 bank('kinematics', 'advanced', [{
     title: 'How much floor can a two-link arm reach?',
+    explore: {type: 'arm2', l1: 2, l2: 1},
     diagram: sketch('Two-link arm on a fixed base; the hand can reach a ring.',
         ring(360, 125, 105) + ring(360, 125, 35) + guide('M360 125H465') + wire('M360 125L413.6 80L436.1 106.8') + ring(360, 125, 6) + ring(413.6, 80, 6) + dot(436.1, 106.8),
         [[372, 92, 'l₁ = 2 m'], [452, 82, 'l₂ = 1 m'], [530, 128, 'r = 3 m'], [360, 158, '1 m']]),
@@ -91,6 +92,7 @@ bank('kinematics', 'advanced', [{
     verify: () => [NUM.simpson(r => Math.abs((r * r - 5) / 4) <= 1 ? 2 * Math.PI * r : 0, 0, 4, 40000)]
 }, {
     title: 'Where a two-link arm is most agile',
+    explore: {type: 'arm2', l1: 1, l2: 1},
     diagram: sketch('Two-link arm with equal links and the elbow bent at a right angle.',
         wire('M260 190L390 90L490 220') + ring(260, 190, 7) + ring(390, 90, 7) + dot(490, 220) + guide('M260 190L490 220') + `<path d="M260 208h-30m60 0h-30" stroke="#aab9a0"/>`,
         [[300, 128, 'L'], [462, 150, 'L'], [372, 226, 'r'], [412, 112, 'q₂']]),
@@ -305,8 +307,9 @@ function makeRoboticsExercise(topic, date, level) {
     if (!TOPICS.some(t => t.id === topic && t.group === 'robotics') || li < 1)
         throw Error('Unknown challenge selection');
     const pick = seededPicker(date, hashString(topic + level)), p = part;
+    const extra = {}; // explore / concept settings for the interactive figures (js/motion.js)
     const q = (title, text, givens, parts, hints, steps, idea, diagram, prerequisites) => ({
-        id: `${topic}-${level}`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source: {reading: ROBO_READING[topic]}
+        id: `${topic}-${level}`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source: {reading: ROBO_READING[topic]}, ...extra
     });
 
     if (topic === 'kinematics') {
@@ -316,6 +319,7 @@ function makeRoboticsExercise(topic, date, level) {
             const {c2, q1, q2} = ik2(l1, l2, x, y), s1 = Math.sin(q1), c1 = Math.cos(q1), s12 = Math.sin(q1 + q2), c12 = Math.cos(q1 + q2);
             const J = [[-l1 * s1 - l2 * s12, -l2 * s12], [l1 * c1 + l2 * c12, l2 * c12]], det = l1 * l2 * Math.sin(q2);
             const qd1 = (J[1][1] * vx - J[0][1] * vy) / det, qd2 = (-J[1][0] * vx + J[0][0] * vy) / det;
+            extra.explore = {type: 'arm2', l1, l2, target: [x, y]};
             return q('Inverse kinematics of a two-link arm', T`A planar arm has links $l_1 = ${l1}\,\text{m}$ and $l_2 = ${l2}\,\text{m}$; $q_1$ is measured from the $x$ axis and $q_2$ relative to link 1. The hand must reach $(x, y) = (${x}, ${y})\,\text{m}$, using the solution with $q_2 > 0$. Find both joint angles and $\det J$ there. Then find the joint rates that move the hand at $\mathbf v = (${vx}, ${vy})\,\text{m/s}$.`,
                 [T`$l_1 = ${l1}\,\text{m}$, $l_2 = ${l2}\,\text{m}$`, T`Target $(${x}, ${y})\,\text{m}$`, T`$\mathbf v = (${vx}, ${vy})\,\text{m/s}$`],
                 [p(T`$q_2$`, deg(q2), '°', .01, .05), p(T`$q_1$`, deg(q1), '°', .01, .05), p(T`$\det J$`, det, 'm²'), p(T`$\dot q_1$`, qd1, 'rad/s', .01, .002), p(T`$\dot q_2$`, qd2, 'rad/s', .01, .002)],
@@ -334,6 +338,7 @@ function makeRoboticsExercise(topic, date, level) {
             const [Fx, Fy] = pick([[0, -20], [15, -10], [-10, -25], [20, 0]]);
             const wx = x - l3 * Math.cos(phi), wy = y - l3 * Math.sin(phi), {c2, q1, q2} = ik2(l1, l2, wx, wy), q3 = phi - q1 - q2;
             const pts = fkN([l1, l2, l3], [q1, q2, q3]), tau = [0, 1, 2].map(i => (pts[3][0] - pts[i][0]) * Fy - (pts[3][1] - pts[i][1]) * Fx);
+            extra.explore = {type: 'arm2', l1, l2, target: [wx, wy]};
             return q('A three-link arm: pose and joint torques', T`A planar arm has links $l_1 = ${l1}\,\text{m}$, $l_2 = ${l2}\,\text{m}$ and $l_3 = ${l3}\,\text{m}$ (relative joint angles; $q_1$ from the $x$ axis). The tool tip must sit at $(${x}, ${y})\,\text{m}$ with the last link at $\varphi = ${phiDeg}^\circ$ to the $x$ axis, using the solution with $q_2 > 0$. Find the three joint angles. The tool then pushes on its surroundings with $\mathbf F = (${Fx}, ${Fy})\,\text{N}$ and no moment: find the joint torques $\boldsymbol\tau = J^{\mathsf T}\mathbf F$.`,
                 [T`$l = (${l1}, ${l2}, ${l3})\,\text{m}$`, T`Tip $(${x}, ${y})\,\text{m}$, $\varphi = ${phiDeg}^\circ$`, T`$\mathbf F = (${Fx}, ${Fy})\,\text{N}$`],
                 [p(T`$q_1$`, deg(q1), '°', .01, .05), p(T`$q_2$`, deg(q2), '°', .01, .05), p(T`$q_3$`, deg(q3), '°', .01, .05), p(T`$\tau_1$`, tau[0], 'N·m', .01, .01), p(T`$\tau_2$`, tau[1], 'N·m', .01, .01), p(T`$\tau_3$`, tau[2], 'N·m', .01, .01)],
@@ -354,6 +359,7 @@ function makeRoboticsExercise(topic, date, level) {
             const q1 = Math.atan2(y, x), r = Math.hypot(x, y), s = z - d1, c3 = (r * r + s * s - a2 * a2 - a3 * a3) / (2 * a2 * a3), q3 = -Math.acos(c3), q2 = Math.atan2(s, r) - Math.atan2(a3 * Math.sin(q3), a2 + a3 * Math.cos(q3));
             const S = a2 * Math.sin(q2) + a3 * Math.sin(q2 + q3), R = a2 * Math.cos(q2) + a3 * Math.cos(q2 + q3), c1 = Math.cos(q1), s1 = Math.sin(q1), s23 = Math.sin(q2 + q3), c23 = Math.cos(q2 + q3);
             const J = [[-R * s1, -S * c1, -a3 * s23 * c1], [R * c1, -S * s1, -a3 * s23 * s1], [0, R, a3 * c23]], det = Math.abs(det3(J)), qd = NUM.solve(J, v);
+            extra.explore = {type: 'arm2', l1: a2, l2: a3, target: [r, s]};
             return q('An elbow arm in three dimensions', T`An elbow (anthropomorphic) arm has a base joint $q_1$ about the vertical axis, a shoulder at height $d_1 = ${d1}\,\text{m}$, and shoulder and elbow joints $q_2$, $q_3$ in the vertical plane, with links $a_2 = ${a2}\,\text{m}$ and $a_3 = ${a3}\,\text{m}$. $q_2$ is measured up from the horizontal and $q_3$ relative to the upper arm. The hand must reach $(${x}, ${y}, ${z})\,\text{m}$ with the arm facing the target and the elbow up ($q_3 < 0$). Find the joint angles and $|\det J|$. Then find the joint rates for a hand velocity $\mathbf v = (${v.join(', ')})\,\text{m/s}$.`,
                 [T`$d_1 = ${d1}\,\text{m}$, $a_2 = ${a2}\,\text{m}$, $a_3 = ${a3}\,\text{m}$`, T`Target $(${x}, ${y}, ${z})\,\text{m}$`, T`$\mathbf v = (${v.join(', ')})\,\text{m/s}$`],
                 [p(T`$q_1$`, deg(q1), '°', .01, .05), p(T`$q_2$`, deg(q2), '°', .01, .05), p(T`$q_3$`, deg(q3), '°', .01, .05), p(T`$|\det J|$`, det, 'm³'), p(T`$\dot q_1$`, qd[0], 'rad/s', .01, .002), p(T`$\dot q_2$`, qd[1], 'rad/s', .01, .002), p(T`$\dot q_3$`, qd[2], 'rad/s', .01, .002)],
@@ -379,6 +385,7 @@ function makeRoboticsExercise(topic, date, level) {
         let a = best.phi - 2 * Math.PI / N, b = best.phi + 2 * Math.PI / N;
         for (let i = 0; i < 60; i++) { const m1 = a + (b - a) * .382, m2 = a + (b - a) * .618; if (wAt(m1, best.sg) > wAt(m2, best.sg)) b = m2; else a = m1; }
         const phiOpt = (a + b) / 2, qOpt = conf(phiOpt, best.sg), wMax = manip(qOpt), off = Math.abs(deg(Math.atan2(Math.sin(phiOpt - al), Math.cos(phiOpt - al)))), q0 = conf(al, 1), w0 = manip(q0);
+        extra.explore = {type: 'arm2', l1, l2};
         return q('Choosing the best posture of a redundant arm', T`A planar three-link arm ($l_1 = ${l1}\,\text{m}$, $l_2 = ${l2}\,\text{m}$, $l_3 = ${l3}\,\text{m}$) must hold its hand at $(${px}, ${py})\,\text{m}$, a distance $\rho = ${rho}\,\text{m}$ from the base along $30^\circ$. Only the position is specified, so the hand angle $\varphi$ (of the last link) is free: one extra degree of freedom. Find the range of feasible hand angles. Then, over every feasible $\varphi$ and both elbow branches, find the largest manipulability $w = \sqrt{\det(JJ^{\mathsf T})}$ of the $2\times3$ position Jacobian, the hand angle relative to the target direction and the elbow angle $|q_2|$ at that posture, and $w$ with the last link pointing straight at the target ($\varphi = 30^\circ$, $q_2 > 0$).`,
             [T`$l = (${l1}, ${l2}, ${l3})\,\text{m}$`, T`Hand at $(${px}, ${py})\,\text{m}$`, T`Search: hand angle $\varphi$ and both elbow branches`],
             [p('Width of the feasible range of φ', width, '°', .01, .05), p(T`$w_{\max}$`, wMax, 'm²'), p(T`$|\varphi - 30^\circ|$ at $w_{\max}$`, off, '°', .01, .3), p(T`$|q_2|$ at $w_{\max}$`, deg(Math.abs(qOpt[1])), '°', .01, .3), p(T`$w$ at $\varphi = 30^\circ$`, w0, 'm²')],
