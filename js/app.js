@@ -6,13 +6,13 @@ const shifted = (date, days) => {
     return localDate(d);
 };
 const GROUPS = [
-    {id: 'electrical', name: 'Electrical', short: 'Electrical'},
-    {id: 'mechanical', name: 'Mechanical & civil', short: 'Mechanical'},
-    {id: 'robotics', name: 'Robotics & mechatronics', short: 'Robotics'},
+    {id: 'circuits-electronics', name: 'Circuits & electronics', short: 'Circuits'},
+    {id: 'signals-control', name: 'Signals & control', short: 'Signals'},
+    {id: 'power-em', name: 'Power & electromagnetics', short: 'Power'},
     {id: 'comms', name: 'Communications & RF', short: 'Comms & RF'}
 ];
 /* Each discipline's symbol on the home screen, in LaTeX. */
-const GLYPHS = {circuits: '\\Omega', electronics: '\\beta', signals: '\\mathcal F', control: 'G(s)', digital: '\\mathtt{01}', fields: '\\nabla', power: '3\\phi', measurement: '\\sigma', statics: '\\Sigma F', dynamics: '\\omega', thermo: '\\Delta S', kinematics: '\\theta', robotcontrol: '\\ddot q', motors: '\\tau', sensors: '\\hat x', infotheory: 'H', modulation: 'E_b', linkbudget: 'G', rfcircuits: '\\Gamma'};
+const GLYPHS = {circuits: '\\Omega', electronics: '\\beta', signals: '\\mathcal F', control: 'G(s)', digital: '\\mathtt{01}', fields: '\\nabla', power: '3\\phi', measurement: '\\sigma', motors: '\\tau', sensors: '\\hat x', infotheory: 'H', modulation: 'E_b', linkbudget: 'G', rfcircuits: '\\Gamma'};
 const MAX_ATTEMPTS = 5;
 /* MathLive turns each answer box into a WYSIWYG math editor (typing 3/4 makes a stacked fraction).
    It shares KaTeX's fonts; if it fails to load, plain text inputs are used instead. */
@@ -161,7 +161,7 @@ function readField(i) {
         return {value: NaN, error: err.message, raw};
     }
 }
-let today = localDate(), date = today, topic = 'circuits', level = 'level-1', group = 'electrical', view = 'home', hintCount = 0, solutionShown = false, exercise;
+let today = localDate(), date = today, topic = 'circuits', level = 'level-1', group = 'circuits-electronics', view = 'home', hintCount = 0, solutionShown = false, exercise;
 let progress = {}, attempts = {}, storageAvailable = true;
 /* key → the answers last checked for that problem, so a finished problem can show them beside the solution. */
 let submitted = {};

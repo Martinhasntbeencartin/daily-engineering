@@ -464,9 +464,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .74); }
 .fig svg .dashed { stroke-dasharray: 5 4; }
 .fig svg .thick { stroke-width: 3; }
 .fig svg .dot { fill: var(--accent); stroke: none; }
-.fig svg .joint { fill: var(--bg); }
 .fig svg .solid-bg { fill: var(--bg); }
-.fig svg .fillwash { fill: var(--accent-wash); }
 .fig svg text { fill: var(--soft); font: 12px var(--mono); stroke: none; }
 .explore > .muted { margin: 0 0 10px; }
 .explore-stage { position: relative; max-width: 520px; user-select: none; -webkit-user-select: none; }
@@ -476,7 +474,6 @@ dialog::backdrop { background: rgba(0, 0, 0, .74); }
 .explore-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0; }
 .explore-controls .ctl-label { color: var(--muted); font-size: 13px; margin-left: 8px; }
 .explore-controls .ctl-label:first-child { margin-left: 0; }
-.explore[data-type="arm2"] .explore-stage { max-width: 440px; }
 .readouts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 18px; margin: 8px 0 0; }
 .readouts div { display: flex; flex-direction: column; }
 .readouts dt { color: var(--muted); font-size: 12px; }

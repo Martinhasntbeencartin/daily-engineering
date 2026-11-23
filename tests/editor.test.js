@@ -91,21 +91,21 @@ server.listen(0, async () => {
         const figures = await page.evaluate(checkFigureLayouts);
         step(`${figures.count} exercise diagrams fit their viewBox and have distinct labels`, !figures.issues.length, figures.issues.join(' / '));
         const menu = await page.evaluate(() => [...document.querySelectorAll('#home [data-menu]')].map(a => a.dataset.menu));
-        step('the main menu offers all four categories, the archive, progress and help', menu.join() === 'electrical,mechanical,robotics,comms,archive,progress,help', menu.join());
+        step('the main menu offers all four categories, the archive, progress and help', menu.join() === 'circuits-electronics,signals-control,power-em,comms,archive,progress,help', menu.join());
         step('the Menu tab is marked as the current page', await page.getAttribute('.tabs a[data-tab="menu"]', 'aria-current') === 'page');
-        step('the menu shows today at a glance', /0\s*\/19/.test(await page.textContent('#home .menu-stats')) && /coins/.test(await page.textContent('#home .menu-stats')));
+        step('the menu shows today at a glance', /0\s*\/14/.test(await page.textContent('#home .menu-stats')) && /coins/.test(await page.textContent('#home .menu-stats')));
         step('a first visit explains how it works', await page.locator('#home .intro').count() === 1);
         await page.click('#dismiss-intro'); await page.reload(); await page.waitForTimeout(400);
         step('“Got it” hides the explanation for good', await page.locator('#home .intro').count() === 0);
         await page.click('#menu-help'); await page.waitForTimeout(100);
         step('“How it works” opens the help', await page.evaluate(() => document.getElementById('about-dialog').open));
         await page.click('#close-dialog');
-        await page.click('#home [data-menu="mechanical"]'); await page.waitForTimeout(200);
-        const mech = await page.evaluate(() => ({hash: location.hash, cards: [...document.querySelectorAll('#category .card')].map(c => c.dataset.topic)}));
-        step('choosing Mechanical & civil shows its 3 disciplines', mech.hash === '#/mechanical' && mech.cards.join() === 'statics,dynamics,thermo', JSON.stringify(mech));
-        await page.click('#category .switch-opt:has-text("Electrical")'); await page.waitForTimeout(200);
-        step('the switch moves to Electrical and its 8 disciplines', await page.evaluate(() => location.hash === '#/electrical' && document.querySelectorAll('#category .card').length === 8));
-        const card = await page.evaluate(() => { const c = document.querySelector('#category .card[data-topic="control"]'); return {status: c.querySelector('.card-status').textContent, cta: c.querySelector('.card-cta').textContent, levels: c.querySelectorAll('.lvl').length}; });
+        await page.click('#home [data-menu="power-em"]'); await page.waitForTimeout(200);
+        const pem = await page.evaluate(() => ({hash: location.hash, cards: [...document.querySelectorAll('#category .card')].map(c => c.dataset.topic)}));
+        step('choosing Power & electromagnetics shows its 3 disciplines', pem.hash === '#/power-em' && pem.cards.join() === 'power,motors,fields', JSON.stringify(pem));
+        await page.click('#category .switch-opt:has-text("Circuits")'); await page.waitForTimeout(200);
+        step('the switch moves to Circuits & electronics and its 4 disciplines', await page.evaluate(() => location.hash === '#/circuits-electronics' && [...document.querySelectorAll('#category .card')].map(c => c.dataset.topic).join() === 'circuits,electronics,digital,measurement'));
+        const card = await page.evaluate(() => { const c = document.querySelector('#category .card[data-topic="digital"]'); return {status: c.querySelector('.card-status').textContent, cta: c.querySelector('.card-cta').textContent, levels: c.querySelectorAll('.lvl').length}; });
         step('each card says its status, offers four levels and what clicking does', card.status === 'Not done yet today' && /Start level 1/.test(card.cta) && card.levels === 4, JSON.stringify(card));
         await page.click('#category .card[data-topic="electronics"] .lvl:nth-of-type(3)'); await page.waitForTimeout(150);
         step('a level button on a card opens that level straight away (no animation)', await page.evaluate(() => location.hash === '#/electronics/level-3' && !document.querySelector('.swoosh')));
@@ -115,7 +115,7 @@ server.listen(0, async () => {
         step('one click opens the problem at Level 1', await page.evaluate(() => location.hash) === '#/circuits/level-1');
         const trackIds = await page.locator('#problem-bar .level-tab').evaluateAll(as => as.map(a => a.dataset.level));
         step('labelled tabs offer levels 1–4', trackIds.join() === 'level-1,level-2,level-3,level-4', trackIds.join());
-        step('a breadcrumb shows where you are', /Electrical\s*\/\s*Circuit analysis/.test(await page.textContent('#problem-bar .crumbs')));
+        step('a breadcrumb shows where you are', /Circuits & electronics\s*\/\s*Circuit analysis/.test(await page.textContent('#problem-bar .crumbs')));
         await page.click('#problem-bar .level-tab[data-level="level-3"]'); await page.waitForTimeout(150);
         step('the tabs switch level in place', await page.evaluate(() => location.hash === '#/circuits/level-3' && level === 'level-3'));
         await page.goBack(); await page.waitForTimeout(150);
@@ -130,23 +130,23 @@ server.listen(0, async () => {
         step('Enter jumps to the first answer box', await page.evaluate(() => document.activeElement?.id) === 'answer-0');
         await page.click('.problem-title');
         await page.keyboard.press('Escape'); await page.waitForTimeout(150);
-        step('Escape goes back to the category', await page.evaluate(() => location.hash) === '#/electrical' && await shown('category'));
+        step('Escape goes back to the category', await page.evaluate(() => location.hash) === '#/circuits-electronics' && await shown('category'));
         step('the category remembers the level used for a discipline', await page.getAttribute('#category .card[data-topic="circuits"] .card-link', 'href') === '#/circuits/level-2' && /Start level 2/.test(await page.textContent('#category .card[data-topic="circuits"] .card-cta')));
         await page.keyboard.press('Escape'); await page.waitForTimeout(150);
         step('Escape again goes back to the main menu', await shown('home'));
         step('the menu offers to continue the last problem', await page.getAttribute('#home [data-menu="continue"]', 'href') === '#/circuits/level-2');
         await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown');
-        step('arrow keys move through the menu', await page.evaluate(() => document.activeElement?.dataset.menu) === 'mechanical');
+        step('arrow keys move through the menu', await page.evaluate(() => document.activeElement?.dataset.menu) === 'signals-control');
         await go('#/circuits');
         step('a bare discipline address opens its remembered level', await page.evaluate(() => location.hash) === '#/circuits/level-2');
         await page.click('#back-link'); await page.waitForTimeout(150);
-        step('the breadcrumb link returns to the category', await page.evaluate(() => location.hash) === '#/electrical' && await shown('category'));
+        step('the breadcrumb link returns to the category', await page.evaluate(() => location.hash) === '#/circuits-electronics' && await shown('category'));
         await page.click('#cat-back'); await page.waitForTimeout(150);
         step('the category breadcrumb returns to the main menu', await page.evaluate(() => location.hash) === '#/' && await shown('home'));
         await page.click('.tabs a[data-tab="archive"]'); await page.waitForTimeout(200);
         step('the Archive tab opens the archive of the last discipline', await page.evaluate(() => location.hash) === '#/circuits/archive' && await shown('archive') && await page.getAttribute('.tabs a[data-tab="archive"]', 'aria-current') === 'page');
-        await page.click('#archive .pick:has-text("Thermo")'); await page.waitForTimeout(150);
-        step('the archive switches discipline from its picker', await page.evaluate(() => location.hash) === '#/thermo/archive');
+        await page.click('#archive .pick:has-text("Power systems")'); await page.waitForTimeout(150);
+        step('the archive switches discipline from its picker', await page.evaluate(() => location.hash) === '#/power/archive');
         await go('#/nowhere/at-all');
         step('an unknown address falls back to the main menu', await shown('home'));
         await go('#/circuits/level-1');
@@ -272,7 +272,7 @@ server.listen(0, async () => {
         step('the next reward is announced', /Next reward at 7 days \(\+20\)/.test(paid.feedback));
         await page.reload(); await page.waitForTimeout(200);
         step('a milestone pays only once', await page.textContent('#coin-count') === '10');
-        await go('#/electrical');
+        await go('#/circuits-electronics');
         await page.waitForTimeout(1300);
         step('the category marks the discipline done with its streak', await page.evaluate(() => { const c = document.querySelector('#category .card[data-topic="circuits"]'); return c.classList.contains('done') && /Done today · 3-day streak/.test(c.querySelector('.card-status').textContent); }));
         await go('#/circuits/archive');
@@ -303,7 +303,7 @@ server.listen(0, async () => {
                 step('a diagram draws itself when the problem opens', early.loaded && early.drawing > 0 && early.hidden > 0, JSON.stringify(early));
                 step('after drawing, the diagram is exactly as authored (dashed guides intact)', late.drawing === 0 && late.hidden === 0 && late.guides && late.authored > 0, JSON.stringify(late));
             }
-            await mp.evaluate(() => { location.hash = '#/robotics'; }); await mp.waitForTimeout(60);
+            await mp.evaluate(() => { location.hash = '#/comms'; }); await mp.waitForTimeout(60);
             const cards = () => mp.evaluate(() => [...document.querySelectorAll('#category .card')].map(c => c.style.opacity));
             const c0 = await cards();
             await mp.waitForTimeout(1200);
@@ -349,7 +349,7 @@ server.listen(0, async () => {
                 await mp.click('.concept-play'); await mp.waitForTimeout(700);
                 step('a concept animation waits for Play, then the phasor turns', x0 === still && await mp.getAttribute('.concept svg line.ac', 'x2') !== x0 && await mp.isDisabled('.concept-play'));
                 // Category switch: the highlight glides to the new category, then the glider is removed.
-                await mp.goto(url + '#/electrical'); await mp.waitForTimeout(600);
+                await mp.goto(url + '#/circuits-electronics'); await mp.waitForTimeout(600);
                 await mp.click('.switch-opt:has-text("Comms")'); await mp.waitForTimeout(80);
                 const g0 = await mp.evaluate(() => !!document.querySelector('.switch .glider') && document.querySelector('.switch').classList.contains('gliding'));
                 await mp.waitForTimeout(600);
@@ -366,32 +366,26 @@ server.listen(0, async () => {
                 const b0 = parseFloat(await mp.evaluate(() => document.querySelector('#home .goal-bar span').style.width));
                 await mp.waitForTimeout(1100);
                 const b1 = parseFloat(await mp.evaluate(() => document.querySelector('#home .goal-bar span').style.width));
-                step('the done-today bar grows to its value', b0 < b1 && Math.abs(b1 - 100 / 19) < .1, `${b0} → ${b1}`);
+                step('the done-today bar grows to its value', b0 < b1 && Math.abs(b1 - 100 / 14) < .1, `${b0} → ${b1}`);
                 await mp.goto(url + '#/progress'); await mp.waitForTimeout(1500);
                 step('streak bars fill on the progress page', await mp.evaluate(() => document.querySelector('.streaks tr:has(a[href="#/linkbudget"]) .streak-bar span').style.width) === '33.3%');
             }
             await mp.close();
         }
-        // 3D views (three.js): nothing downloads until a view is opened; the elbow arm starts on its target; leaving frees WebGL.
+        // 3D views (three.js): nothing downloads until a view is opened; the antenna patterns; leaving frees WebGL.
         {
             const tp = await browser.newPage(), bundle = [];
             tp.on('pageerror', e => errors.push(`3d: ${e.message}`));
             tp.on('request', r => { if (r.url().includes('three-lite')) bundle.push(r.url()); });
-            await tp.goto(url + '#/kinematics/level-4'); await tp.waitForSelector('#problem math-field');
-            await tp.evaluate(() => { exercise = {...makeTierExercise('kinematics', '2026-03-02', 'expert'), level: exercise.level, minutes: exercise.minutes}; openSolution(); });
-            const before = bundle.length;
-            await tp.click('.view3d-open'); await tp.waitForSelector('.view3d-stage canvas', {timeout: 20000}); await tp.waitForTimeout(300);
-            const arm = await tp.textContent('.view3d .readouts');
-            await tp.fill('.view3d-controls input >> nth=0', '0'); await tp.dispatchEvent('.view3d-controls input >> nth=0', 'input');
-            const moved = await tp.textContent('.view3d .readouts');
-            step('a 3D view downloads three.js only when opened, and the elbow arm starts on its target', before === 0 && bundle.length === 1 && /Distance to target\s*0\.0 mm/.test(arm) && moved !== arm, arm.replace(/\s+/g, ' ').slice(0, 90));
             await tp.goto(url + '#/linkbudget/level-4'); await tp.waitForSelector('#problem math-field');
-            await tp.click('#solution'); await tp.click('.view3d-open'); await tp.waitForSelector('.view3d-stage canvas'); await tp.waitForTimeout(200);
+            await tp.click('#solution'); await tp.waitForSelector('.view3d-open');
+            const before = bundle.length;
+            await tp.click('.view3d-open'); await tp.waitForSelector('.view3d-stage canvas', {timeout: 20000}); await tp.waitForTimeout(200);
             await tp.fill('.view3d-controls input >> nth=2', '40'); await tp.dispatchEvent('.view3d-controls input >> nth=2', 'input');
             const pat = await tp.textContent('.view3d .readouts');
             await tp.click('.view3d-views button:has-text("Short dipole")');
             const dip = await tp.textContent('.view3d .readouts');
-            step('the antenna pattern view shows a steered array as a cone and the dipole as a doughnut', /cone 50° from the array axis/.test(pat) && /doughnut/.test(dip) && bundle.length === 1, pat.replace(/\s+/g, ' ').slice(0, 120));
+            step('three.js downloads only when a 3D view is opened; the antenna view shows a steered array as a cone and the dipole as a doughnut', /cone 50° from the array axis/.test(pat) && /doughnut/.test(dip) && before === 0 && bundle.length === 1, pat.replace(/\s+/g, ' ').slice(0, 120));
             await tp.goto(url + '#/'); await tp.waitForTimeout(200);
             step('leaving a problem frees its 3D view', await tp.evaluate(() => document.querySelectorAll('canvas').length) === 0);
             await tp.close();
