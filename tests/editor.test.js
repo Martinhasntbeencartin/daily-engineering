@@ -40,6 +40,38 @@ async function typeKeys(page, keys) {
         await page.waitForTimeout(15);
     }
 }
+/* Check real browser text metrics. Exercise generators vary both the geometry
+   and the printed values, including between tiers within the same level. */
+function checkFigureLayouts() {
+    const host = document.createElement('div'), seen = new Set(), issues = new Set();
+    host.className = 'diagram';
+    document.body.append(host);
+    try {
+        for (let day = 0; day < 32; day++) {
+            const date = new Date(Date.UTC(2026, 0, 1 + day)).toISOString().slice(0, 10);
+            for (const topic of TOPICS) for (const tier of TIERS) {
+                const {diagram, title} = makeTierExercise(topic.id, date, tier);
+                if (seen.has(diagram)) continue;
+                seen.add(diagram);
+                host.innerHTML = diagram;
+                const svg = host.querySelector('svg'), view = svg.viewBox.baseVal, bounds = svg.getBBox();
+                if (bounds.x < view.x - 1 || bounds.y < view.y - 1 ||
+                    bounds.x + bounds.width > view.x + view.width + 1 || bounds.y + bounds.height > view.y + view.height + 1)
+                    issues.add(`${topic.id}: ${title} extends past the viewBox`);
+                const labels = [...svg.querySelectorAll('text')].filter(el => el.textContent)
+                    .map(el => ({name: el.textContent, box: el.getBoundingClientRect()}));
+                const scale = svg.getScreenCTM().a;
+                for (const [i, a] of labels.entries()) for (const b of labels.slice(i + 1)) {
+                    const w = Math.min(a.box.right, b.box.right) - Math.max(a.box.left, b.box.left);
+                    const h = Math.min(a.box.bottom, b.box.bottom) - Math.max(a.box.top, b.box.top);
+                    if (w > 2 * scale && h > 3 * scale) issues.add(`${title}: labels “${a.name}” and “${b.name}” overlap`);
+                }
+            }
+        }
+    } finally { host.remove(); }
+    return {count: seen.size, issues: [...issues]};
+}
+
 server.listen(0, async () => {
     const url = `http://localhost:${server.address().port}/`, browser = await chromium.launch(), page = await browser.newPage(), errors = [];
     page.on('pageerror', e => errors.push(e.message));
@@ -54,6 +86,8 @@ server.listen(0, async () => {
         // Navigation: the main menu, a category, one click to a problem, the level tabs, shortcuts, and back again.
         await page.goto(url);
         await page.waitForTimeout(600);
+        const figures = await page.evaluate(checkFigureLayouts);
+        step(`${figures.count} exercise diagrams fit their viewBox and have distinct labels`, !figures.issues.length, figures.issues.join(' / '));
         const menu = await page.evaluate(() => [...document.querySelectorAll('#home [data-menu]')].map(a => a.dataset.menu));
         step('the main menu offers all four categories, the archive, progress and help', menu.join() === 'electrical,mechanical,robotics,comms,archive,progress,help', menu.join());
         step('the Menu tab is marked as the current page', await page.getAttribute('.tabs a[data-tab="menu"]', 'aria-current') === 'page');

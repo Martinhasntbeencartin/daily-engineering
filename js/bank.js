@@ -188,7 +188,11 @@ bank('control', 'advanced', [{
 
 bank('digital', 'advanced', [{
     title: 'Self-dual functions',
-    diagram: signalChain(['Input x|000', 'Complement|111', 'Output|1 − f(000)'], 'Self-duality pairs each input with its bitwise complement'),
+    diagram: sketch('Each input is paired with its bitwise complement, and their output values are opposites.',
+        [0, 1, 2, 3].map((i) => {
+            const x = 120 + 160 * i, word = n => n.toString(2).padStart(3, '0');
+            return dt(x, 47, word(i)) + arrow(x, 63, x, 122) + dt(x, 151, word(7 - i));
+        }).join(''), [[360, 211, 'Complementary inputs have complementary outputs']]),
     text: T`A Boolean function is self-dual if $f(\bar x_1, \bar x_2, \bar x_3) = \overline{f(x_1, x_2, x_3)}$. How many self-dual functions of three variables exist?`,
     parts: [exInt('Self-dual functions', 16)],
     hints: [T`The 8 input vectors form 4 complementary pairs.`, T`Choosing $f$ on one member of each pair fixes it on the other.`],
@@ -208,10 +212,7 @@ bank('digital', 'advanced', [{
     verify: () => { let r = 1; for (let i = 0; i < 7; i++) { r <<= 1; if (r & 8) r ^= 0b1011; } return [r]; }
 }, {
     title: 'Monotone functions of three inputs',
-    diagram: sketch(
-        'One chain in the three-input Boolean lattice, ordered by bitwise inclusion.',
-        arrow(146, 165, 249, 131) + arrow(293, 120, 402, 84) + arrow(448, 75, 546, 42),
-        [[120, 177, '000'], [272, 132, '001'], [426, 88, '011'], [572, 44, '111'], [360, 220, 'Changing one input from 0 to 1']]),
+    diagram: booleanLattice(),
     text: T`A Boolean function is monotone if changing any input from $0$ to $1$ never changes the output from $1$ to $0$. How many monotone functions of three variables are there (including the constants)?`,
     parts: [exInt('Monotone functions', 20)],
     hints: [T`Monotone functions correspond to antichains (sets of mutually incomparable subsets) of $\{1,2,3\}$.`, T`Count them by size, or enumerate all 256 functions.`],
@@ -221,7 +222,7 @@ bank('digital', 'advanced', [{
     verify: () => { let n = 0; for (let f = 0; f < 256; f++) { let ok = 1; for (let x = 0; x < 8; x++) for (let k = 0; k < 3; k++) if (!(x & (1 << k)) && ((f >> x) & 1) > ((f >> (x | (1 << k))) & 1)) ok = 0; n += ok; } return [n]; }
 }, {
     title: 'Maximal-length LFSRs of degree five',
-    diagram: bitWord(['q₄', 'q₃', 'q₂', 'q₁', 'q₀'], [], 'Five register bits · feedback taps select the polynomial'),
+    diagram: fiveStageRegister(),
     text: T`How many distinct degree-5 feedback polynomials over $\mathrm{GF}(2)$ produce a maximal-length (period $31$) LFSR? That is, how many primitive polynomials of degree 5 are there?`,
     parts: [exInt('Primitive polynomials', 6)],
     hints: [T`The number of primitive polynomials of degree $n$ is $\varphi(2^n - 1)/n$.`, T`$31$ is prime.`],
@@ -334,7 +335,7 @@ bank('measurement', 'advanced', [{
     verify: () => { const x = [0, 1, 2], y = [0, 1, 3], n = 3, sx = 3, sy = 4, sxx = 5, sxy = 7, b = (n * sxy - sx * sy) / (n * sxx - sx * sx); return [b, (sy - b * sx) / n]; }
 }, {
     title: 'The golden Kalman gain',
-    diagram: signalChain(['Predict|random walk', 'Innovation|z − prediction', 'Update|with gain K'], 'Process and measurement noise each have variance 1'),
+    diagram: estimatorDiagram('Delay', 'Predicted x', 'Estimate x̂', 'Random walk · Q = R = 1'),
     text: T`A scalar random walk $x_{k+1} = x_k + w_k$ is measured as $z_k = x_k + v_k$, with $\operatorname{Var} w = \operatorname{Var} v = 1$. Find the steady-state Kalman gain.`,
     parts: [ex(T`$K$`, (Math.sqrt(5) - 1) / 2, T`\dfrac{\sqrt5-1}{2}`)],
     hints: [T`The prior variance satisfies $P = \dfrac{P}{P+1} + 1$, i.e. $P^2 - P - 1 = 0$.`, T`$K = \dfrac{P}{P+1}$.`],
@@ -354,7 +355,7 @@ bank('measurement', 'advanced', [{
     verify: () => { const k = 1.380649e-23, Tk = 300, C = 1e-12, R = 1e3, S = 4 * k * Tk * R, bw = NUM.simpson(f => 1 / (1 + (2 * Math.PI * f * R * C) ** 2), 0, 1e13, 200000) + 1 / (4 * Math.PI ** 2 * R * R * C * C * 1e13); return [Math.sqrt(S * bw) * 1e6]; }
 }, {
     title: 'Noise figure of a two-stage chain',
-    diagram: signalChain(['Input', 'Stage 1|F₁ = 2, G₁ = 10', 'Stage 2|F₂ = 11', 'Output'], 'Cascaded receiver stages'),
+    diagram: noiseCascade('F₁ = 2', 'G₁ = 10', 'F₂ = 11', 'Input'),
     text: T`A receiver chain has a first stage with noise factor $F_1 = 2$ and gain $G_1 = 10$, followed by a stage with $F_2 = 11$. Find the overall noise factor (as a ratio, not in dB).`,
     parts: [ex(T`$F$`, 3, '3')],
     hints: [T`Friis formula: $F = F_1 + \dfrac{F_2 - 1}{G_1}$.`],

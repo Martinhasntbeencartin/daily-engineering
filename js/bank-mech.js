@@ -65,8 +65,8 @@ bank('dynamics', 'advanced', [{
     diagram: sketch(
         'Bead on a vertical rotating hoop, with angle measured from its bottom radius.',
         ring(354, 123, 83) + guide('M354 24v190') + wire('M354 123l59 59') + dot(413, 182) +
-        arrow(316, 33, 382, 33),
-        [[329, 176, 'θ'], [433, 196, 'm'], [402, 37, 'ω']]),
+        wire('M334 43a23 8 0 1 1 37 -2l-8 -3m8 3 -2 -8') + wire('M354 159a36 36 0 0 0 25.5 -10.5'),
+        [[369, 180, 'θ'], [433, 196, 'm'], [402, 37, 'ω']]),
     text: T`A bead slides without friction on a vertical hoop of radius $R$ spinning about its vertical diameter at angular speed $\omega$, with $\omega^2 = 2g/R$. At what angle from the bottom, in degrees, does the bead sit in stable equilibrium?`,
     parts: [ex(T`$\theta$`, 60, '60', '°')],
     hints: [T`In the rotating frame: $\omega^2R\sin\theta\cos\theta = g\sin\theta$.`, T`Off-bottom equilibrium: $\cos\theta = \dfrac{g}{\omega^2R}$.`],
