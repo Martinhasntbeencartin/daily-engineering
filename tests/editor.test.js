@@ -73,7 +73,9 @@ function checkFigureLayouts() {
 }
 
 server.listen(0, async () => {
-    const url = `http://localhost:${server.address().port}/`, browser = await chromium.launch(), page = await browser.newPage(), errors = [];
+    // The main run freezes the clock; anime.js times itself with Date.now, so this page asks for reduced motion
+    // (nothing animates and the logic is checked). The motion itself is checked further down on pages with a running clock.
+    const url = `http://localhost:${server.address().port}/`, browser = await chromium.launch(), page = await browser.newPage({reducedMotion: 'reduce'}), errors = [];
     page.on('pageerror', e => errors.push(e.message));
     page.on('response', r => r.status() >= 400 && errors.push(`${r.status()} ${r.url()}`));
     let failures = 0;
@@ -287,7 +289,7 @@ server.listen(0, async () => {
         for (const reducedMotion of ['no-preference', 'reduce']) {
             const mp = await browser.newPage({reducedMotion});
             mp.on('pageerror', e => errors.push(`motion: ${e.message}`));
-            await mp.goto(url + '#/linkbudget/level-2'); await mp.waitForSelector('#problem .diagram svg');
+            await mp.goto(url + '#/linkbudget/level-3'); await mp.waitForSelector('#problem .diagram svg');
             const probe = () => mp.evaluate(() => {
                 const svg = document.querySelector('#challenge .diagram svg'), lines = [...svg.querySelectorAll('path, line, polyline, polygon, rect, circle, ellipse')];
                 return {loaded: typeof anime === 'object', drawing: lines.filter(el => el.hasAttribute('pathLength') || el.hasAttribute('draw')).length, hidden: [...svg.querySelectorAll('text')].filter(t => t.style.opacity !== '').length,
@@ -311,7 +313,88 @@ server.listen(0, async () => {
                 step('category cards fade in one after another', c0.length === 4 && Number(c0[3]) < 1, JSON.stringify(c0));
                 step('the cascade leaves no inline styles behind, so hover still works', c1.every(o => o === '') && await mp.evaluate(() => [...document.querySelectorAll('#category .card')].every(c => !c.style.transform)), JSON.stringify(c1));
             }
+            // Solving: "All correct." decodes and ticks draw (or appear at once with reduced motion).
+            await mp.goto(url + '#/linkbudget/level-3'); await mp.waitForSelector('#problem math-field'); await mp.waitForTimeout(200);
+            await mp.evaluate(() => exercise.parts.forEach((p, i) => { document.getElementById(`answer-${i}`).value = String(p.answer); }));
+            await mp.click('#check'); await mp.waitForTimeout(80);
+            const sol0 = await mp.evaluate(() => ({verdict: document.querySelector('.verdict-word')?.textContent, ticks: document.querySelectorAll('.part-feedback .tick').length, drawing: document.querySelectorAll('.part-feedback .tick [pathLength]').length}));
+            await mp.waitForTimeout(1500);
+            const sol1 = await mp.evaluate(() => ({verdict: document.querySelector('.verdict-word')?.textContent, drawing: document.querySelectorAll('.part-feedback .tick [pathLength]').length}));
+            if (reducedMotion === 'reduce') step('reduced motion: the verdict and ticks appear at once', sol0.verdict === 'All correct.' && sol0.ticks > 0 && sol0.drawing === 0, JSON.stringify(sol0));
+            else step('“All correct.” decodes and each correct part gets a drawn tick, then both settle', sol0.verdict !== 'All correct.' && sol0.drawing > 0 && sol1.verdict === 'All correct.' && sol1.drawing === 0, JSON.stringify([sol0, sol1]));
+            // Walk-through: one step at a time, labels named in the step light up, "Show all" returns to the full working.
+            await mp.click('[data-walk]'); await mp.waitForTimeout(100);
+            const w1 = await mp.evaluate(() => ({count: document.querySelector('.walk-count').textContent, later: document.querySelectorAll('.steps .later').length, n: exercise.steps.length}));
+            await mp.click('[data-walk-next]'); await mp.waitForTimeout(450);
+            const w2 = await mp.evaluate(() => ({count: document.querySelector('.walk-count').textContent, current: document.querySelectorAll('.steps li.current').length, styled: [...document.querySelectorAll('.steps li')].some(li => li.style.opacity || li.style.transform)}));
+            await mp.click('[data-walk-all]'); await mp.waitForTimeout(100);
+            const w3 = await mp.evaluate(() => ({walk: !!document.querySelector('.walk'), dimmed: document.querySelectorAll('.steps .later, .steps .current').length, button: !!document.querySelector('[data-walk]')}));
+            step(`${reducedMotion}: the walk-through shows one step at a time and returns to the full working`, w1.count === `Step 1 of ${w1.n}` && w1.later === w1.n - 1 && w2.count === `Step 2 of ${w1.n}` && w2.current === 1 && !w2.styled && !w3.walk && w3.dimmed === 0 && w3.button, JSON.stringify([w1, w2, w3]));
+            // Explore: dragging the array's steering knob changes the beam and its readouts.
+            const knob = await mp.$('.explore .knob');
+            await knob.scrollIntoViewIfNeeded(); await mp.waitForTimeout(150);
+            const before = await mp.textContent('.explore .readouts'), kb = await knob.boundingBox();
+            await mp.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2); await mp.mouse.down();
+            await mp.mouse.move(kb.x + kb.width / 2 + 90, kb.y + kb.height / 2, {steps: 10}); await mp.mouse.up(); await mp.waitForTimeout(600);
+            const after = await mp.textContent('.explore .readouts');
+            step(`${reducedMotion}: dragging the explore knob steers the array (readouts update)`, before !== after && /Steering θ₀-?\d/.test(after), after.replace(/\s+/g, ' ').slice(0, 80));
+            await knob.focus(); await mp.keyboard.press('ArrowLeft'); await mp.waitForTimeout(100);
+            step(`${reducedMotion}: the explore knob also moves with the arrow keys`, await mp.textContent('.explore .readouts') !== after);
+            if (reducedMotion === 'no-preference') {
+                // Concept animation: nothing moves until Play is pressed.
+                await mp.goto(url + '#/power/level-2'); await mp.waitForSelector('#problem math-field');
+                await mp.click('#solution'); await mp.waitForSelector('.concept-play');
+                const x0 = await mp.getAttribute('.concept svg line.ac', 'x2'); await mp.waitForTimeout(400);
+                const still = await mp.getAttribute('.concept svg line.ac', 'x2');
+                await mp.click('.concept-play'); await mp.waitForTimeout(700);
+                step('a concept animation waits for Play, then the phasor turns', x0 === still && await mp.getAttribute('.concept svg line.ac', 'x2') !== x0 && await mp.isDisabled('.concept-play'));
+                // Category switch: the highlight glides to the new category, then the glider is removed.
+                await mp.goto(url + '#/electrical'); await mp.waitForTimeout(600);
+                await mp.click('.switch-opt:has-text("Comms")'); await mp.waitForTimeout(80);
+                const g0 = await mp.evaluate(() => !!document.querySelector('.switch .glider') && document.querySelector('.switch').classList.contains('gliding'));
+                await mp.waitForTimeout(600);
+                step('the category switch highlight glides, then tidies up', g0 && await mp.evaluate(() => !document.querySelector('.switch .glider') && !document.querySelector('.switch').classList.contains('gliding')));
+                // Coins count up; the reward toast springs in and counts its amount.
+                await mp.evaluate(() => { wallet.earned['circuits:test:3'] = {amount: 30, at: today}; announceRewards([{days: 3, topic: TOPICS[0], amount: 30}]); });
+                await mp.waitForTimeout(120);
+                const k0 = await mp.evaluate(() => ({chip: Number(document.getElementById('coin-count').textContent), toast: Number(document.querySelector('#toast [data-count]').textContent), moving: !!document.getElementById('toast').style.transform}));
+                await mp.waitForTimeout(1400);
+                const k1 = await mp.evaluate(() => ({chip: document.getElementById('coin-count').textContent, toast: document.querySelector('#toast [data-count]').textContent, style: document.getElementById('toast').style.transform}));
+                step('coins count up, and the reward toast springs in while its amount counts', k0.chip < 30 && k0.toast < 30 && k0.moving && k1.chip === '30' && k1.toast === '30' && !k1.style, JSON.stringify([k0, k1]));
+                // Menu bar and progress bars fill.
+                await mp.goto(url + '#/'); await mp.waitForTimeout(60);
+                const b0 = parseFloat(await mp.evaluate(() => document.querySelector('#home .goal-bar span').style.width));
+                await mp.waitForTimeout(1100);
+                const b1 = parseFloat(await mp.evaluate(() => document.querySelector('#home .goal-bar span').style.width));
+                step('the done-today bar grows to its value', b0 < b1 && Math.abs(b1 - 100 / 19) < .1, `${b0} → ${b1}`);
+                await mp.goto(url + '#/progress'); await mp.waitForTimeout(1500);
+                step('streak bars fill on the progress page', await mp.evaluate(() => document.querySelector('.streaks tr:has(a[href="#/linkbudget"]) .streak-bar span').style.width) === '33.3%');
+            }
             await mp.close();
+        }
+        // 3D views (three.js): nothing downloads until a view is opened; the elbow arm starts on its target; leaving frees WebGL.
+        {
+            const tp = await browser.newPage(), bundle = [];
+            tp.on('pageerror', e => errors.push(`3d: ${e.message}`));
+            tp.on('request', r => { if (r.url().includes('three-lite')) bundle.push(r.url()); });
+            await tp.goto(url + '#/kinematics/level-4'); await tp.waitForSelector('#problem math-field');
+            await tp.evaluate(() => { exercise = {...makeTierExercise('kinematics', '2026-03-02', 'expert'), level: exercise.level, minutes: exercise.minutes}; openSolution(); });
+            const before = bundle.length;
+            await tp.click('.view3d-open'); await tp.waitForSelector('.view3d-stage canvas', {timeout: 20000}); await tp.waitForTimeout(300);
+            const arm = await tp.textContent('.view3d .readouts');
+            await tp.fill('.view3d-controls input >> nth=0', '0'); await tp.dispatchEvent('.view3d-controls input >> nth=0', 'input');
+            const moved = await tp.textContent('.view3d .readouts');
+            step('a 3D view downloads three.js only when opened, and the elbow arm starts on its target', before === 0 && bundle.length === 1 && /Distance to target\s*0\.0 mm/.test(arm) && moved !== arm, arm.replace(/\s+/g, ' ').slice(0, 90));
+            await tp.goto(url + '#/linkbudget/level-4'); await tp.waitForSelector('#problem math-field');
+            await tp.click('#solution'); await tp.click('.view3d-open'); await tp.waitForSelector('.view3d-stage canvas'); await tp.waitForTimeout(200);
+            await tp.fill('.view3d-controls input >> nth=2', '40'); await tp.dispatchEvent('.view3d-controls input >> nth=2', 'input');
+            const pat = await tp.textContent('.view3d .readouts');
+            await tp.click('.view3d-views button:has-text("Short dipole")');
+            const dip = await tp.textContent('.view3d .readouts');
+            step('the antenna pattern view shows a steered array as a cone and the dipole as a doughnut', /cone 50° from the array axis/.test(pat) && /doughnut/.test(dip) && bundle.length === 1, pat.replace(/\s+/g, ' ').slice(0, 120));
+            await tp.goto(url + '#/'); await tp.waitForTimeout(200);
+            step('leaving a problem frees its 3D view', await tp.evaluate(() => document.querySelectorAll('canvas').length) === 0);
+            await tp.close();
         }
         if (errors.length) { failures++; console.log('FAIL page errors', errors); }
     } finally {

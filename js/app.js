@@ -275,9 +275,11 @@ function unlockDay(t, d) {
     toast(`<p><span>Unlocked ${longDate(d)} · ${topicOf(t).name}</span><b>−${UNLOCK_COST} ◎</b></p>`);
     return true;
 }
+let shownCoins = null, shownDone = null;
 function renderCoins() {
     const n = coins();
-    $('#coin-count').textContent = n;
+    countTo($('#coin-count'), shownCoins ?? n, n);
+    shownCoins = n;
     $('#coin-link').setAttribute('aria-label', `${plural(n, 'coin')}. Streaks and rewards`);
 }
 let toastTimer;
@@ -288,12 +290,13 @@ function toast(html) {
     el.classList.remove('show');
     void el.offsetWidth; // restart the entrance animation
     el.classList.add('show');
+    popToast(el);
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { el.hidden = true; }, 6000);
 }
 function announceRewards(list) {
     renderCoins();
-    if (list.length) toast(list.map(r => `<p><span>${streakName(r.days)} · ${r.topic.name}</span><b>+${r.amount} ◎</b></p>`).join(''));
+    if (list.length) toast(list.map(r => `<p><span>${streakName(r.days)} · ${r.topic.name}</span><b>+<span data-count="${r.amount}">${r.amount}</span> ◎</b></p>`).join(''));
 }
 const LOCK_ICON = '<svg class="lock" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3" y="7" width="10" height="7"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>';
 const glyph = tex => window.katex ? katex.renderToString(tex, {throwOnError: false}) : tex;
@@ -362,53 +365,26 @@ function renderHome() {
         `<button class="menu-item" type="button" id="menu-help" data-menu="help">${MENU_ICONS.help}<span><b>How it works</b><small>Rules, coins and shortcuts</small></span></button>`
     ].filter(Boolean).join('');
     $('#home').innerHTML = `<header class="menu-head"><p class="kicker mono">Main menu</p><h1>Daily Engineer</h1><p class="muted">${longDate(today, {weekday: 'long', day: 'numeric', month: 'long'})} · new problems in <span class="countdown">--:--:--</span></p></header>`
-        + `<section class="menu-stats" aria-label="Today at a glance"><div class="frame"><b>${n}<small>/${TOPICS.length}</small></b><span>disciplines done today</span><div class="goal-bar" role="progressbar" aria-label="Disciplines done today" aria-valuemin="0" aria-valuemax="${TOPICS.length}" aria-valuenow="${n}"><span style="width: ${(100 * n / TOPICS.length).toFixed(1)}%"></span></div></div><div class="frame"><b>◎ ${coins()}</b><span>coins</span></div><div class="frame"><b>${best}</b><span>best current streak</span></div></section>`
+        + `<section class="menu-stats" aria-label="Today at a glance"><div class="frame"><b>${n}<small>/${TOPICS.length}</small></b><span>disciplines done today</span><div class="goal-bar" role="progressbar" aria-label="Disciplines done today" aria-valuemin="0" aria-valuemax="${TOPICS.length}" aria-valuenow="${n}"><span></span></div></div><div class="frame"><b>◎ ${coins()}</b><span>coins</span></div><div class="frame"><b>${best}</b><span>best current streak</span></div></section>`
         + introHTML()
         + `<nav class="menu" aria-label="Main menu"><h2 class="menu-k">Choose a category</h2><div class="menu-cats">${cats}</div><h2 class="menu-k">More</h2><div class="menu-items">${items}</div></nav>`;
+    fillBar($('#home .goal-bar span'), 100 * n / TOPICS.length, shownDone ?? 0);
+    shownDone = 100 * n / TOPICS.length;
     $('#dismiss-intro')?.addEventListener('click', () => { remember('daily-engineer-intro', 'done'); $('#home .intro')?.remove(); });
     $('#menu-help').addEventListener('click', () => $('#about-dialog').showModal());
 }
 /* A category: its disciplines as cards, with a switch to the other category. */
 function renderCategory() {
     const ts = TOPICS.filter(t => t.group === group), done = ts.filter(t => doneOn(t.id, today)).length;
+    const was = chosenRect('#category .switch', '.switch-opt.current');
     const sw = GROUPS.map(g => `<a class="switch-opt ${g.id === group ? 'current' : ''}" href="#/${g.id}" ${g.id === group ? 'aria-current="page"' : ''} title="${g.name}">${g.short}</a>`).join('');
     $('#category').innerHTML = `<nav class="crumbs" aria-label="Breadcrumb"><a id="cat-back" href="#/">← Main menu</a><span aria-hidden="true">/</span><span class="crumb-here">${groupName(group)}</span></nav>`
-        + `<header class="cat-head"><div><h1>${groupName(group)}</h1><p class="muted">${done} of ${ts.length} done today. Pick a discipline and a level; one solved level a day keeps its streak.</p></div><nav class="switch" aria-label="Category">${sw}</nav></header>`
+        + `<header class="cat-head"><div><h1>${groupName(group)}</h1><p class="muted">${done} of ${ts.length} done today. Pick a discipline and a level; one solved level a day keeps its streak.</p><div class="goal-bar cat-bar" role="progressbar" aria-label="Done today in ${groupName(group)}" aria-valuemin="0" aria-valuemax="${ts.length}" aria-valuenow="${done}"><span></span></div></div><nav class="switch" aria-label="Category">${sw}</nav></header>`
         + `<div class="cards">${ts.map(cardHTML).join('')}</div>`;
+    fillBar($('#category .cat-bar span'), 100 * done / ts.length);
+    glide($('#category .switch'), '.switch-opt.current', was);
     cascade([...document.querySelectorAll('#category .card')]);
 }
-/* ---------- Motion (anime.js, vendor/animejs): diagrams draw themselves and category cards cascade in.
-   Nothing moves when the system asks for reduced motion, or if the library did not load. ---------- */
-const calm = () => typeof anime !== 'object' || matchMedia('(prefers-reduced-motion: reduce)').matches;
-/* Clears the inline styles an animation leaves behind (anime.js's own clean-up would restore the hidden start state). */
-const unstyle = els => els.forEach(el => { el.style.removeProperty('opacity'); el.style.removeProperty('transform'); });
-/* Each line of a diagram is drawn in order, as if sketched; dashed guides, filled dots and labels fade in.
-   Afterwards the drawing attributes are removed, so the figure is exactly as it was authored. */
-function drawDiagram(svg) {
-    if (!svg || calm()) return;
-    const shapes = [...svg.querySelectorAll('path, line, polyline, polygon, rect, circle, ellipse')];
-    const lines = shapes.filter(el => !el.hasAttribute('stroke-dasharray') && getComputedStyle(el).fill === 'none');
-    const rest = [...shapes.filter(el => !lines.includes(el)), ...svg.querySelectorAll('text')];
-    const step = Math.min(30, 600 / Math.max(lines.length, 1)), total = 600 + step * lines.length;
-    if (lines.length) anime.animate(anime.createDrawable(lines), {
-        draw: ['0 0', '0 1'], duration: 600, delay: anime.stagger(step), ease: 'inOutSine',
-        onComplete: () => lines.forEach(el => {
-            for (const a of ['pathLength', 'stroke-dasharray', 'stroke-dashoffset', 'draw']) el.removeAttribute(a);
-            el.style.removeProperty('stroke-linecap');
-        })
-    });
-    if (rest.length) {
-        anime.utils.set(rest, {opacity: 0});
-        anime.animate(rest, {opacity: 1, duration: 400, delay: total * .45, ease: 'outQuad', onComplete: () => unstyle(rest)});
-    }
-}
-/* Cards fade up one after another; inline styles are cleared at the end so hover effects work as before. */
-function cascade(els) {
-    if (!els.length || calm()) return;
-    anime.utils.set(els, {opacity: 0, y: 10});
-    anime.animate(els, {opacity: 1, y: 0, duration: 380, delay: anime.stagger(45), ease: 'outQuad', onComplete: () => unstyle(els)});
-}
-
 /* Where Back and Esc lead: problem → its category (or the archive for a past day) → main menu. */
 const backHref = () => view === 'problem' ? (date !== today ? `#/${topic}/archive` : `#/${topicOf(topic).group}`) : '#/';
 /* Above a problem: a breadcrumb with this discipline's streak, and the four levels as labelled tabs. */
@@ -432,7 +408,7 @@ function nextStepsHTML() {
 }
 /* The archive: pick a discipline, then a day. Today is open; past days unlock with coins (days already played stay open). */
 function renderArchive() {
-    const t = topicOf(topic), bal = coins();
+    const t = topicOf(topic), bal = coins(), was = chosenRect('#archive .picker', '.pick.current');
     const picker = TOPICS.map(x => `<a class="pick ${x.id === t.id ? 'current' : ''}" href="#/${x.id}/archive" ${x.id === t.id ? 'aria-current="page"' : ''}>${x.name}</a>`).join('');
     const rows = Array.from({length: 31}, (_, k) => shifted(today, -k)).map(d => {
         const open = isOpen(t.id, d), label = d === today ? 'Today' : longDate(d);
@@ -449,6 +425,7 @@ function renderArchive() {
         + `<div class="archive-bar frame"><p class="archive-coins"><b>◎ ${bal}</b> coins</p><p class="muted">${wallet}</p></div>`
         + `<nav class="picker" aria-label="Discipline">${picker}</nav>`
         + `<div class="arch-head"><h2>${t.name}</h2><span class="muted">${plural(locked, 'day')} locked</span></div><ol class="arch-list">${rows}</ol>`;
+    glide($('#archive .picker'), '.pick.current', was);
     $('#archive').querySelectorAll('[data-unlock]').forEach(b => b.addEventListener('click', () => { if (unlockDay(t.id, b.dataset.unlock)) renderArchive(); }));
 }
 /* A past day that is still locked: offer to unlock it right here. */
@@ -593,8 +570,8 @@ function solutionHTML() {
     }).join('');
     return `${verdict ? `<p class="solution-verdict">${verdict}</p>` : ''}<h4>Answers</h4><ol class="answer-review">${review}</ol>` +
         `<h4>How to approach it</h4><ul class="approach">${e.hints.map(h => `<li>${h}</li>`).join('')}</ul>` +
-        `<h4>Worked solution</h4><ol class="steps">${e.steps.map(st => `<li>${st}</li>`).join('')}</ol>` +
-        `<h4>Take this with you</h4><p>${e.idea}</p>`;
+        `<h4>Worked solution</h4>${e.steps.length > 1 ? '<div class="walk-bar"><button type="button" class="ghost small" data-walk>Walk through it step by step</button></div>' : ''}<ol class="steps">${e.steps.map(st => `<li>${st}</li>`).join('')}</ol>` +
+        `<h4>Take this with you</h4><p>${e.idea}</p>` + conceptHTML(e) + exploreHTML(e) + scene3dHTML(e);
 }
 /* Explain why an answer could not be read: an unfinished box, a different unit, or unknown notation. */
 function unreadableHint(i, p) {
@@ -625,7 +602,11 @@ function checkAnswer(event) {
         if (!Number.isFinite(value)) unreadable = true;
         field.setAttribute('aria-invalid', String(!ok));
         out.className = 'part-feedback ' + (ok ? 'correct' : 'incorrect');
-        out.textContent = ok ? '✓ Correct' : !Number.isFinite(value) ? unreadableHint(i, p) : 'Not quite. Check the sign, units and relationships in this part.';
+        if (ok) { out.innerHTML = `${TICK_SVG} Correct`; drawTick(out.querySelector('svg')); }
+        else {
+            out.textContent = !Number.isFinite(value) ? unreadableHint(i, p) : 'Not quite. Check the sign, units and relationships in this part.';
+            if (Number.isFinite(value)) nudge(field.closest('.input-wrap'));
+        }
     });
     const f = $('#feedback'), previous = progress[key()] || {};
     if (!unreadable && previous.status !== 'solved')
@@ -646,7 +627,11 @@ function checkAnswer(event) {
             const st = topicStreak(topic), paid = fresh.filter(r => r.topic.id === topic).reduce((sum, r) => sum + r.amount, 0), next = nextMilestone(st.length);
             note = ` ${topicOf(topic).name} streak: ${plural(st.length, 'day')}.${paid ? ` +${paid} coins.` : ''}${next ? ` Next reward at ${milestoneName(next[0])} (+${next[1]}).` : ''}`;
         }
-        f.textContent = status === 'solved' ? `All correct. Solved at ${exercise.level} in ${used()} attempt${used() === 1 ? '' : 's'}.${note} The full worked solution is below.` : 'All correct. Saved as reviewed because the solution was revealed.';
+        const verdict = document.createElement('strong');
+        verdict.className = 'verdict-word';
+        verdict.textContent = 'All correct.';
+        f.replaceChildren(verdict, status === 'solved' ? ` Solved at ${exercise.level} in ${used()} attempt${used() === 1 ? '' : 's'}.${note} The full worked solution is below.` : ' Saved as reviewed because the solution was revealed.');
+        scrambleIn(verdict);
         announceRewards(fresh);
         $('#status-line').textContent = status === 'solved' ? '✓ COMPLETED' : 'SOLUTION REVIEWED';
         openSolution(true);
@@ -689,6 +674,7 @@ function openSolution(scroll=false) {
     panel.innerHTML = solutionHTML();
     panel.hidden = false; // visible first, so formula widths can be measured
     renderMath(panel);
+    mountSolution(panel, exercise);
     $('#solution').textContent = solutionLabel(true);
     $('#solution').setAttribute('aria-expanded', 'true');
     $('#next-steps').innerHTML = nextStepsHTML();
@@ -707,7 +693,8 @@ function renderProgress() {
     const solvedRows = GROUPS.map(g => `<tr class="group-row"><th colspan="${LEVELS.length + 1}">${g.name}</th></tr>` + TOPICS.filter(t => t.group === g.id).map(t => `<tr><th><a href="#/${t.id}">${t.name}</a></th>${LEVELS.map(l => { const n = count(t.id, l.id); return `<td class="${n ? 'some' : ''}">${n || '·'}</td>`; }).join('')}</tr>`).join('')).join('');
     const streakRows = GROUPS.map(g => `<tr class="group-row"><th colspan="4">${g.name}</th></tr>` + TOPICS.filter(t => t.group === g.id).map(t => {
         const st = topicStreak(t.id), next = nextMilestone(st.length), best = bestStreak(t.id);
-        return `<tr><th><a href="#/${t.id}">${t.name}</a></th><td class="${st.length ? 'some' : ''}">${st.length || '·'}${st.length && !st.doneToday ? '<span class="due"> due</span>' : ''}</td><td>${best || '·'}</td><td class="next-cell">${next ? `${milestoneName(next[0])} · +${next[1]}` : 'All earned'}</td></tr>`;
+        const pct = next ? 100 * st.length / next[0] : 100;
+        return `<tr><th><a href="#/${t.id}">${t.name}</a></th><td class="${st.length ? 'some' : ''}">${st.length || '·'}${st.length && !st.doneToday ? '<span class="due"> due</span>' : ''}<span class="streak-bar" aria-hidden="true"><span data-to="${pct.toFixed(1)}"></span></span></td><td>${best || '·'}</td><td class="next-cell">${next ? `${milestoneName(next[0])} · +${next[1]}` : 'All earned'}</td></tr>`;
     }).join('')).join('');
     const ladder = MILESTONES.map(([d, a]) => `<li><span>${milestoneName(d)}</span><b>+${a} ◎</b></li>`).join('');
     const log = [
@@ -716,11 +703,13 @@ function renderProgress() {
     ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 12);
     const logHTML = log.length ? log.map(x => `<li><span class="log-date mono">${x.at ? longDate(x.at, {day: 'numeric', month: 'short'}) : ''}</span><span>${x.text}</span><b class="${x.amount < 0 ? 'spend' : ''}">${x.amount < 0 ? '−' : '+'}${Math.abs(x.amount)} ◎</b></li>`).join('') : '<li class="empty">No coins yet. A 3-day streak in any discipline pays the first 10.</li>';
     $('#progress-view').innerHTML = `<header class="page-head"><p class="kicker mono">Log / your learning</p><h1>Progress</h1><p class="muted">Solve any one level of a discipline each day to keep its streak. Streak milestones pay coins once per streak; coins unlock past days in the archive.</p></header>`
-        + `<div class="stats"><div class="stat frame"><b>◎ ${coins()}</b><span>Coins</span></div><div class="stat frame"><b>${doneToday()}<small>/${TOPICS.length}</small></b><span>Done today</span></div><div class="stat frame"><b>${streak()}</b><span>Best current streak</span></div></div>`
+        + `<div class="stats"><div class="stat frame"><b>◎ <span class="stat-coins">${coins()}</span></b><span>Coins</span></div><div class="stat frame"><b>${doneToday()}<small>/${TOPICS.length}</small></b><span>Done today</span></div><div class="stat frame"><b>${streak()}</b><span>Best current streak</span></div></div>`
         + `<div class="progress-grid"><section><h2 class="section-k mono">Streaks</h2><div class="progress-table-wrap"><table class="progress-table streaks"><thead><tr><th>Discipline</th><th>Current</th><th>Best</th><th>Next reward</th></tr></thead><tbody>${streakRows}</tbody></table></div></section>`
         + `<section><h2 class="section-k mono">Rewards</h2><ol class="ladder">${ladder}</ol><h2 class="section-k mono">Coin log</h2><ul class="coin-log">${logHTML}</ul></section></div>`
         + `<h2 class="section-k mono">Solved by discipline and level</h2><div class="progress-table-wrap"><table class="progress-table"><thead><tr><th>Discipline</th>${LEVELS.map((l, i) => `<th><span class="arch-node static" title="${l.name}">${i + 1}</span></th>`).join('')}</tr></thead><tbody>${solvedRows}</tbody></table></div>`
         + `<p class="progress-note">${includesRetired ? 'Totals and streaks include your earlier work on retired levels. ' : ''}Archive practice adds to your totals but not to streaks. Progress is stored in this browser; clearing browser data removes it.</p>`;
+    countTo($('#progress-view .stat-coins'), 0, coins());
+    fillOnScroll([...document.querySelectorAll('#progress-view .streak-bar span')], $('#progress-view .streaks'));
 }
 /* Routes: #/ home · #/topic levels · #/topic/level-N today's problem · #/topic/level-N/YYYY-MM-DD archive · #/topic/archive · #/progress */
 function parseRoute() {
@@ -737,6 +726,8 @@ function parseRoute() {
 }
 const SCREEN = {home: '#home', group: '#category', problem: '#problem', archive: '#archive', progress: '#progress-view'};
 function route() {
+    release('screen');
+    release('solution');
     const r = parseRoute();
     if (r.view === 'levels') { location.replace(`#/${r.topic}/${levelFor(r.topic)}`); return; } // a discipline opens straight at its level
     if (r.view === 'archive' && !r.topic) { location.replace(`#/${topic}/archive`); return; } // the Archive tab opens on the last discipline

@@ -106,14 +106,16 @@ function makeMechExercise(topic, date, level) {
     if (!TOPICS.some(t => t.id === topic && t.group === 'mechanical') || li < 1)
         throw Error('Unknown challenge selection');
     const pick = seededPicker(date, hashString(topic + level)), p = part;
+    const extra = {}; // explore / concept settings for the interactive figures (js/motion.js)
     const q = (title, text, givens, parts, hints, steps, idea, diagram, prerequisites) => ({
-        id: `${topic}-${level}`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source: {reading: MECH_READING[topic]}
+        id: `${topic}-${level}`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source: {reading: MECH_READING[topic]}, ...extra
     });
 
     if (topic === 'statics') {
         if (li === 1) {
             const w = pick([5, 8, 10, 12]), L = pick([4, 5, 6]), I = pick([40e6, 60e6, 80e6]);
             const EIk = 200e3 * I / 1e9, rb = 3 * w * L / 8, ma = w * L * L / 8, mp = 9 * w * L * L / 128, xp = 5 * L / 8, xd = L * (15 - Math.sqrt(33)) / 16, dmax = w * xd * xd * (3 * L * L - 5 * L * xd + 2 * xd * xd) / (48 * EIk) * 1e3;
+            extra.explore = {type: 'beam', L, P: 10};
             return q('A propped cantilever is statically indeterminate', T`A beam of span $L = ${L}\,\text{m}$ is fixed at $A$ and propped (simply supported) at $B$, and carries a uniform load $w = ${w}\,\text{kN/m}$. $E = 200\,\text{GPa}$ and $I = ${I / 1e6}\times10^6\,\text{mm}^4$. Equilibrium alone cannot give the reactions, so add compatibility: zero deflection at $B$. Find $R_B$ and the fixed-end moment $M_A$. Then find the maximum sagging moment and its distance from $A$, and the maximum deflection.`, [T`$L = ${L}\,\text{m}$`, T`$w = ${w}\,\text{kN/m}$`, T`$E = 200\,\text{GPa}$`, T`$I = ${I / 1e6}\times10^6\,\text{mm}^4$`], [p(T`$R_B$`, rb, 'kN'), p(T`$|M_A|$`, ma, 'kN·m'), p('Maximum sagging moment', mp, 'kN·m'), p('Its distance from A', xp, 'm'), p(T`$\delta_{\max}$`, dmax, 'mm')], [T`Superpose a cantilever under the UDL (tip deflection $\tfrac{wL^4}{8EI}$) and one with an upward tip load $R_B$ (deflection $\tfrac{R_BL^3}{3EI}$).`, T`Then $M_A = R_BL - \tfrac{wL^2}{2}$. The shear is zero at $\tfrac{3L}{8}$ from $B$.`, T`The elastic curve is $y = \dfrac{wx^2(3L^2 - 5Lx + 2x^2)}{48EI}$. Set $y' = 0$.`], [T`$\dfrac{wL^4}{8EI} = \dfrac{R_BL^3}{3EI} \Rightarrow R_B = \dfrac{3wL}{8} = ${tf(rb)}\,\text{kN}$.`, T`$|M_A| = \dfrac{wL^2}{8} = ${tf(ma)}\,\text{kN}\cdot\text{m}$ (hogging).`, T`Zero shear at $x = \tfrac{5L}{8} = ${tf(xp)}\,\text{m}$, where $M = \tfrac{9wL^2}{128} = ${tf(mp)}\,\text{kN}\cdot\text{m}$.`, T`$y' = 0$ at $x = \dfrac{L(15 - \sqrt{33})}{16} = ${tf(xd)}\,\text{m}$, giving $\delta_{\max} = ${tf(dmax)}\,\text{mm}$ ($EI = ${tf(EIk)}\,\text{kN}\cdot\text{m}^2$).`], 'Indeterminate structures need a deformation condition as well as equilibrium; the extra restraint lowers both moments and deflections.', beamDiagram({span: L, udl: w + ' kN/m', fixedLeft: true}), 'Superposition; compatibility; the elastic curve.');
         }
         if (li === 2) {
