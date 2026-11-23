@@ -52,10 +52,32 @@ A static web app with a new electrical engineering problem every day, in the spi
     - streak bars on the Progress page fill as they scroll into view.
   - **Started by you (they never play on their own):**
     - **Walk through it step by step:** the worked solution one step at a time (Next, Back, Show all), beside a copy of the diagram whose labels light up when the step names them (for example R₁, q₂, I₀). With reduced motion the steps change without animation.
-    - **See it move (Play):** a rotating phasor tracing a sine wave (power, signals), charge flowing round a series loop (circuits), Γ turning on a Smith chart as the line lengthens, using the problem's own load (RF circuits), a constellation growing from QPSK to 16- and 64-QAM (modulation), and a step response morphing as damping grows (control systems).
-    - **Explore (drag):** a steerable antenna array with live beamwidth, directivity and grating-lobe readouts (antennas & link budgets). The knob also moves with the arrow keys.
+    - **See it move (Play):**
+      - circuits: charge flowing round a series loop;
+      - power and signals: a rotating phasor tracing a sine wave;
+      - signals: a Fourier series building a square wave from rotating circles, with the Gibbs overshoot;
+      - control systems: a step response morphing as damping grows;
+      - sensors & estimation: a live Kalman filter whose ±2σ band tightens as readings arrive;
+      - information theory: a Huffman tree building itself, merge by merge;
+      - modulation & coding: a constellation growing from QPSK to 64-QAM, and an eye diagram closing as noise rises;
+      - RF circuits: Γ turning on a Smith chart as the line lengthens, using the problem's own load.
+    - **Explore (drag, slide or click):**
+      - circuits: charging a capacitor (R, C, τ), with a Charge button;
+      - electronics: op-amp gain and clipping at the ±12 V rails, inverting or non-inverting;
+      - digital logic: Y = A·B + Ā·C with gate delays and a live timing diagram, showing a static hazard (a one-delay glitch);
+      - measurement: averaging noisy readings, the error shrinking as σ/√N;
+      - signals: sampling and aliasing;
+      - signals and control: poles and zeros you drag on the s-plane, with the Bode magnitude and step response following;
+      - power systems: power-factor phasors with capacitor correction;
+      - antennas & link budgets: a steerable antenna array with beamwidth, directivity and grating-lobe readouts.
+      - Points and knobs also move with the arrow keys.
 - **3D views (three.js 0.187.0, MIT, in `vendor/three/`; code in `js/scenes3d.js`).** An **Explore in 3D** section in the worked solution, loaded only when you press **Open the 3D view** (about 140 KB, once per visit). Orbit with the mouse or a finger; nothing moves on its own.
   - **Antenna radiation pattern** (antennas & link budgets, electromagnetism): the short dipole's doughnut, and a line array whose steered beam is a cone around the array axis; change the element count, spacing and steering.
+  - **|H(s)| as a landscape** (signals, control): poles as peaks and zeros as pits, with the jω-axis cut (the Bode magnitude) in red. It follows the poles and zeros dragged in the explorer.
+  - **An electromagnetic wave** (electromagnetism): E and H travelling together. Press Play, then set the phase and amplitude between the two E components for linear, circular or elliptical polarisation.
+  - **The rotating magnetic field** (motors & drives, power systems): three coil fields adding to one turning vector; Play, scrub the angle, or swap two phases to reverse it.
+  - **Inside a waveguide** (electromagnetism, RF circuits): the TE₁₀ field in a WR-90 guide travelling along it, and dying away below cutoff, with fc, λg and the phase and group velocities.
+  - **Field lines in 3D** (electromagnetism): two point charges (set the second one's charge) or the closed magnetic field lines of a current loop.
   - The bundle is tree-shaken to the parts in `tools/three-entry.js`. To rebuild it, in any folder run `npm install --no-save three@0.187.0 esbuild`, then `node /path/to/daily-engineering/tools/build-three.mjs`.
 - **LaTeX everywhere.** All problem text, hints and solutions are typeset with KaTeX, which is bundled in `vendor/katex/` (MIT licence), so the site needs no CDN.
 - **A real maths editor for answers.** The answer box is a MathLive field (bundled in `vendor/mathlive/`, MIT licence; it shares KaTeX's fonts), so maths becomes typeset as you type:
@@ -105,7 +127,7 @@ node tests/exercises.test.js
 node tests/editor.test.js
 ```
 
-`editor.test.js` needs Playwright with Chromium. It walks the navigation (the main menu and first-visit intro, both category pages and their switch, level buttons, the breadcrumbs and level tabs, the tabs, the archive picker, Back, the 1–4/H/Enter/Esc and arrow-key shortcuts, remembered levels, unknown addresses), checks every motion feature on pages with a running clock (the diagram draw, card cascade, decoding verdict and drawn ticks, walk-through, dragging and arrow keys on an explore figure, Play, the switch glide, counting coins and the reward toast, the growing bars), and again with reduced motion, where nothing animates but the walk-through and explore figures still work. It also opens the 3D views: three.js downloads only when a view is opened, the elbow arm starts on its target, the antenna view shows a cone and a doughnut, and leaving the page frees WebGL. The main run freezes the clock (anime.js times itself with `Date.now`), so it runs with reduced motion; types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces, then checks the worked solution after solving and after five wrong attempts.
+`editor.test.js` needs Playwright with Chromium. It walks the navigation (the main menu and first-visit intro, both category pages and their switch, level buttons, the breadcrumbs and level tabs, the tabs, the archive picker, Back, the 1–4/H/Enter/Esc and arrow-key shortcuts, remembered levels, unknown addresses), checks every motion feature on pages with a running clock (the diagram draw, card cascade, decoding verdict and drawn ticks, walk-through, dragging and arrow keys on an explore figure, Play, the switch glide, counting coins and the reward toast, the growing bars), and again with reduced motion, where nothing animates but the walk-through and explore figures still work. It opens every figure in every discipline (each explore figure must react to its controls, each Play animation must change its drawing, each 3D view must open and play), and checks that the |H(s)| landscape follows the dragged poles. It also opens the 3D views: three.js downloads only when a view is opened, the elbow arm starts on its target, the antenna view shows a cone and a doughnut, and leaving the page frees WebGL. The main run freezes the clock (anime.js times itself with `Date.now`), so it runs with reduced motion; types 104 real expressions into the editor, such as `(1+sqrt5)/2` and `8sqrt2/pi^2`, and checks the maths each one produces, then checks the worked solution after solving and after five wrong attempts.
 
 The suite checks:
 - Every topic × level, and every topic × tier, for 120 days: each exercise is complete and every answer is finite.
@@ -142,8 +164,9 @@ Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, i
 | `js/comms.js` | Communications & RF: curated Level 1 and generated Levels 2–4 |
 | `js/numerics.js` | Linear solve, matrix exponential, Jacobi eigenvalues, polynomial roots, bisection, Simpson |
 | `js/diagrams.js` | SVG drawing helpers |
+| `js/explore-ee.js` | The electrical explore figures and Play animations (pole–zero, sampling, logic, RC, op-amp, averaging, power factor; Fourier, Kalman, eye, Huffman) |
 | `js/motion.js` | Motion (anime.js): diagram drawing, cascades, counters, ticks, toast, glides; the walk-through, concept animations and explore figures |
-| `js/scenes3d.js` | 3D views with three.js (antenna radiation patterns), loaded on demand |
+| `js/scenes3d.js` | 3D views with three.js (radiation patterns, |H(s)|, EM wave, rotating field, waveguide, field lines), loaded on demand |
 | `tools/build-three.mjs`, `tools/three-entry.js` | Build the tree-shaken three.js bundle in `vendor/three/` |
 | `js/app.js` | Screens and hash routes, the answer editor, progress and attempts (localStorage), archive |
 
