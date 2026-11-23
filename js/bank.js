@@ -363,3 +363,11 @@ bank('measurement', 'advanced', [{
     idea: 'The first stage dominates: put the low-noise, high-gain amplifier first.',
     prereq: 'Noise figure; cascaded systems.'
 }]);
+
+/* Picks today’s curated problem for a (topic, level) slot. */
+function makeBankExercise(topic, date, level) {
+    const list = BANK[topic + ':' + level];
+    if (!list) throw Error('Unknown challenge selection');
+    const d = Math.floor(Date.parse(date + 'T00:00:00Z') / 86400000), i = ((d + hashString(topic + level)) % list.length + list.length) % list.length, e = list[i];
+    return {id: `${topic}-${level}-${i}`, givens: [], source: null, ...e, prerequisites: e.prereq, diagram: e.diagram || '', bankIndex: i};
+}

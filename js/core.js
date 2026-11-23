@@ -1,20 +1,15 @@
 /* Topics, levels and the router that picks the generator for a (topic, date, level) selection. */
 const TOPICS = [
-    {id: 'circuits', name: 'Circuit analysis', sub: 'Networks, transients & phasors', icon: '⌁', group: 'electrical'},
-    {id: 'electronics', name: 'Electronics', sub: 'Devices, amplifiers & oscillators', icon: '⋈', group: 'electrical'},
-    {id: 'signals', name: 'Signals & systems', sub: 'Transforms, filters & sampling', icon: '∿', group: 'electrical'},
-    {id: 'control', name: 'Control systems', sub: 'Feedback, stability & optimal control', icon: '⊞', group: 'electrical'},
-    {id: 'digital', name: 'Digital logic', sub: 'Boolean algebra, codes & timing', icon: '01', group: 'electrical'},
-    {id: 'fields', name: 'Electromagnetism', sub: 'Fields, waves & antennas', icon: 'Φ', group: 'electrical'},
-    {id: 'power', name: 'Power systems', sub: 'AC power, machines & grids', icon: 'ϟ', group: 'electrical'},
-    {id: 'measurement', name: 'Measurement', sub: 'Noise, uncertainty & estimation', icon: '⊙', group: 'electrical'},
-    {id: 'statics', name: 'Statics & structures', sub: 'Equilibrium, beams & stress', icon: '△', group: 'mechanical'},
-    {id: 'dynamics', name: 'Dynamics & vibrations', sub: 'Motion, oscillation & modes', icon: '≋', group: 'mechanical'},
-    {id: 'thermo', name: 'Thermo & fluids', sub: 'Cycles, flow & heat transfer', icon: '♨', group: 'mechanical'},
-    {id: 'kinematics', name: 'Robot kinematics', sub: 'Poses, inverse kinematics & Jacobians', icon: '⟂', group: 'robotics'},
-    {id: 'robotcontrol', name: 'Robot dynamics & control', sub: 'Joint dynamics, PD & trajectories', icon: '↻', group: 'robotics'},
-    {id: 'motors', name: 'Motors & drives', sub: 'DC & brushless motors, gearing', icon: '⊛', group: 'robotics'},
-    {id: 'sensors', name: 'Sensors & estimation', sub: 'Encoders, IMUs, filtering & fusion', icon: '◎', group: 'robotics'},
+    {id: 'circuits', name: 'Circuit analysis', sub: 'Networks, transients & phasors', icon: '⌁', group: 'circuits-electronics'},
+    {id: 'electronics', name: 'Electronics', sub: 'Devices, amplifiers & oscillators', icon: '⋈', group: 'circuits-electronics'},
+    {id: 'digital', name: 'Digital logic', sub: 'Boolean algebra, codes & timing', icon: '01', group: 'circuits-electronics'},
+    {id: 'measurement', name: 'Measurement', sub: 'Noise, uncertainty & estimation', icon: '⊙', group: 'circuits-electronics'},
+    {id: 'signals', name: 'Signals & systems', sub: 'Transforms, filters & sampling', icon: '∿', group: 'signals-control'},
+    {id: 'control', name: 'Control systems', sub: 'Feedback, stability & optimal control', icon: '⊞', group: 'signals-control'},
+    {id: 'sensors', name: 'Sensors & estimation', sub: 'Encoders, IMUs, filtering & fusion', icon: '◎', group: 'signals-control'},
+    {id: 'power', name: 'Power systems', sub: 'AC power, machines & grids', icon: 'ϟ', group: 'power-em'},
+    {id: 'motors', name: 'Motors & drives', sub: 'DC & brushless motors, gearing', icon: '⊛', group: 'power-em'},
+    {id: 'fields', name: 'Electromagnetism', sub: 'Fields, waves & antennas', icon: 'Φ', group: 'power-em'},
     {id: 'infotheory', name: 'Information theory', sub: 'Entropy, coding & capacity', icon: 'H', group: 'comms'},
     {id: 'modulation', name: 'Modulation & coding', sub: 'QAM, error rates & channel codes', icon: '⁘', group: 'comms'},
     {id: 'linkbudget', name: 'Antennas & link budgets', sub: 'Path loss, noise & arrays', icon: '⟟', group: 'comms'},
@@ -43,12 +38,9 @@ function makeTierExercise(topic, date, tier) {
         throw Error('Unknown challenge selection');
     if (tier === CURATED_TIER)
         return makeBankExercise(topic, date, tier);
-    const group = TOPICS.find(t => t.id === topic).group;
-    if (group === 'mechanical')
-        return makeMechExercise(topic, date, tier);
-    if (group === 'robotics')
-        return makeRoboticsExercise(topic, date, tier);
-    if (group === 'comms')
+    if (topic === 'motors' || topic === 'sensors')
+        return makeMotorSensorExercise(topic, date, tier);
+    if (TOPICS.find(t => t.id === topic).group === 'comms')
         return makeCommsExercise(topic, date, tier);
     if (tier === 'expert' || tier === 'mastery')
         return makeExpertExercise(topic, date, tier);

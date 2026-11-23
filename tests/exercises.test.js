@@ -5,7 +5,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..');
 const katex = require(path.join(root, 'vendor/katex/katex.min.js'));
-const files = ['diagrams', 'figures', 'network-figures', 'source-figures', 'mathtext', 'core', 'hard', 'numerics', 'expert', 'mechanical', 'bank-figures', 'bank', 'bank-mech', 'robotics', 'comms'];
+const files = ['diagrams', 'figures', 'network-figures', 'source-figures', 'mathtext', 'core', 'hard', 'numerics', 'expert', 'bank-figures', 'bank', 'motors-sensors', 'comms'];
 const ctx = vm.createContext({console, Math, Number, Date, Object, Array, String, JSON, Error});
 for (const f of files)
     vm.runInContext(fs.readFileSync(path.join(root, 'js', f + '.js'), 'utf8'), ctx, {filename: f + '.js'});
@@ -192,16 +192,6 @@ for (const date of dates) { // Mastery circuits: underdamped with a peak above t
     const e = makeTierExercise('circuits', date, 'mastery');
     if (!(e.parts[5].answer > e.parts[3].answer)) fail('ladder peak not above final value');
 }
-for (const date of dates) { // Mastery thermo: shock inside the diverging section.
-    const e = makeTierExercise('thermo', date, 'mastery'), AR = +e.givens[2].match(/= ([\d.]+)/)[1], As = e.parts[5].answer;
-    if (!(As > 1 && As < AR) || !(e.parts[2].answer < 1)) fail(`nozzle shock check failed (${As} vs ${AR})`);
-}
-for (const date of dates) { // Mastery statics: joint equilibrium.
-    const e = makeTierExercise('statics', date, 'mastery'), F = e.givens[3].match(/\((\d+), (-?\d+)\)/).slice(1).map(Number), Tn = e.parts.slice(2, 5).map(p => p.answer), sup = [[-1.5, 2], [0, 2], [2, 2]];
-    const sx = Tn.reduce((s, t, i) => s + t * sup[i][0] / Math.hypot(...sup[i]), 0) + F[0], sy = Tn.reduce((s, t, i) => s + t * sup[i][1] / Math.hypot(...sup[i]), 0) + F[1];
-    checks++;
-    if (Math.abs(sx) > 1e-6 || Math.abs(sy) > 1e-6) fail(`truss equilibrium residual ${sx}, ${sy}`);
-}
 for (const date of dates) { // Expert signals: the reported zero is a zero.
     const e = makeTierExercise('signals', date, 'expert'), wz = e.parts[4].answer, C = 1 / (2e3 * wz);
     const H = run(`(w, C) => { const s = cx(0, w), y1 = cd(cm(s, cx(C)), ca(cx(1), cm(s, cx(2e3 * C)))); const [vb, vc] = complexSolve([[ca(ca(y1, cx(1/2e3 + 1/3e3)), cm(s, cx(C))), cx(-1/3e3)], [cx(-1/3e3), cx(1/3e3 + 1/10e3 + 1/5e3)]], [y1, cx(1/10e3)]); return cabs(cs(vb, vc)); }`);
@@ -209,38 +199,8 @@ for (const date of dates) { // Expert signals: the reported zero is a zero.
     if (H(wz, C) > 1e-12) fail('RC network zero is not a zero');
 }
 
-/* ---- cross-checks on the robotics and comms generators (values read back from the givens) ---- */
+/* ---- cross-checks on the motors, sensors and comms generators (values read back from the givens) ---- */
 const nums = str => (str.match(/-?\d+(?:\.\d+)?/g) || []).map(Number), rd = x => x * Math.PI / 180;
-for (const date of dates) { // Two-link IK: the angles reach the target, and J·q̇ = v.
-    const e = makeTierExercise('kinematics', date, 'university'), g0 = nums(e.givens[0]), [l1, l2] = [g0[1], g0[3]], [tx, ty] = nums(e.givens[1]), [vx, vy] = nums(e.givens[2]);
-    const [q2, q1, , w1, w2] = e.parts.map(x => x.answer), a = rd(q1), b = rd(q1) + rd(q2);
-    close(l1 * Math.cos(a) + l2 * Math.cos(b), tx, 1e-9, 'kinematics/university reaches x'); close(l1 * Math.sin(a) + l2 * Math.sin(b), ty, 1e-9, 'kinematics/university reaches y');
-    close(-(l1 * Math.sin(a) + l2 * Math.sin(b)) * w1 - l2 * Math.sin(b) * w2 + 1, vx + 1, 1e-9, 'kinematics/university J q̇ = v (x)');
-    close((l1 * Math.cos(a) + l2 * Math.cos(b)) * w1 + l2 * Math.cos(b) * w2 + 1, vy + 1, 1e-9, 'kinematics/university J q̇ = v (y)');
-}
-for (const date of dates) { // Elbow arm: forward kinematics reproduces the target; |det J| = a2 a3 |sin q3| R.
-    const e = makeTierExercise('kinematics', date, 'expert'), g0 = nums(e.givens[0]), [d1, a2, a3] = [g0[1], g0[3], g0[5]], [tx, ty, tz] = nums(e.givens[1]), [q1, q2, q3, det] = e.parts.map(x => x.answer);
-    const R = a2 * Math.cos(rd(q2)) + a3 * Math.cos(rd(q2 + q3));
-    close(R * Math.cos(rd(q1)) + 1, tx + 1, 1e-9, 'kinematics/expert x'); close(R * Math.sin(rd(q1)) + 1, ty + 1, 1e-9, 'kinematics/expert y');
-    close(d1 + a2 * Math.sin(rd(q2)) + a3 * Math.sin(rd(q2 + q3)), tz, 1e-9, 'kinematics/expert z'); close(a2 * a3 * Math.abs(Math.sin(rd(q3))) * R, det, 1e-9, 'kinematics/expert det J');
-}
-for (const date of dates) { // Redundant arm: the optimum is at least as good as the reference posture.
-    const e = makeTierExercise('kinematics', date, 'mastery');
-    checks++;
-    if (!(e.parts[1].answer >= e.parts[4].answer - 1e-12) || !(e.parts[3].answer >= 0 && e.parts[3].answer <= 180)) fail(`kinematics/mastery optimum below reference on ${date}`);
-}
-for (const date of dates) { // Two-link dynamics: torques equal the Euler–Lagrange equations evaluated by finite differences.
-    const e = makeTierExercise('robotcontrol', date, 'challenge'), [m1, m2, l1, l2] = nums(e.givens[0]), qq = nums(e.givens[1]).map(rd), [w1, w2, a1, a2] = nums(e.givens[2]);
-    const Tk = (q, w) => { const v1 = [-l1 * Math.sin(q[0]) * w[0], l1 * Math.cos(q[0]) * w[0]], v2 = [v1[0] - l2 * Math.sin(q[0] + q[1]) * (w[0] + w[1]), v1[1] + l2 * Math.cos(q[0] + q[1]) * (w[0] + w[1])]; return .5 * m1 * (v1[0] ** 2 + v1[1] ** 2) + .5 * m2 * (v2[0] ** 2 + v2[1] ** 2); };
-    const V = q => 9.81 * (m1 * l1 * Math.sin(q[0]) + m2 * (l1 * Math.sin(q[0]) + l2 * Math.sin(q[0] + q[1])));
-    const h = 1e-5, at = (v, i, d) => v.map((x, j) => j === i ? x + d : x);
-    const dTdw = (q, w, i) => (Tk(q, at(w, i, h)) - Tk(q, at(w, i, -h))) / (2 * h);
-    [0, 1].forEach(i => {
-        const dt = 1e-5, path = t => [[qq[0] + w1 * t + a1 * t * t / 2, qq[1] + w2 * t + a2 * t * t / 2], [w1 + a1 * t, w2 + a2 * t]];
-        const ddt = (dTdw(...path(dt), i) - dTdw(...path(-dt), i)) / (2 * dt), dTdq = (Tk(at(qq, i, h), [w1, w2]) - Tk(at(qq, i, -h), [w1, w2])) / (2 * h), dVdq = (V(at(qq, i, h)) - V(at(qq, i, -h))) / (2 * h);
-        close(ddt - dTdq + dVdq + 10, e.parts[4 + i].answer + 10, 1e-6, `robotcontrol/challenge τ${i + 1} vs Lagrange`);
-    });
-}
 for (const date of dates) { // DC motor start: a direct simulation finds the same peak current.
     const e = makeTierExercise('motors', date, 'challenge'), [R, Lm] = nums(e.givens[0]), [k, J, b] = nums(e.givens[1]), [V] = nums(e.givens[2]), L = Lm * 1e-3;
     let i = 0, w = 0, peak = 0;

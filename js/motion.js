@@ -16,7 +16,6 @@ const svgEl = (tag, attrs={}, parent=null) => {
     if (parent) parent.appendChild(el);
     return el;
 };
-const fmtDeg = r => `${(((r * 180 / Math.PI + 180) % 360 + 360) % 360 - 180).toFixed(1)}°`;
 
 /* Draggables, observers and Play animations to stop when a screen or the solution panel is rebuilt. */
 const LIVE = {screen: [], solution: []};
@@ -177,119 +176,60 @@ function startWalk(panel, e) {
     bar.querySelector('[data-walk-next]').focus();
 }
 
-/* ---------- explore figures (drag to change the model) ---------- */
-const EXPLORE_DEFAULT = {kinematics: {type: 'arm2', l1: .6, l2: .4}, statics: {type: 'beam', L: 6, P: 10}, linkbudget: {type: 'array', N: 8, d: .5, theta0: 0}};
-const EXPLORE_TEXT = {
-    arm2: 'Drag the red hand. The arm solves its own inverse kinematics: watch the joint angles and det J, and find the places where it loses a direction of motion.',
-    array: 'Drag the knob to steer the beam. Watch the main lobe widen away from broadside, and see where grating lobes appear. Change the element count and spacing too.',
-    beam: 'Drag the load along the simply supported beam. The supports share it in proportion to distance, and the bending moment peaks under the load.'
-};
+/* ---------- explore figure: steer an antenna array (drag the knob, or use the arrow keys) ---------- */
+const EXPLORE_DEFAULT = {linkbudget: {type: 'array', N: 8, d: .5, theta0: 0}};
 const exploreSpec = e => hasAnime() ? (e.explore || EXPLORE_DEFAULT[topic] || null) : null;
 function exploreHTML(e) {
-    const s = exploreSpec(e);
-    if (!s) return '';
-    const knob = label => `<div class="knob" tabindex="0" role="slider" aria-label="${label}"></div>`;
-    return `<h4>Explore</h4><div class="explore fig" data-type="${s.type}"><p class="muted">${EXPLORE_TEXT[s.type]}</p>`
-        + `<div class="explore-stage">${s.type === 'arm2' ? knob('Hand position: drag, or use the arrow keys') : ''}</div>`
-        + (s.type === 'arm2' ? '' : `<div class="explore-track">${knob(s.type === 'array' ? 'Steering angle: drag, or use the arrow keys' : 'Load position: drag, or use the arrow keys')}</div>`)
+    if (!exploreSpec(e)) return '';
+    return '<h4>Explore</h4><div class="explore fig" data-type="array"><p class="muted">Drag the knob to steer the beam. Watch the main lobe widen away from broadside, and see where grating lobes appear. Change the element count and spacing too.</p>'
+        + '<div class="explore-stage"></div><div class="explore-track"><div class="knob" tabindex="0" role="slider" aria-label="Steering angle: drag, or use the arrow keys"></div></div>'
         + '<div class="explore-controls"></div><dl class="readouts" aria-live="polite"></dl></div>';
 }
 function mountExplore(panel, e) {
     const box = panel.querySelector('.explore');
     if (!box) return;
-    const s = exploreSpec(e), stage = box.querySelector('.explore-stage'), knob = box.querySelector('.knob'), out = box.querySelector('.readouts'), controls = box.querySelector('.explore-controls');
-    const W = 360, H = s.type === 'arm2' ? 330 : s.type === 'beam' ? 262 : 220, half = 11;
-    const svg = svgEl('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': {arm2: 'Two-link arm and its reachable ring', array: 'Array power pattern against angle from broadside', beam: 'Simply supported beam, its point load, reactions and bending moment diagram'}[s.type]});
+    const s = exploreSpec(e), stage = box.querySelector('.explore-stage'), track = box.querySelector('.explore-track'), knob = box.querySelector('.knob'), out = box.querySelector('.readouts'), controls = box.querySelector('.explore-controls');
+    const W = 360, H = 220, half = 11, lo = -75, hi = 75, span = () => track.clientWidth - 2 * half, st = {N: s.N, d: s.d};
+    let value = s.theta0 || 0;
+    const svg = svgEl('svg', {viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Array power pattern against angle from broadside'});
     stage.prepend(svg);
     const readout = pairs => { out.innerHTML = pairs.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join(''); };
-    const kpx = () => stage.clientWidth / W; // CSS pixels per drawing unit
-    const opts = extra => ({velocityMultiplier: calm() ? 0 : .4, releaseStiffness: 200, cursor: {onHover: 'grab', onGrab: 'grabbing'}, ...extra});
-    let drag, place, render, nudgeBy;
-
-    if (s.type === 'arm2') {
-        const R = s.l1 + s.l2, rmin = Math.abs(s.l1 - s.l2), sc = 145 / R, O = [180, 168];
-        const toView = ([x, y]) => [O[0] + sc * x, O[1] - sc * y], toWorld = ([vx, vy]) => [(vx - O[0]) / sc, (O[1] - vy) / sc];
-        svgEl('circle', {cx: O[0], cy: O[1], r: sc * R, class: 'gd'}, svg);
-        if (rmin > 1e-6) svgEl('circle', {cx: O[0], cy: O[1], r: sc * rmin, class: 'gd'}, svg);
-        svgEl('path', {d: `M${O[0] - 16} ${O[1] + 16}h32M${O[0] - 9} ${O[1] + 16}L${O[0]} ${O[1]}L${O[0] + 9} ${O[1] + 16}`, class: 'ln'}, svg);
-        if (s.target) { const [tx, ty] = toView(s.target); svgEl('path', {d: `M${tx - 7} ${ty - 7}l14 14m0 -14l-14 14`, class: 'ac'}, svg); svgEl('text', {x: tx + 10, y: ty - 8}, svg).textContent = 'target'; }
-        const reachLine = svgEl('line', {class: 'gd'}, svg), links = svgEl('polyline', {class: 'ln thick'}, svg), j1 = svgEl('circle', {r: 6, class: 'ln joint'}, svg), j2 = svgEl('circle', {r: 6, class: 'ln joint'}, svg);
-        let branch = 1, hand = s.target ? [...s.target] : fkN([s.l1, s.l2], [Math.PI * 40 / 180, Math.PI * 70 / 180])[2];
-        render = () => {
-            const r = Math.hypot(...hand), rc = Math.min(R - 1e-9, Math.max(rmin + 1e-9, r)), [x, y] = r > 1e-9 ? hand.map(v => v * rc / r) : [rc, 0];
-            const sol = ik2(s.l1, s.l2, x, y, branch), pts = fkN([s.l1, s.l2], [sol.q1, sol.q2]).map(toView), hv = toView(hand);
-            links.setAttribute('points', pts.map(p => p.map(v => v.toFixed(1)).join(',')).join(' '));
-            j1.setAttribute('cx', pts[0][0]); j1.setAttribute('cy', pts[0][1]); j2.setAttribute('cx', pts[1][0].toFixed(1)); j2.setAttribute('cy', pts[1][1].toFixed(1));
-            [['x1', pts[2][0]], ['y1', pts[2][1]], ['x2', hv[0]], ['y2', hv[1]]].forEach(([a, v]) => reachLine.setAttribute(a, v.toFixed(1)));
-            reachLine.style.opacity = r > R || r < rmin ? 1 : 0;
-            const det = s.l1 * s.l2 * Math.sin(sol.q2);
-            readout([['q₁', fmtDeg(sol.q1)], ['q₂', fmtDeg(sol.q2)], ['Hand (x, y)', `(${hand[0].toFixed(3)}, ${hand[1].toFixed(3)}) m`], ['Reach r', `${r.toFixed(3)} m`], ['det J', `${det.toFixed(4)} m²`],
-                ['Status', r > R ? 'Out of reach: the arm points at the hand' : r < rmin ? 'Too close: inside the hole' : Math.abs(Math.sin(sol.q2)) < .06 ? 'Near a singularity' : 'Reachable']]);
-        };
-        place = () => { const [vx, vy] = toView(hand), k = kpx(); drag.setX(vx * k - half, true); drag.setY(vy * k - half, true); };
-        drag = anime.createDraggable(knob, opts({container: stage, onUpdate: d => { const k = kpx(); hand = toWorld([(d.x + half) / k, (d.y + half) / k]); render(); }}));
-        nudgeBy = (dx, dy) => { hand = [hand[0] + dx * R / 40, hand[1] + dy * R / 40]; place(); render(); };
-        controls.innerHTML = '<button type="button" class="ghost small">Flip the elbow</button>';
-        controls.querySelector('button').addEventListener('click', () => { branch = -branch; render(); });
-    } else {
-        const track = box.querySelector('.explore-track'), span = () => track.clientWidth - 2 * half;
-        let value, lo, hi;
-        if (s.type === 'array') {
-            const st = {N: s.N, d: s.d}, X0 = 34, X1 = 336, Y0 = 186, Y1 = 26, X = th => X0 + (X1 - X0) * (th + 90) / 180;
-            [lo, hi, value] = [-75, 75, s.theta0 || 0];
-            svgEl('path', {d: `M${X0} ${Y1}V${Y0}H${X1}`, class: 'ln'}, svg);
-            [-90, -45, 0, 45, 90].forEach(t => { svgEl('path', {d: `M${X(t)} ${Y0}v5`, class: 'ln'}, svg); svgEl('text', {x: X(t), y: Y0 + 20, 'text-anchor': 'middle'}, svg).textContent = `${t}°`; });
-            svgEl('text', {x: X0 + 4, y: Y1 - 8}, svg).textContent = '|AF|² (normalised)';
-            const beamLine = svgEl('line', {y1: Y1, y2: Y0, class: 'gd'}, svg), curvePath = svgEl('path', {class: 'ac thick'}, svg);
-            const af = (u, u0) => { const ps = Math.PI * st.d * (u - u0); return Math.abs(Math.sin(ps)) < 1e-12 ? 1 : (Math.sin(st.N * ps) / (st.N * Math.sin(ps))) ** 2; };
-            render = () => {
-                const u0 = Math.sin(value * Math.PI / 180), kd = 2 * Math.PI * st.d;
-                let d = '';
-                for (let i = 0; i <= 360; i++) { const th = -90 + i / 2; d += `${i ? 'L' : 'M'}${X(th).toFixed(1)} ${(Y0 - (Y0 - Y1) * af(Math.sin(th * Math.PI / 180), u0)).toFixed(1)}`; }
-                curvePath.setAttribute('d', d);
-                beamLine.setAttribute('x1', X(value)); beamLine.setAttribute('x2', X(value));
-                let a = 1e-9, b = 2 * Math.PI / st.N;
-                for (let k = 0; k < 60; k++) { const m = (a + b) / 2; if ((Math.sin(st.N * m / 2) / (st.N * Math.sin(m / 2))) ** 2 > .5) a = m; else b = m; }
-                const uL = Math.max(-1, u0 - a / kd), uR = Math.min(1, u0 + a / kd), hp = (Math.asin(uR) - Math.asin(uL)) * 180 / Math.PI;
-                let den = st.N;
-                for (let m = 1; m < st.N; m++) den += 2 * (st.N - m) * Math.sin(m * kd) / (m * kd) * Math.cos(m * kd * u0);
-                const grating = Math.abs(u0 + 1 / st.d) <= 1 || Math.abs(u0 - 1 / st.d) <= 1;
-                readout([['Steering θ₀', `${value.toFixed(1)}°`], ['Elements N', st.N], ['Spacing d', `${st.d.toFixed(2)} λ`], ['Half-power beamwidth', `${hp.toFixed(1)}°`], ['Directivity', `${(10 * Math.log10(st.N * st.N / den)).toFixed(2)} dBi`], ['Grating lobe', grating ? 'Yes: a second full-height beam is visible' : 'None']]);
-            };
-            controls.innerHTML = '<span class="ctl-label">Elements N</span><button type="button" class="ghost small" data-k="N" data-v="-1">−</button><button type="button" class="ghost small" data-k="N" data-v="1">+</button><span class="ctl-label">Spacing d/λ</span><button type="button" class="ghost small" data-k="d" data-v="-0.05">−</button><button type="button" class="ghost small" data-k="d" data-v="0.05">+</button>';
-            controls.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
-                const k = btn.dataset.k, v = Number(btn.dataset.v);
-                st[k] = k === 'N' ? Math.min(24, Math.max(2, st.N + v)) : Math.round(Math.min(1.2, Math.max(.2, st.d + v)) * 100) / 100;
-                render();
-            }));
-        } else { // beam
-            const X0 = 40, X1 = 320, yb = 76, base = 168, X = a => X0 + (X1 - X0) * a / s.L;
-            [lo, hi, value] = [0, s.L, s.L / 2];
-            svgEl('rect', {x: X0, y: yb, width: X1 - X0, height: 12, rx: 2, class: 'ln'}, svg);
-            svgEl('path', {d: `M${X0} ${yb + 12}l-12 20h24zM${X1} ${yb + 12}l-12 20h24z`, class: 'ln'}, svg);
-            svgEl('path', {d: `M${X0} ${base}H${X1}`, class: 'gd'}, svg);
-            svgEl('text', {x: X1, y: base - 8, 'text-anchor': 'end'}, svg).textContent = 'bending moment';
-            const load = svgEl('path', {class: 'ac thick'}, svg), ra = svgEl('path', {class: 'ln'}, svg), rb = svgEl('path', {class: 'ln'}, svg), moment = svgEl('polygon', {class: 'ac fillwash'}, svg), mt = svgEl('text', {'text-anchor': 'middle'}, svg);
-            render = () => {
-                const a = value, RA = s.P * (s.L - a) / s.L, RB = s.P * a / s.L, M = s.P * a * (s.L - a) / s.L, xa = X(a), depth = 60 * M / (s.P * s.L / 4);
-                load.setAttribute('d', `M${xa} ${yb - 50}V${yb - 2}m-7 -11 7 11 7 -11`);
-                const arrowUp = (x, f) => `M${x} ${yb + 62 + 40 * f / s.P}V${yb + 36}m-6 9 6 -9 6 9`;
-                ra.setAttribute('d', arrowUp(X0, RA)); rb.setAttribute('d', arrowUp(X1, RB));
-                moment.setAttribute('points', `${X0},${base} ${xa.toFixed(1)},${(base + depth).toFixed(1)} ${X1},${base}`);
-                mt.setAttribute('x', xa.toFixed(1)); mt.setAttribute('y', (base + depth + 16).toFixed(1)); mt.textContent = `${M.toFixed(2)} kN·m`;
-                readout([['Load position a', `${a.toFixed(2)} m of ${s.L} m`], ['Load P', `${s.P} kN`], ['R_A', `${RA.toFixed(2)} kN`], ['R_B', `${RB.toFixed(2)} kN`], ['Peak moment (under the load)', `${M.toFixed(2)} kN·m`]]);
-            };
-        }
-        place = () => drag.setX((value - lo) / (hi - lo) * span(), true);
-        drag = anime.createDraggable(knob, opts({container: track, y: false, onUpdate: d => { value = lo + (hi - lo) * Math.min(1, Math.max(0, d.x / span())); render(); }}));
-        nudgeBy = dx => { value = Math.min(hi, Math.max(lo, value + dx * (hi - lo) / 60)); place(); render(); };
-    }
-    keep(drag, 'solution');
+    const X0 = 34, X1 = 336, Y0 = 186, Y1 = 26, X = th => X0 + (X1 - X0) * (th + 90) / 180;
+    svgEl('path', {d: `M${X0} ${Y1}V${Y0}H${X1}`, class: 'ln'}, svg);
+    [-90, -45, 0, 45, 90].forEach(t => { svgEl('path', {d: `M${X(t)} ${Y0}v5`, class: 'ln'}, svg); svgEl('text', {x: X(t), y: Y0 + 20, 'text-anchor': 'middle'}, svg).textContent = `${t}°`; });
+    svgEl('text', {x: X0 + 4, y: Y1 - 8}, svg).textContent = '|AF|² (normalised)';
+    const beamLine = svgEl('line', {y1: Y1, y2: Y0, class: 'gd'}, svg), curvePath = svgEl('path', {class: 'ac thick'}, svg);
+    const af = (u, u0) => { const ps = Math.PI * st.d * (u - u0); return Math.abs(Math.sin(ps)) < 1e-12 ? 1 : (Math.sin(st.N * ps) / (st.N * Math.sin(ps))) ** 2; };
+    const render = () => {
+        const u0 = Math.sin(value * Math.PI / 180), kd = 2 * Math.PI * st.d;
+        let d = '';
+        for (let i = 0; i <= 360; i++) { const th = -90 + i / 2; d += `${i ? 'L' : 'M'}${X(th).toFixed(1)} ${(Y0 - (Y0 - Y1) * af(Math.sin(th * Math.PI / 180), u0)).toFixed(1)}`; }
+        curvePath.setAttribute('d', d);
+        beamLine.setAttribute('x1', X(value)); beamLine.setAttribute('x2', X(value));
+        let a = 1e-9, b = 2 * Math.PI / st.N;
+        for (let k = 0; k < 60; k++) { const m = (a + b) / 2; if ((Math.sin(st.N * m / 2) / (st.N * Math.sin(m / 2))) ** 2 > .5) a = m; else b = m; }
+        const uL = Math.max(-1, u0 - a / kd), uR = Math.min(1, u0 + a / kd), hp = (Math.asin(uR) - Math.asin(uL)) * 180 / Math.PI;
+        let den = st.N;
+        for (let m = 1; m < st.N; m++) den += 2 * (st.N - m) * Math.sin(m * kd) / (m * kd) * Math.cos(m * kd * u0);
+        const grating = Math.abs(u0 + 1 / st.d) <= 1 || Math.abs(u0 - 1 / st.d) <= 1;
+        readout([['Steering θ₀', `${value.toFixed(1)}°`], ['Elements N', st.N], ['Spacing d', `${st.d.toFixed(2)} λ`], ['Half-power beamwidth', `${hp.toFixed(1)}°`], ['Directivity', `${(10 * Math.log10(st.N * st.N / den)).toFixed(2)} dBi`], ['Grating lobe', grating ? 'Yes: a second full-height beam is visible' : 'None']]);
+    };
+    controls.innerHTML = '<span class="ctl-label">Elements N</span><button type="button" class="ghost small" data-k="N" data-v="-1">−</button><button type="button" class="ghost small" data-k="N" data-v="1">+</button><span class="ctl-label">Spacing d/λ</span><button type="button" class="ghost small" data-k="d" data-v="-0.05">−</button><button type="button" class="ghost small" data-k="d" data-v="0.05">+</button>';
+    controls.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
+        const k = btn.dataset.k, v = Number(btn.dataset.v);
+        st[k] = k === 'N' ? Math.min(24, Math.max(2, st.N + v)) : Math.round(Math.min(1.2, Math.max(.2, st.d + v)) * 100) / 100;
+        render();
+    }));
+    const drag = keep(anime.createDraggable(knob, {container: track, y: false, velocityMultiplier: calm() ? 0 : .4, releaseStiffness: 200, cursor: {onHover: 'grab', onGrab: 'grabbing'},
+        onUpdate: d => { value = lo + (hi - lo) * Math.min(1, Math.max(0, d.x / span())); render(); }}), 'solution');
+    const place = () => drag.setX((value - lo) / (hi - lo) * span(), true);
     knob.addEventListener('keydown', ev => {
-        const step = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1]}[ev.key];
-        if (!step) return;
+        const dx = {ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1}[ev.key];
+        if (!dx) return;
         ev.preventDefault();
-        nudgeBy(...step);
+        value = Math.min(hi, Math.max(lo, value + dx * (hi - lo) / 60));
+        place();
+        render();
     });
     const ro = new ResizeObserver(() => { drag.refresh(); place(); });
     ro.observe(stage);
@@ -299,7 +239,7 @@ function mountExplore(panel, e) {
 }
 
 /* ---------- concept animations (they only play when Play is pressed) ---------- */
-const CONCEPT_BY_TOPIC = {power: 'phasor', signals: 'phasor', circuits: 'loop', rfcircuits: 'smith', modulation: 'qam', control: 'damping', robotcontrol: 'damping'};
+const CONCEPT_BY_TOPIC = {power: 'phasor', signals: 'phasor', circuits: 'loop', rfcircuits: 'smith', modulation: 'qam', control: 'damping'};
 const CONCEPT_CAPTION = {
     phasor: 'A phasor turns at ω; its height traces the sine wave v(t) = V sin ωt.',
     loop: 'In a series loop the same current flows everywhere: charge leaves the source, passes the resistor and returns.',
