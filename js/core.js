@@ -32,12 +32,33 @@ const fmt = n => Number(n.toPrecision(5)).toString();
 /* tolerance is relative; abs is an optional absolute floor for answers that can be close to zero. */
 const part = (label, answer, unit, tolerance=.01, abs=0) => ({label, answer, unit, tolerance, abs});
 
+/* Extra problem types per topic and tier, filled in by js/types-*.js. makeTierExercise rotates each tier's original
+   generator with its extra types, one type a day; Level 4's two tiers take turns day by day, so their types advance
+   every second day. Each type draws its own values from dayGrid, so no problem repeats within a year. */
+const EXTRA_TYPES = {};
+const addTypes = (topic, tier, ...makers) => ((EXTRA_TYPES[topic] ||= {})[tier] ||= []).push(...makers);
+function extraTypeFor(topic, date, tier) {
+    const list = EXTRA_TYPES[topic]?.[tier];
+    if (!list?.length) return null;
+    const day = Math.floor(Date.parse(date + 'T00:00:00Z') / 86400000), n = list.length + 1, every = tier === 'expert' || tier === 'mastery' ? 2 : 1;
+    const k = ((Math.floor(day / every) + hashString(topic + tier)) % n + n) % n;
+    return k ? list[k - 1] : null;
+}
+/* What every extra type shares: the day's values (grid, salted by the type) and the problem record. */
+function typeKit(topic, tier, name, date, reading) {
+    const salt = hashString(`${topic}:${tier}:${name}`);
+    return {grid: (...lists) => dayGrid(date, salt, ...lists), q: o => ({id: `${topic}-${tier}-${name}`, source: reading ? {reading} : undefined, ...o})};
+}
+
 /* Builds the problem for one tier. Exposed separately so tests can reach every tier on every date. */
 function makeTierExercise(topic, date, tier) {
     if (!TOPICS.some(t => t.id === topic) || !TIERS.includes(tier))
         throw Error('Unknown challenge selection');
     if (tier === CURATED_TIER)
         return makeBankExercise(topic, date, tier);
+    const extra = extraTypeFor(topic, date, tier);
+    if (extra)
+        return extra(date, tier, topic);
     if (topic === 'motors' || topic === 'sensors')
         return makeMotorSensorExercise(topic, date, tier);
     if (TOPICS.find(t => t.id === topic).group === 'comms')
