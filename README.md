@@ -36,7 +36,8 @@ A static web app with a new electrical engineering problem every day, in the spi
   - **Communications & RF:** information theory (entropy, Huffman, capacity, water-filling), modulation & coding (QAM, Hamming and convolutional codes, fading and diversity), antennas & link budgets (path loss, noise, two-ray, arrays), RF circuits & matching (transmission lines, stubs, amplifier stability, multisection transformers).
 - **Four levels.**
   - **Level 1 (Insight)** is a rotation of 56 hand-picked problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
-  - **Levels 2–4 (Advanced, Challenge, Expert)** are multi-part problems whose values change daily. Level 4 alternates between graduate-level problems and research-grade work that needs numerical methods.
+  - **Levels 2–4 (Advanced, Challenge, Expert)** are multi-part problems with fresh values every day. Level 4 alternates between graduate-level problems and research-grade work that needs numerical methods.
+  - **No repeats within a year at Levels 2–4.** Each generator varies two to six of its quantities over a grid of hundreds to millions of combinations. It then walks that grid in a fixed shuffled order, one step per day (`dayGrid` in `js/numerics.js`, a keyed permutation), so any 365 consecutive days give 365 different problems. Each discipline and level has its own order. Grids are filtered so every problem stays physically sensible (for example the motor operating point stays inside the inverter's voltage, the ladder circuit always overshoots, the array never shows a grating lobe), and drawings show the day's values. `tests/exercises.test.js` checks a full year for every discipline and level.
   - Internally the generators work on five difficulty *tiers* (`TIERS` in `js/core.js`); each public level maps to one or more tiers, so the levels can be regrouped without changing any problem.
 - **The full working once you finish.** Solving a problem, or using all five attempts, opens its worked solution: each answer (exact form and decimal) beside the one you gave, the approach, every step of the working and the key idea. Your last answers are kept, so the comparison is still there when you come back (also in the Archive). Revealing the solution before finishing marks the problem as reviewed.
 - **Motion and interactive figures (anime.js 4.5.0, MIT, in `vendor/animejs/`; code in `js/motion.js`).**
@@ -162,7 +163,7 @@ Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, i
 | `js/expert.js` | Level 4 for the same disciplines |
 | `js/motors-sensors.js` | Motors & drives and sensors & estimation: curated Level 1 and generated Levels 2–4 |
 | `js/comms.js` | Communications & RF: curated Level 1 and generated Levels 2–4 |
-| `js/numerics.js` | Linear solve, matrix exponential, Jacobi eigenvalues, polynomial roots, bisection, Simpson |
+| `js/numerics.js` | Linear solve, matrix exponential, Jacobi eigenvalues, polynomial roots, bisection, Simpson; `dayGrid` (the daily shuffled walk through each generator's value grid), `product` and `steps` |
 | `js/diagrams.js` | SVG drawing helpers |
 | `js/explore-ee.js` | The electrical explore figures and Play animations (pole–zero, sampling, logic, RC, op-amp, averaging, power factor; Fourier, Kalman, eye, Huffman) |
 | `js/motion.js` | Motion (anime.js): diagram drawing, cascades, counters, ticks, toast, glides; the walk-through, concept animations and explore figures |

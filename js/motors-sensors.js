@@ -180,11 +180,12 @@ bank('sensors', 'advanced', [{
 }]);
 
 /* ---------- Levels 2–4: generated ---------- */
+let PMSM_POINTS = null; // reachable dq operating points, filtered once (18 000 candidates)
 function makeMotorSensorExercise(topic, date, level) {
     const li = TIERS.indexOf(level); // 1 university, 2 challenge, 3 expert, 4 mastery
     if (!['motors', 'sensors'].includes(topic) || li < 1)
         throw Error('Unknown challenge selection');
-    const pick = seededPicker(date, hashString(topic + level)), p = part;
+    const salt = hashString(topic + level), grid = (...lists) => dayGrid(date, salt, ...lists), p = part;
     const extra = {}; // explore / concept settings for the interactive figures (js/motion.js)
     const q = (title, text, givens, parts, hints, steps, idea, diagram, prerequisites) => ({
         id: `${topic}-${level}`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source: {reading: DRIVES_READING[topic]}, ...extra
@@ -192,7 +193,7 @@ function makeMotorSensorExercise(topic, date, level) {
 
     if (topic === 'motors') {
         if (li === 1) {
-            const V = pick([12, 24, 48]), R = pick([.5, 1, 2]), K = pick([.03, .05, .08]), stall = K * V / R, tl = +(stall * pick([.2, .3, .4])).toFixed(3);
+            const [V, R, K, frac] = grid([6, 9, 12, 18, 24, 36, 48], [.3, .5, .8, 1, 1.5, 2, 3], [.02, .03, .04, .05, .06, .08, .1], [.15, .2, .25, .3, .35, .4]), stall = K * V / R, tl = +(stall * frac).toFixed(3);
             const w0 = V / K, I = tl / K, w = (V - I * R) / K, eta = tl * w / (V * I), rpm = x => x * 60 / (2 * Math.PI);
             return q('A DC motor at its operating point', T`A permanent-magnet DC motor has armature resistance $R = ${R}\,\Omega$ and motor constant $k = ${K}\,\text{V}\cdot\text{s/rad}$ ($= \text{N}\cdot\text{m/A}$), and runs from $V = ${V}\,\text{V}$. Ignore friction and inductance. Find the no-load speed and the stall torque. It drives a load of $${tl}\,\text{N}\cdot\text{m}$: find the speed, the current and the efficiency.`,
                 [T`$V = ${V}\,\text{V}$, $R = ${R}\,\Omega$`, T`$k = ${K}\,\text{N}\cdot\text{m/A}$`, T`Load $${tl}\,\text{N}\cdot\text{m}$`],
@@ -204,7 +205,14 @@ function makeMotorSensorExercise(topic, date, level) {
                 'Ohm’s law; DC motor equations.');
         }
         if (li === 2) {
-            const R = pick([1, 2]), L = pick([.2e-3, .5e-3]), K = pick([.03, .05]), J = pick([5e-5, 1e-4, 2e-4]), b = pick([1e-5, 2e-5]), V = pick([6, 12]);
+            // Keep two well-separated real roots and a current peak at a positive time.
+            const stepOk = ([R, L, K, J, b]) => {
+                const D0 = R * b + K * K, a2 = L * J, a1 = R * J + L * b, dd = a1 * a1 - 4 * a2 * D0;
+                if (dd <= 4 * a2 * D0) return false;
+                const disc = Math.sqrt(dd), pf = (-a1 - disc) / (2 * a2), ps = (-a1 + disc) / (2 * a2), ratio = -((J * ps + b) / (ps - pf)) / ((J * pf + b) / (pf - ps));
+                return ratio > 0 && Math.log(ratio) / (pf - ps) > 0;
+            };
+            const [[R, L, K, J, b], V] = grid(product([.5, 1, 1.5, 2, 3], [.1e-3, .2e-3, .3e-3, .5e-3, 1e-3], [.02, .03, .04, .05, .06], [2e-5, 5e-5, 1e-4, 2e-4, 5e-4], [1e-5, 2e-5, 5e-5]).filter(stepOk), [6, 12, 24]);
             const D0 = R * b + K * K, a2 = L * J, a1 = R * J + L * b, disc = Math.sqrt(a1 * a1 - 4 * a2 * D0), pf = (-a1 - disc) / (2 * a2), ps = (-a1 + disc) / (2 * a2);
             const wss = K * V / D0, iss = V * b / D0, A = pi => (J * pi + b) / (L * J * (pi - (pi === pf ? ps : pf)));
             const tpk = Math.log(-A(ps) / A(pf)) / (pf - ps), cur = t => V * (b / D0 + [pf, ps].reduce((s, pi) => s + (J * pi + b) / (L * J * pi * (pi - (pi === pf ? ps : pf))) * Math.exp(pi * t), 0)), ipk = cur(tpk);
@@ -218,7 +226,9 @@ function makeMotorSensorExercise(topic, date, level) {
                 'Laplace transforms; partial fractions; second-order systems.');
         }
         if (li === 3) {
-            const pp = pick([2, 4, 5]), psi = pick([.01, .015, .02]), Tq = pick([.5, 1, 1.5]), Rs = pick([.1, .2]), L = pick([.2e-3, .4e-3]), n = pick([2000, 3000]), Vdc = pick([24, 48]);
+            // The stated operating point must be reachable: its voltage stays within 95% of the inverter limit.
+            const reachable = ([pp, psi, Tq, Rs, L, n, Vdc]) => { const iq = Tq / (1.5 * pp * psi), we = pp * n * 2 * Math.PI / 60; return Math.hypot(we * L * iq, Rs * iq + we * psi) <= .95 * Vdc / Math.sqrt(3); };
+            const [[pp, psi, Tq, Rs, L, n, Vdc]] = grid(PMSM_POINTS ||= product([2, 3, 4, 5], [.008, .01, .012, .015, .02], [.3, .5, .8, 1, 1.5], [.05, .1, .2], [.1e-3, .2e-3, .3e-3, .4e-3], [1000, 1500, 2000, 2500, 3000], [24, 36, 48]).filter(reachable));
             const iq = Tq / (1.5 * pp * psi), we = pp * n * 2 * Math.PI / 60, vd = -we * L * iq, vq = Rs * iq + we * psi, vm = Math.hypot(vd, vq), Vmax = Vdc / Math.sqrt(3);
             const A = psi * psi + L * L * iq * iq, B = 2 * Rs * iq * psi, Cc = Rs * Rs * iq * iq - Vmax * Vmax, web = (-B + Math.sqrt(B * B - 4 * A * Cc)) / (2 * A), nb = web / pp * 60 / (2 * Math.PI);
             return q('A brushless motor in the dq frame', T`A surface permanent-magnet synchronous motor has $${pp}$ pole pairs, magnet flux linkage $\psi = ${psi}\,\text{V}\cdot\text{s}$, stator resistance $R_s = ${Rs}\,\Omega$ and $L_d = L_q = ${tf(L * 1e3)}\,\text{mH}$. Torque is $T = \tfrac32p\psi i_q$ (amplitude-invariant dq). Running at $${n}\,\text{rpm}$ in steady state with $i_d = 0$, it must deliver $${Tq}\,\text{N}\cdot\text{m}$. Find $i_q$, the electrical speed, $v_d$, $v_q$ and the voltage magnitude. The inverter, on a $${Vdc}\,\text{V}$ bus, can supply at most $V_{dc}/\sqrt3$: find the highest speed at which this torque is possible with $i_d = 0$.`,
@@ -231,10 +241,10 @@ function makeMotorSensorExercise(topic, date, level) {
                 'Synchronous machines; Park transform; quadratic equations.');
         }
         // Mastery: field weakening with resistance, at a speed above base speed.
-        const pp = pick([3, 4]), psi = pick([.01, .012]), L = pick([.3e-3, .5e-3]), Rs = pick([.05, .08]), Im = pick([15, 20]), Vm = pick([14, 20]);
+        const [pp, psi, L, Rs, Im, Vm, frac] = grid([3, 4, 5], [.008, .01, .012], [.2e-3, .3e-3, .5e-3], [.05, .08], [10, 15, 20], [12, 14, 20], [.3, .5, .7]);
         const iqv = (we, id) => { const a = we * we * L * L + Rs * Rs, b = Rs * we * psi, c = Rs * Rs * id * id + we * we * (psi + L * id) ** 2, dd = b * b - a * (c - Vm * Vm); return dd < 0 ? -1 : (-b + Math.sqrt(dd)) / a; };
         const web = NUM.bisect(we => iqv(we, 0) - Im, 1, 1e5), wmax = psi > L * Im ? Math.sqrt(Vm * Vm - Rs * Rs * Im * Im) / (psi - L * Im) : 3 * web;
-        const rpmOf = we => we / pp * 60 / (2 * Math.PI), n = Math.round(rpmOf(web + pick([.3, .5, .7]) * (Math.min(wmax, 3 * web) - web)) / 100) * 100, we = pp * n * 2 * Math.PI / 60;
+        const rpmOf = we => we / pp * 60 / (2 * Math.PI), n = Math.round(rpmOf(web + frac * (Math.min(wmax, 3 * web) - web)) / 100) * 100, we = pp * n * 2 * Math.PI / 60;
         const id = NUM.bisect(d => iqv(we, d) - Math.sqrt(Math.max(0, Im * Im - d * d)), 0, -Im), iq = Math.sqrt(Im * Im - id * id), Tq = 1.5 * pp * psi * iq, P = Tq * n * 2 * Math.PI / 60;
         return q('Field weakening: the most torque above base speed', T`A surface PM synchronous motor ($p = ${pp}$, $\psi = ${psi}\,\text{V}\cdot\text{s}$, $L_d = L_q = ${tf(L * 1e3)}\,\text{mH}$, $R_s = ${Rs}\,\Omega$) is limited to a current amplitude $I_{\max} = ${Im}\,\text{A}$ and a voltage amplitude $V_{\max} = ${Vm}\,\text{V}$ (amplitude-invariant dq; $T = \tfrac32p\psi i_q$). Find the base speed: the highest speed at which full current with $i_d = 0$ is possible. At $${n}\,\text{rpm}$, above base speed, find the $i_d$ and $i_q$ that give the most torque within both limits, the torque and the mechanical power. Keep $R_s$ in the voltage equations.`,
             [T`$p = ${pp}$, $\psi = ${psi}\,\text{V}\cdot\text{s}$, $L = ${tf(L * 1e3)}\,\text{mH}$, $R_s = ${Rs}\,\Omega$`, T`$I_{\max} = ${Im}\,\text{A}$, $V_{\max} = ${Vm}\,\text{V}$`, T`Speed $${n}\,\text{rpm}$`],
@@ -248,10 +258,10 @@ function makeMotorSensorExercise(topic, date, level) {
 
     // sensors
     if (li === 1) {
-        const N = pick([500, 1000, 2048]), Ts = pick([1, 2, 5]) * 1e-3, n = pick([120, 600, 1500]), fc = pick([1e6, 1e7]);
+        const [N, Tsms, n, fcM] = grid([100, 200, 256, 360, 500, 512, 1000, 1024, 2000, 2048, 4096], [.5, 1, 2, 5, 10], [60, 120, 300, 600, 900, 1500, 3000], [1, 10, 20]), Ts = Tsms * 1e-3, fc = fcM * 1e6;
         const res = 360 / (4 * N), c = 4 * N * n / 60 * Ts, dn = 60 / (4 * N * Ts), rel = 100 / c, m = fc / (4 * N * n / 60), nx = 60 / (4 * N) * Math.sqrt(fc / Ts);
-        return q('Reading speed from an incremental encoder', T`An incremental encoder has $${N}$ lines per revolution and is decoded $\times4$ (both edges of both channels). The shaft turns at $${n}\,\text{rpm}$. Find the angular resolution. Counting edges in a window $T_s = ${Ts * 1e3}\,\text{ms}$: find the expected count, the speed resolution and the relative quantisation at this speed. Timing one edge interval with a $${fc / 1e6}\,\text{MHz}$ clock: find the expected tick count. Finally, find the speed at which the two methods have equal resolution.`,
-            [T`$${N}$ lines, $\times4$ decoding`, T`$n = ${n}\,\text{rpm}$, $T_s = ${Ts * 1e3}\,\text{ms}$`, T`Clock $${fc / 1e6}\,\text{MHz}$`],
+        return q('Reading speed from an incremental encoder', T`An incremental encoder has $${N}$ lines per revolution and is decoded $\times4$ (both edges of both channels). The shaft turns at $${n}\,\text{rpm}$. Find the angular resolution. Counting edges in a window $T_s = ${Tsms}\,\text{ms}$: find the expected count, the speed resolution and the relative quantisation at this speed. Timing one edge interval with a $${fc / 1e6}\,\text{MHz}$ clock: find the expected tick count. Finally, find the speed at which the two methods have equal resolution.`,
+            [T`$${N}$ lines, $\times4$ decoding`, T`$n = ${n}\,\text{rpm}$, $T_s = ${Tsms}\,\text{ms}$`, T`Clock $${fc / 1e6}\,\text{MHz}$`],
             [p('Angular resolution', res, '°'), p('Counts per window', c), p('Speed resolution (counting)', dn, 'rpm'), p('Relative quantisation', rel, '%'), p('Clock ticks per edge', m), p('Equal-resolution speed', nx, 'rpm')],
             [T`$4N$ edges per revolution.`, T`Counting: one count in $T_s$ is $\Delta n = \dfrac{60}{4NT_s}\,\text{rpm}$.`, T`Timing: $m = f_c/f_{\text{edge}}$ ticks, with resolution $\approx n/m$. Equal when $n^2\dfrac{4N}{60f_c} = \dfrac{60}{4NT_s}$.`],
             [T`$360^\circ/(4\times${N}) = ${tf(res)}^\circ$.`, T`Edge rate $= 4N\,n/60 = ${tf(4 * N * n / 60)}\,\text{Hz}$, so $${tf(c)}$ counts per window.`, T`$\Delta n = ${tf(dn)}\,\text{rpm}$, i.e. $${tf(rel)}\%$ of the speed.`, T`$m = ${tf(fc)}/${tf(4 * N * n / 60)} = ${tf(m)}$ ticks.`, T`$n_\times = \dfrac{60}{4N}\sqrt{f_c/T_s} = ${tf(nx)}\,\text{rpm}$.`],
@@ -260,7 +270,7 @@ function makeMotorSensorExercise(topic, date, level) {
             'Frequency and period; quantisation.');
     }
     if (li === 2) {
-        const dts = pick([.005, .01, .02]), tau = pick([.5, 1, 2]), bias = pick([.5, 1, 2]), sig = pick([1, 2, 3]);
+        const [dts, tau, bias, sig] = grid([.002, .004, .005, .01, .02], [.2, .3, .5, .8, 1, 1.5, 2], [.1, .2, .5, 1, 2], [.5, 1, 2, 3]);
         const alpha = tau / (tau + dts), err = alpha * bias * dts / (1 - alpha), sd = sig * Math.sqrt((1 - alpha) / (1 + alpha)), fx = 1 / (2 * Math.PI * tau), tdisc = -dts / Math.log(alpha);
         return q('Designing a complementary filter for tilt', T`A tilt estimate fuses a gyroscope and an accelerometer every $\Delta t = ${dts}\,\text{s}$: $\hat\theta_k = \alpha(\hat\theta_{k-1} + \omega_k\Delta t) + (1 - \alpha)\theta_{a,k}$, with $\alpha = \tau/(\tau + \Delta t)$ and $\tau = ${tau}\,\text{s}$. The gyro has a constant bias of $${bias}^\circ/\text{s}$; the accelerometer angle has white noise of $${sig}^\circ$ standard deviation per sample. Find $\alpha$, the steady-state angle error caused by the gyro bias, the standard deviation of the output caused by accelerometer noise, the crossover frequency, and the exact time constant of the discrete filter.`,
             [T`$\Delta t = ${dts}\,\text{s}$, $\tau = ${tau}\,\text{s}$`, T`Gyro bias $${bias}^\circ/\text{s}$`, T`Accelerometer noise $\sigma = ${sig}^\circ$`],
@@ -272,7 +282,7 @@ function makeMotorSensorExercise(topic, date, level) {
             'First-order filters; variance of filtered noise.');
     }
     if (li === 3) {
-        const Lb = pick([10, 20]), truth = [pick([.3, .45, .6, .7]) * Lb, pick([.25, .4, .55, .8]) * Lb], noise = pick([[.05, -.08, .03, -.02], [-.04, .06, .07, -.05], [.09, .02, -.06, .04]]);
+        const [Lb, fx, fy, noise] = grid([8, 10, 12, 15, 20], steps(.2, .8, .1), steps(.2, .8, .1), [[.05, -.08, .03, -.02], [-.04, .06, .07, -.05], [.09, .02, -.06, .04]]), truth = [fx * Lb, fy * Lb];
         const B = [[0, 0], [Lb, 0], [Lb, Lb], [0, Lb]], rho = B.map((b, i) => +(Math.hypot(truth[0] - b[0], truth[1] - b[1]) + noise[i]).toFixed(3));
         let x = [Lb / 2, Lb / 2];
         for (let it = 0; it < 30; it++) {
@@ -294,7 +304,7 @@ function makeMotorSensorExercise(topic, date, level) {
             'Nonlinear least squares; linearisation; 2×2 matrices.');
     }
     // Mastery: steady-state alpha-beta-gamma gains from the discrete Riccati equation.
-    const Tq = pick([.1, .2, .5]), sz = pick([1, 2, 5]), sa = pick([.1, .5, 1]);
+    const [Tq, sz, sa] = grid([.02, .05, .1, .2, .25, .5, 1], [.5, 1, 1.5, 2, 3, 4, 5, 10], [.05, .1, .2, .3, .5, 1, 2]);
     const F = [[1, Tq, Tq * Tq / 2], [0, 1, Tq], [0, 0, 1]], Gv = [Tq * Tq / 2, Tq, 1], Qm = Gv.map(a => Gv.map(b => sa * sa * a * b)), Rv = sz * sz;
     let P = [[1e4, 0, 0], [0, 1e4, 0], [0, 0, 1e4]], Pm = P, K = [0, 0, 0];
     for (let it = 0; it < 5000; it++) {
