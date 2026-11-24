@@ -128,16 +128,16 @@ function shuntStub(R, X) {
         'RF single-line representation. The shunt stub is connected at distance d from the load and shorted to the return at its far end.', 275);
 }
 
-function quarterWaveSections(count, load) {
+function quarterWaveSections(count, load, z0 = 50) {
     const x0 = 128, pitch = 420 / count;
-    let b = ring(70, 84, 5) + ring(70, 164, 5) + wire('M75 84H598M75 164H598') + dt(87, 60, '50 Ω');
+    let b = ring(70, 84, 5) + ring(70, 164, 5) + wire('M75 84H598M75 164H598') + dt(87, 60, z0 + ' Ω');
     for (let i = 0; i <= count; i++) {
         const x = x0 + i * pitch;
         b += guide(`M${x} 68v111`);
-        if (i < count) b += dt(x + pitch / 2, 130, 'Z' + '₁₂₃₄'[i]) + dt(x + pitch / 2, 202, 'λ₀/4');
+        if (i < count) b += dt(x + pitch / 2, 130, 'Z' + '₁₂₃₄₅₆'[i]) + dt(x + pitch / 2, 202, 'λ₀/4');
     }
     return drawing(b + element('R', 598, 84, 598, 164, load + ' Ω') + dt(359, 246, 'Dashed lines mark section boundaries'),
-        `Two continuous conductors through ${count} quarter-wave sections, between a 50 ohm port and a ${load} ohm load.`, 268);
+        `Two continuous conductors through ${count} quarter-wave sections, between a ${z0} ohm port and a ${load} ohm load.`, 268);
 }
 
 function matchedAmplifier(f) {
@@ -372,24 +372,31 @@ bank('rfcircuits', 'advanced', [{
 }]);
 
 /* S-parameter sets for the amplifier problems (magnitude, angle in degrees); only unconditionally stable ones are used. */
-const SPARAMS = [
-    [[.72, -116], [.03, 57], [2.6, 76], [.73, -54]],
-    [[.45, 150], [.01, -10], [2.05, 10], [.4, -150]],
-    [[.61, -170], [.045, 16], [2.5, 30], [.5, -90]],
-    [[.5, -100], [.05, 40], [4, 80], [.45, -40]],
-    [[.65, -140], [.04, 35], [3.2, 60], [.55, -70]],
-    [[.38, -158], [.06, 52], [3.8, 75], [.38, -40]]
-].map(s => s.map(([m, a]) => cp(m, a))).filter(([s11, s12, s21, s22]) => {
+const SPARAMS = product([.4, .5, .6, .7], [-60, -110, -160], [.02, .04, .06], [20, 50], [2, 3, 4, 5], [50, 80, 110], [.3, .4, .5, .6], [-30, -60, -90])
+    .map(([m11, a11, m12, a12, m21, a21, m22, a22]) => [[m11, a11], [m12, a12], [m21, a21], [m22, a22]])
+    .map(s => s.map(([m, a]) => cp(m, a))).filter(([s11, s12, s21, s22]) => {
     const D = cs(cm(s11, s22), cm(s12, s21)), K = (1 - cabs(s11) ** 2 - cabs(s22) ** 2 + cabs(D) ** 2) / (2 * cabs(cm(s12, s21)));
     return K > 1.02 && cabs(D) < 1;
 });
+
+/* Five-symbol sources for the Huffman exercise: probabilities in steps of 0.02, each between 0.04 and 0.5, decreasing. */
+let huffmanCache = null;
+function huffmanSources() {
+    if (huffmanCache) return huffmanCache;
+    const out = [], rec = (left, parts, max) => {
+        if (parts.length === 4) { if (left >= 2 && left <= max) out.push([...parts, left].map(k => k / 50)); return; }
+        for (let k = Math.min(max, left - 2 * (4 - parts.length)); k >= 2; k--) rec(left - k, [...parts, k], k);
+    };
+    rec(50, [], 25);
+    return huffmanCache = out;
+}
 
 /* ---------- Levels 2–4: generated ---------- */
 function makeCommsExercise(topic, date, level) {
     const li = TIERS.indexOf(level); // 1 university, 2 challenge, 3 expert, 4 mastery
     if (!TOPICS.some(t => t.id === topic && t.group === 'comms') || li < 1)
         throw Error('Unknown challenge selection');
-    const pick = seededPicker(date, hashString(topic + level)), p = part;
+    const salt = hashString(topic + level), grid = (...lists) => dayGrid(date, salt, ...lists), p = part;
     const extra = {}; // explore / concept settings for the interactive figures (js/motion.js)
     const q = (title, text, givens, parts, hints, steps, idea, diagram, prerequisites) => ({
         id: `${topic}-${level}`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source: {reading: COMMS_READING[topic]}, ...extra
@@ -397,7 +404,7 @@ function makeCommsExercise(topic, date, level) {
 
     if (topic === 'infotheory') {
         if (li === 1) {
-            const ps = pick([[.4, .2, .2, .1, .1], [.35, .25, .2, .15, .05], [.3, .3, .2, .1, .1], [.5, .2, .15, .1, .05], [.25, .25, .2, .15, .15], [.45, .25, .15, .1, .05]]);
+            const [ps] = grid(huffmanSources());
             const H = -ps.reduce((s, v) => s + v * Math.log2(v), 0), {L, merges} = huffman(ps), L2 = huffLen(ps.flatMap(a => ps.map(b => a * b))) / 2;
             return q('Entropy and Huffman coding of a source', T`A memoryless source emits five symbols $A$–$E$ with probabilities $${ps.join(',\\ ')}$. Find its entropy and the average length of a Huffman code for single symbols, and the coding efficiency. Then find the average length per symbol of a Huffman code for pairs of symbols, and how many bits the single-symbol code saves per 1000 symbols compared with a fixed 3-bit code.`,
                 [T`$P = (${ps.join(', ')})$ for $A$–$E$`, 'Memoryless source', 'Fixed-length code: 3 bits'],
@@ -409,8 +416,8 @@ function makeCommsExercise(topic, date, level) {
                 'Logarithms; prefix codes.');
         }
         if (li === 2) {
-            const Pr = pick([-95, -90, -85]), NF = pick([3, 5, 7]), B = pick([1, 2, 5, 10]) * 1e6;
-            const N0 = -174 + NF, N = N0 + dB(B), snr = Pr - N, C = B * Math.log2(1 + unDB(snr)), PN = unDB(Pr - N0), Cinf = PN / Math.LN2, R = Number((pick([.3, .5, .7]) * Cinf).toPrecision(2));
+            const [Pr, NF, Bm, frac] = grid(steps(-100, -80, 1), [2.5, 3.2, 4.1, 5.3, 6.7, 7.4], [.5, 1, 2, 5, 10, 20], [.3, .5, .7]), B = Bm * 1e6;
+            const N0 = -174 + NF, N = N0 + dB(B), snr = Pr - N, C = B * Math.log2(1 + unDB(snr)), PN = unDB(Pr - N0), Cinf = PN / Math.LN2, R = Number((frac * Cinf).toPrecision(2));
             const BR = Math.exp(NUM.bisect(lb => Math.exp(lb) * Math.log2(1 + PN / Math.exp(lb)) - R, 0, 30, 120));
             return q('Capacity of a noisy radio link', T`A receiver sees $P_r = ${Pr}\,\text{dBm}$ in a bandwidth $B = ${B / 1e6}\,\text{MHz}$. Its noise density is $N_0 = -174\,\text{dBm/Hz}$ plus a noise figure of $${NF}\,\text{dB}$. Find the SNR, the Shannon capacity, the spectral efficiency and the $E_b/N_0$ at capacity. With unlimited bandwidth at the same received power, what capacity is possible? And what bandwidth would carry $R = ${tf(R / 1e6)}\,\text{Mbit/s}$ at capacity?`,
                 [T`$P_r = ${Pr}\,\text{dBm}$`, T`$B = ${B / 1e6}\,\text{MHz}$, $\text{NF} = ${NF}\,\text{dB}$`, T`$R = ${tf(R / 1e6)}\,\text{Mbit/s}$`],
@@ -422,7 +429,7 @@ function makeCommsExercise(topic, date, level) {
                 'Decibels; logarithms; root finding.');
         }
         if (li === 3) {
-            const e0 = pick([.01, .02, .05]), e1 = pick([.3, .4, .5]);
+            const [e0, e1] = grid(steps(.005, .1, .005), steps(.1, .5, .02));
             const py1 = qv => (1 - qv) * e0 + qv * (1 - e1), I = qv => H2(py1(qv)) - ((1 - qv) * H2(e0) + qv * H2(e1));
             let a = 0, b = 1;
             for (let i = 0; i < 80; i++) { const m1 = a + (b - a) * .382, m2 = a + (b - a) * .618; if (I(m1) < I(m2)) a = m1; else b = m2; }
@@ -437,7 +444,9 @@ function makeCommsExercise(topic, date, level) {
                 'Entropy; mutual information; optimisation.');
         }
         // Mastery: water-filling over the subcarriers of an OFDM symbol.
-        const taps = pick([[1, .9], [1, .7, .3], [1, -.5, .4], [1, .8, -.3], [1, .6, .6]]), snr = pick([.5, 1, 2, 4]), N = 16, Pt = N * snr;
+        // Two- and three-tap channels without a dead subcarrier (every gain above 0.01).
+        const N = 16, dftGain = (h, k) => { let re = 0, im = 0; h.forEach((v, n) => { re += v * Math.cos(2 * Math.PI * k * n / N); im -= v * Math.sin(2 * Math.PI * k * n / N); }); return re * re + im * im; };
+        const [[h1, h2], snr] = grid(product(steps(-.9, .9, .1).filter(v => v !== 0), [0, -.4, -.2, .2, .4]).filter(([h1, h2]) => Array.from({length: N}, (_, k) => dftGain([1, h1, h2], k)).every(g => g > .01)), [.25, .5, 1, 2, 4]), taps = h2 ? [1, h1, h2] : [1, h1], Pt = N * snr;
         const g = Array.from({length: N}, (_, k) => { let re = 0, im = 0; taps.forEach((h, n) => { re += h * Math.cos(2 * Math.PI * k * n / N); im -= h * Math.sin(2 * Math.PI * k * n / N); }); return re * re + im * im; });
         const inv = g.map(x => 1 / x).sort((a, b) => a - b);
         let m = N, mu = 0;
@@ -455,7 +464,7 @@ function makeCommsExercise(topic, date, level) {
 
     if (topic === 'modulation') {
         if (li === 1) {
-            const Rb = pick([10, 20, 50, 100]), M = pick([4, 16, 64]), al = pick([.2, .25, .35]), eb = pick([8, 10, 12, 14]), k = Math.log2(M);
+            const [Rb, M, al, eb] = grid([1, 2, 5, 10, 20, 50, 100, 200], [4, 16, 64], [.1, .2, .25, .3, .35, .5], steps(6, 18, 1)), k = Math.log2(M);
             const Rs = Rb / k, Bw = (1 + al) * Rs, ber = qamBer(M, unDB(eb));
             return q('A QAM link: bandwidth and bit errors', T`A link carries $${Rb}\,\text{Mbit/s}$ with Gray-coded square $${M}$-QAM and root-raised-cosine pulses of roll-off $\alpha = ${al}$. The receiver sees $E_b/N_0 = ${eb}\,\text{dB}$ in AWGN. Find the symbol rate, the occupied bandwidth, the spectral efficiency and $E_s/N_0$. Estimate the bit error rate with $P_b \approx \dfrac{4}{\log_2M}\left(1 - \dfrac{1}{\sqrt M}\right)Q\!\left(\sqrt{\dfrac{3\log_2M}{M - 1}\dfrac{E_b}{N_0}}\right)$.`,
                 [T`$R_b = ${Rb}\,\text{Mbit/s}$, $M = ${M}$`, T`$\alpha = ${al}$`, T`$E_b/N_0 = ${eb}\,\text{dB}$`],
@@ -467,7 +476,7 @@ function makeCommsExercise(topic, date, level) {
                 'Decibels; the Q function; Nyquist pulses.');
         }
         if (li === 2) {
-            const d = pick([3, 5, 6, 9, 10, 11, 12, 13]), e = pick([1, 2, 3, 4, 5, 6, 7]), pe = pick([.01, .02, .05]);
+            const [d, e, pe] = grid(steps(1, 15, 1), steps(1, 7, 1), [.001, .002, .005, .01, .02, .05, .1]);
             const [d1, d2, d3, d4] = [8, 4, 2, 1].map(m => +!!(d & m)), c = [d1 ^ d2 ^ d4, d1 ^ d3 ^ d4, d1, d2 ^ d3 ^ d4, d2, d3, d4], r = c.map((v, i) => i === e - 1 ? 1 - v : v);
             const s1 = r[0] ^ r[2] ^ r[4] ^ r[6], s2 = r[1] ^ r[2] ^ r[5] ^ r[6], s3 = r[3] ^ r[4] ^ r[5] ^ r[6], syn = 4 * s3 + 2 * s2 + s1;
             const fix = r.map((v, i) => i === syn - 1 ? 1 - v : v), dec = 8 * fix[2] + 4 * fix[4] + 2 * fix[5] + fix[6], Pf = 1 - (1 - pe) ** 7 - 7 * pe * (1 - pe) ** 6, P2 = 21 * pe * pe * (1 - pe) ** 5;
@@ -483,7 +492,7 @@ function makeCommsExercise(topic, date, level) {
         if (li === 3) {
             const enc = bits => { let s1 = 0, s2 = 0; const out = []; for (const u of bits) { out.push(u ^ s1 ^ s2, u ^ s2); s2 = s1; s1 = u; } return out; };
             const toBits = (m, n) => Array.from({length: n}, (_, i) => m >> (n - 1 - i) & 1), errs = [[2, 11], [3, 14], [5, 12], [1, 9], [4, 15], [6, 13], [2, 10], [7, 16]];
-            let msg = pick([11, 19, 22, 37, 45, 52, 26, 41]), start = pick([0, 1, 2, 3, 4, 5, 6, 7]), found = null;
+            let [msg, start] = grid(steps(1, 63, 1), steps(0, 7, 1)), found = null;
             for (let t = 0; t < 64 && !found; t++) {
                 const m = ((msg + t - 1) % 63) + 1, code = enc([...toBits(m, 6), 0, 0]);
                 for (let j = 0; j < errs.length && !found; j++) {
@@ -503,15 +512,15 @@ function makeCommsExercise(topic, date, level) {
                 'Finite-state machines; dynamic programming.');
         }
         // Mastery: 16-QAM over Rayleigh fading with L-branch maximal-ratio combining.
-        const L = pick([2, 3, 4]), gb = pick([10, 15, 20]), fact = [1, 1, 2, 6, 24][L - 1];
+        const [L, gb, texp] = grid([2, 3, 4], steps(5, 25, .5), [2, 3, 4]), target = 10 ** -texp, fact = [1, 1, 2, 6, 24][L - 1];
         const avg = (g, LL, fa) => NUM.simpson(t => { const u = Math.exp(t); return qamBer(16, g * u) * u ** LL * Math.exp(-u) / fa; }, -25, Math.log(60), 400);
         const ber = avg(unDB(gb), L, fact), bpsk1 = .5 * (1 - Math.sqrt(unDB(gb) / (1 + unDB(gb))));
-        const need = NUM.bisect(x => Math.log(avg(unDB(x), L, fact) / 1e-3), 0, 40, 32), awgn = NUM.bisect(x => Math.log(qamBer(16, unDB(x)) / 1e-3), 0, 30, 60), pen = need + dB(L) - awgn;
-        return q('Diversity against Rayleigh fading', T`A 16-QAM link (Gray coding, $P_b(\gamma) \approx \tfrac34Q\big(\sqrt{0.8\,\gamma}\big)$ at $E_b/N_0 = \gamma$) runs over a Rayleigh-fading channel with $L = ${L}$ independent receive branches combined by maximal-ratio combining. Each branch has average $E_b/N_0 = ${gb}\,\text{dB}$, so the combined $\gamma$ has the density $f(\gamma) = \dfrac{\gamma^{L-1}e^{-\gamma/\bar\gamma}}{(L - 1)!\,\bar\gamma^L}$. As a reference, find the BPSK bit error rate on one branch without diversity, $\tfrac12\big(1 - \sqrt{\bar\gamma/(1 + \bar\gamma)}\big)$. Then compute the average 16-QAM bit error rate with combining, the per-branch $E_b/N_0$ that gives $10^{-3}$, the $E_b/N_0$ that gives $10^{-3}$ without fading, and the fading penalty: the total combined $E_b/N_0$ ($L$ times the per-branch value) needed with fading, minus the AWGN value.`,
+        const need = NUM.bisect(x => Math.log(avg(unDB(x), L, fact) / target), 0, 40, 32), awgn = NUM.bisect(x => Math.log(qamBer(16, unDB(x)) / target), 0, 30, 60), pen = need + dB(L) - awgn;
+        return q('Diversity against Rayleigh fading', T`A 16-QAM link (Gray coding, $P_b(\gamma) \approx \tfrac34Q\big(\sqrt{0.8\,\gamma}\big)$ at $E_b/N_0 = \gamma$) runs over a Rayleigh-fading channel with $L = ${L}$ independent receive branches combined by maximal-ratio combining. Each branch has average $E_b/N_0 = ${gb}\,\text{dB}$, so the combined $\gamma$ has the density $f(\gamma) = \dfrac{\gamma^{L-1}e^{-\gamma/\bar\gamma}}{(L - 1)!\,\bar\gamma^L}$. As a reference, find the BPSK bit error rate on one branch without diversity, $\tfrac12\big(1 - \sqrt{\bar\gamma/(1 + \bar\gamma)}\big)$. Then compute the average 16-QAM bit error rate with combining, the per-branch $E_b/N_0$ that gives $10^{-${texp}}$, the $E_b/N_0$ that gives $10^{-${texp}}$ without fading, and the fading penalty: the total combined $E_b/N_0$ ($L$ times the per-branch value) needed with fading, minus the AWGN value.`,
             [T`16-QAM, Gray coding`, T`$L = ${L}$ branches, MRC`, T`$\bar\gamma = ${gb}\,\text{dB}$ per branch`],
-            [p('BPSK, one branch', bpsk1), p('16-QAM average BER with MRC', ber), p(T`Per-branch $E_b/N_0$ for $10^{-3}$`, need, 'dB', .01, .02), p(T`AWGN $E_b/N_0$ for $10^{-3}$`, awgn, 'dB', .01, .02), p('Fading penalty', pen, 'dB', .02, .03)],
-            [T`$\bar P_b = \int_0^\infty P_b(\gamma)f(\gamma)\,d\gamma$. Substitute $u = \gamma/\bar\gamma$, then $u = e^t$, so the integrand is smooth for numerical quadrature.`, T`Solve $\bar P_b(\bar\gamma) = 10^{-3}$ by bisection on $\bar\gamma$ in dB (work with $\log\bar P_b$).`, T`Without fading, solve $\tfrac34Q(\sqrt{0.8\gamma}) = 10^{-3}$. Compare like with like: $L$ branches collect $L$ times the energy of one.`],
-            [T`BPSK, no diversity, at $${gb}\,\text{dB}$: $${tf(bpsk1, 4)}$ — the slow $1/(4\bar\gamma)$ decay of a single fading branch.`, T`Simpson's rule on $t \in [-25, \ln60]$: $\bar P_b = ${tf(ber, 4)}$ for 16-QAM with $L = ${L}$.`, T`Bisection: $\bar P_b = 10^{-3}$ at $${tf(need)}\,\text{dB}$ per branch.`, T`AWGN: $10^{-3}$ at $${tf(awgn)}\,\text{dB}$.`, T`Total combined $E_b/N_0 = ${tf(need)} + 10\log_{10}${L} = ${tf(need + dB(L))}\,\text{dB}$, so the penalty is $${tf(pen)}\,\text{dB}$; with diversity order $L$ the error rate falls as $\bar\gamma^{-${L}}$.`],
+            [p('BPSK, one branch', bpsk1), p('16-QAM average BER with MRC', ber), p(T`Per-branch $E_b/N_0$ for $10^{-${texp}}$`, need, 'dB', .01, .02), p(T`AWGN $E_b/N_0$ for $10^{-${texp}}$`, awgn, 'dB', .01, .02), p('Fading penalty', pen, 'dB', .02, .03)],
+            [T`$\bar P_b = \int_0^\infty P_b(\gamma)f(\gamma)\,d\gamma$. Substitute $u = \gamma/\bar\gamma$, then $u = e^t$, so the integrand is smooth for numerical quadrature.`, T`Solve $\bar P_b(\bar\gamma) = 10^{-${texp}}$ by bisection on $\bar\gamma$ in dB (work with $\log\bar P_b$).`, T`Without fading, solve $\tfrac34Q(\sqrt{0.8\gamma}) = 10^{-${texp}}$. Compare like with like: $L$ branches collect $L$ times the energy of one.`],
+            [T`BPSK, no diversity, at $${gb}\,\text{dB}$: $${tf(bpsk1, 4)}$ — the slow $1/(4\bar\gamma)$ decay of a single fading branch.`, T`Simpson's rule on $t \in [-25, \ln60]$: $\bar P_b = ${tf(ber, 4)}$ for 16-QAM with $L = ${L}$.`, T`Bisection: $\bar P_b = 10^{-${texp}}$ at $${tf(need)}\,\text{dB}$ per branch.`, T`AWGN: $10^{-${texp}}$ at $${tf(awgn)}\,\text{dB}$.`, T`Total combined $E_b/N_0 = ${tf(need)} + 10\log_{10}${L} = ${tf(need + dB(L))}\,\text{dB}$, so the penalty is $${tf(pen)}\,\text{dB}$; with diversity order $L$ the error rate falls as $\bar\gamma^{-${L}}$.`],
             'Fading makes errors decay only as 1/SNR on one branch; combining L independent branches restores a steep slope (SNR^−L), which is why MIMO and multi-antenna receivers are standard.',
             diversityDiagram(L, gb),
             'Probability densities; numerical integration; root finding.');
@@ -519,7 +528,7 @@ function makeCommsExercise(topic, date, level) {
 
     if (topic === 'linkbudget') {
         if (li === 1) {
-            const f = pick([.9, 2.4, 5.8]) * 1e9, dkm = pick([1, 2, 5, 10]), Pt = pick([20, 27, 30]), Gt = pick([6, 10, 15]), Gr = pick([6, 10, 15]), Lc = pick([2, 3]), NF = pick([3, 5, 6]), B = pick([1, 5, 20]) * 1e6, req = pick([10, 15]);
+            const [fG, dkm, Pt, Gt, Gr, Lc, NF, Bm, req] = grid([.9, 2.4, 5.8], [1, 2, 5, 10], [20, 27, 30], [6, 10, 15], [6, 10, 15], [2, 3], [3, 5, 6], [1, 5, 20], [10, 15]), f = fG * 1e9, B = Bm * 1e6;
             const lam = 299792458 / f, fspl = 20 * Math.log10(4 * Math.PI * dkm * 1e3 / lam), Pr = Pt + Gt + Gr - Lc - fspl, N = -174 + dB(B) + NF, snr = Pr - N, margin = snr - req, dmax = dkm * 10 ** (margin / 20);
             return q('A point-to-point radio link budget', T`A $${f / 1e9}\,\text{GHz}$ link spans $${dkm}\,\text{km}$ in free space. The transmitter gives $${Pt}\,\text{dBm}$; the antennas have gains $${Gt}\,\text{dBi}$ and $${Gr}\,\text{dBi}$; cables and connectors lose $${Lc}\,\text{dB}$ in total. The receiver has a noise figure of $${NF}\,\text{dB}$ in a $${B / 1e6}\,\text{MHz}$ bandwidth and needs an SNR of $${req}\,\text{dB}$. Find the free-space path loss, the received power, the noise floor, the SNR, the link margin and the longest distance with a zero margin. Use $c = 299\,792\,458\,\text{m/s}$.`,
                 [T`$f = ${f / 1e9}\,\text{GHz}$, $d = ${dkm}\,\text{km}$`, T`$P_t = ${Pt}\,\text{dBm}$, $G_t = ${Gt}$, $G_r = ${Gr}\,\text{dBi}$, losses $${Lc}\,\text{dB}$`, T`$\text{NF} = ${NF}\,\text{dB}$, $B = ${B / 1e6}\,\text{MHz}$, required SNR $${req}\,\text{dB}$`],
@@ -531,7 +540,7 @@ function makeCommsExercise(topic, date, level) {
                 'Decibels; free-space propagation; thermal noise.');
         }
         if (li === 2) {
-            const f = pick([4, 12]) * 1e9, D = pick([.6, 1.2, 2.4]), eta = pick([.55, .6, .65]), eirp = pick([45, 50, 52]), dkm = pick([36000, 38000, 40000]), La = pick([.5, 1]), Ta = pick([30, 50]), Tl = pick([40, 75]), ebreq = pick([5, 7, 9]);
+            const [fG, D, eta, eirp, dkm, La, Ta, Tl, ebreq] = grid([4, 12], [.6, 1.2, 2.4], [.55, .6, .65], [45, 50, 52], [36000, 38000, 40000], [.5, 1], [30, 50], [40, 75], [5, 7, 9]), f = fG * 1e9;
             const lam = 299792458 / f, G = dB(eta * (Math.PI * D / lam) ** 2), Ts = Ta + Tl + 1000 / 1000, GT = G - dB(Ts), fspl = 20 * Math.log10(4 * Math.PI * dkm * 1e3 / lam), kdb = dB(1.380649e-23), cn0 = eirp - fspl - La + GT - kdb, Rb = unDB(cn0 - ebreq);
             return q('A satellite downlink: G/T and C/N₀', T`A geostationary satellite radiates an EIRP of $${eirp}\,\text{dBW}$ at $${f / 1e9}\,\text{GHz}$ towards a ground station $${dkm}\,\text{km}$ away; the atmosphere adds $${La}\,\text{dB}$ of loss. The station has a dish of diameter $${D}\,\text{m}$ and aperture efficiency $${eta}$, an antenna noise temperature of $${Ta}\,\text{K}$, and an LNA with noise temperature $${Tl}\,\text{K}$ and gain $30\,\text{dB}$ followed by a receiver at $1000\,\text{K}$. Find the dish gain, the system noise temperature, the figure of merit $G/T$, the path loss and $C/N_0$. What bit rate can be carried at $E_b/N_0 = ${ebreq}\,\text{dB}$? Use $k = 1.380649\times10^{-23}\,\text{J/K}$.`,
                 [T`EIRP $${eirp}\,\text{dBW}$, $f = ${f / 1e9}\,\text{GHz}$, $d = ${dkm}\,\text{km}$`, T`Dish $${D}\,\text{m}$, $\eta = ${eta}$`, T`$T_a = ${Ta}\,\text{K}$, LNA $${Tl}\,\text{K}$ / $30\,\text{dB}$, receiver $1000\,\text{K}$`],
@@ -543,10 +552,10 @@ function makeCommsExercise(topic, date, level) {
                 'Antenna gain; noise temperature; decibels.');
         }
         if (li === 3) {
-            const f = pick([.9, 2.4]) * 1e9, ht = pick([10, 20, 30]), hr = pick([1.5, 2]), Pt = pick([20, 30]), d0 = pick([1, 2]) * 1e3;
+            const [fG, ht, hr, d0k, mult] = grid([.9, 1.8, 2.4, 3.5, 5.8], [10, 15, 20, 25, 30, 40], [1, 1.5, 2, 2.5], [1, 2], [4, 8, 16]), Pt = fG < 2 ? 30 : 20, f = fG * 1e9, d0 = d0k * 1e3; // Pt cancels out of every answer, so it is not a varied quantity
             const lam = 299792458 / f, k = 2 * Math.PI / lam, gain = d => { const d1 = Math.hypot(d, ht - hr), d2 = Math.hypot(d, ht + hr), re = Math.cos(k * d1) / d1 - Math.cos(k * d2) / d2, im = -Math.sin(k * d1) / d1 + Math.sin(k * d2) / d2; return (lam / (4 * Math.PI)) ** 2 * (re * re + im * im); };
             const pl0 = -dB(gain(d0)), fs0 = 20 * Math.log10(4 * Math.PI * d0 / lam), db_ = NUM.bisect(d => Math.hypot(d, ht + hr) - Math.hypot(d, ht - hr) - lam / 2, 1, 1e6, 100), pl4 = 40 * Math.log10(d0) - 20 * Math.log10(ht * hr);
-            const sens = Math.round(Pt + dB(gain(db_ * pick([4, 8, 16])))), dmax = NUM.bisect(d => Pt + dB(gain(d)) - sens, db_, 1e7, 100);
+            const sens = Math.round(Pt + dB(gain(db_ * mult))), dmax = NUM.bisect(d => Pt + dB(gain(d)) - sens, db_, 1e7, 100);
             return q('The exact two-ray model', T`Two isotropic antennas at heights $h_t = ${ht}\,\text{m}$ and $h_r = ${hr}\,\text{m}$ communicate at $${f / 1e9}\,\text{GHz}$ over flat, perfectly reflecting ground ($\Gamma = -1$). The received power is $P_r = P_t\left(\dfrac{\lambda}{4\pi}\right)^2\left|\dfrac{e^{-jkd_1}}{d_1} - \dfrac{e^{-jkd_2}}{d_2}\right|^2$ with $d_{1,2} = \sqrt{d^2 + (h_t \mp h_r)^2}$. At $d = ${d0 / 1e3}\,\text{km}$, find the exact path loss, the free-space loss and the fourth-power asymptote $40\log_{10}d - 20\log_{10}(h_th_r)$. Find the breakpoint, the last distance where the two rays are in phase ($d_2 - d_1 = \lambda/2$). With $P_t = ${Pt}\,\text{dBm}$ and a receiver sensitivity of $${sens}\,\text{dBm}$, find the maximum range.`,
                 [T`$h_t = ${ht}\,\text{m}$, $h_r = ${hr}\,\text{m}$`, T`$f = ${f / 1e9}\,\text{GHz}$, $\Gamma = -1$`, T`$P_t = ${Pt}\,\text{dBm}$, sensitivity $${sens}\,\text{dBm}$`],
                 [p('Exact path loss at ' + d0 / 1e3 + ' km', pl0, 'dB', .003), p('Free-space loss', fs0, 'dB', .002), p('Fourth-power asymptote', pl4, 'dB', .002), p('Breakpoint distance', db_, 'm'), p('Maximum range', dmax / 1e3, 'km')],
@@ -557,7 +566,7 @@ function makeCommsExercise(topic, date, level) {
                 'Complex phasors; logarithms; root finding.');
         }
         // Mastery: a uniform linear array, steered.
-        const N = pick([6, 8, 10, 12]), th0 = pick([0, 20, 30]), dl = pick(th0 === 30 ? [.5, .6] : [.5, .6, .7]), u0 = Math.sin(rad(th0)), kd = 2 * Math.PI * dl;
+        const [[N, th0, dl]] = grid(product(steps(4, 16, 1), [0, 10, 15, 20, 25, 30, 40], steps(.4, .8, .05)).filter(([N, th0, dl]) => dl < 1 / (1 + Math.sin(rad(th0))))), u0 = Math.sin(rad(th0)), kd = 2 * Math.PI * dl;
         const af = u => { const ps = kd * (u - u0) / 2; return Math.abs(Math.sin(ps)) < 1e-12 ? 1 : (Math.sin(N * ps) / (N * Math.sin(ps))) ** 2; };
         const D = 2 / NUM.simpson(af, -1, 1, 2000), psiH = NUM.bisect(x => (Math.sin(N * x / 2) / (N * Math.sin(x / 2))) ** 2 - .5, 1e-9, 2 * Math.PI / N, 100);
         const uL = u0 - psiH / kd, uR = u0 + psiH / kd, hpbw = deg(Math.asin(Math.min(1, uR)) - Math.asin(Math.max(-1, uL))), nullU = 1 / (N * dl);
@@ -578,7 +587,7 @@ function makeCommsExercise(topic, date, level) {
 
     // rfcircuits
     if (li === 1) {
-        const Z0 = pick([50, 75]), R = pick([25, 30, 100, 150]), X = pick([-50, -25, 25, 40]), l = pick([.1, .15, .2, .3]), ZL = cx(R, X);
+        const [Z0, R, X, l] = grid([50, 75], [10, 20, 25, 30, 40, 60, 80, 100, 150, 200], [-75, -50, -25, 25, 50, 75], [.05, .1, .125, .15, .2, .3, .35, .4, .45]), ZL = cx(R, X);
         const G = cd(cs(ZL, cx(Z0)), ca(ZL, cx(Z0))), g = cabs(G), vswr = (1 + g) / (1 - g), Zin = czin(Z0, ZL, Math.tan(2 * Math.PI * l));
         extra.concept = {gamma: [G.re, G.im]};
         return q('A mismatched load seen through a line', T`A lossless line of $Z_0 = ${Z0}\,\Omega$ is terminated in $Z_L = ${R} ${X < 0 ? '-' : '+'} j${Math.abs(X)}\,\Omega$. Find the magnitude and angle of the load reflection coefficient, the VSWR and the return loss. Then find the input impedance $${l}\lambda$ from the load.`,
@@ -591,7 +600,7 @@ function makeCommsExercise(topic, date, level) {
             'Complex numbers; transmission lines.');
     }
     if (li === 2) {
-        const Z0 = 50, Y0 = 1 / Z0, [R, X] = pick([[25, -30], [100, 50], [30, 40], [150, -60], [60, -80], [20, 10]]), ZL = cx(R, X), YL = cd(cx(1), ZL);
+        const Z0 = 50, Y0 = 1 / Z0, [[R, X]] = grid(product(steps(10, 200, 10), steps(-100, 100, 10).filter(x => x !== 0)).filter(([r, x]) => Math.abs(50 * r / (r * r + x * x) - 1) > .05)), ZL = cx(R, X), YL = cd(cx(1), ZL);
         const yin = (d, sc=1) => { const t = Math.tan(2 * Math.PI * d * sc); return cm(cx(Y0), cd(ca(YL, cx(0, Y0 * t)), ca(cx(Y0), cm(cx(0, t), YL)))); };
         let lo = 0, d = 0;
         for (let i = 1; i <= 2000; i++) { const a = (i - 1) / 4000, b = i / 4000; if ((yin(a).re - Y0) * (yin(b).re - Y0) <= 0) { lo = a; d = NUM.bisect(x => yin(x).re - Y0, a, b, 80); break; } }
@@ -609,7 +618,7 @@ function makeCommsExercise(topic, date, level) {
             'Admittance; transmission lines; root finding.');
     }
     if (li === 3) {
-        const [s11, s12, s21, s22] = pick(SPARAMS), fG = pick([2, 4, 6]);
+        const [[s11, s12, s21, s22]] = grid(SPARAMS), fG = [8, 6, 4, 2][Math.round(cabs(s21)) - 2]; // higher-gain parts at lower frequencies
         const D = cs(cm(s11, s22), cm(s12, s21)), K = (1 - cabs(s11) ** 2 - cabs(s22) ** 2 + cabs(D) ** 2) / (2 * cabs(cm(s12, s21))), mag = 10 * Math.log10(cabs(s21) / cabs(s12) * (K - Math.sqrt(K * K - 1)));
         const B1 = 1 + cabs(s11) ** 2 - cabs(s22) ** 2 - cabs(D) ** 2, C1 = cs(s11, cm(D, cconj(s22))), B2 = 1 + cabs(s22) ** 2 - cabs(s11) ** 2 - cabs(D) ** 2, C2 = cs(s22, cm(D, cconj(s11)));
         const gs = (B1 - Math.sqrt(B1 * B1 - 4 * cabs(C1) ** 2)) / (2 * cabs(C1)), gl = (B2 - Math.sqrt(B2 * B2 - 4 * cabs(C2) ** 2)) / (2 * cabs(C2));
@@ -624,19 +633,19 @@ function makeCommsExercise(topic, date, level) {
             'Complex arithmetic; S-parameters.');
     }
     // Mastery: a binomial multisection quarter-wave transformer, analysed exactly.
-    const Z0 = 50, ZLr = pick([100, 150, 200, 20]), N = pick([2, 3, 4]), Gm = pick([.05, .1]);
+    const [[Z0, ZLr, N, Gm]] = grid(product([50, 75], [10, 12, 15, 20, 22, 25, 30, 33, 100, 120, 150, 180, 200, 220, 250, 300], [2, 3, 4, 5], [.02, .05, .08, .1, .15]).filter(([z0, zl, n, gm]) => Math.abs((zl - z0) / (zl + z0)) > 1.3 * gm));
     const Cn = (n, k) => { let r = 1; for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1); return r; };
     const Zs = [];
     let zc = Z0;
     for (let n = 0; n < N; n++) { zc *= Math.exp(Cn(N, n) / 2 ** N * Math.log(ZLr / Z0)); Zs.push(zc); }
     const gam = fr => { let z = cx(ZLr); const t = Math.tan(Math.PI / 2 * fr); for (let i = N - 1; i >= 0; i--) z = czin(Zs[i], z, t); return cabs(cd(cs(z, cx(Z0)), ca(z, cx(Z0)))); };
     const fm = NUM.bisect(fr => gam(fr) - Gm, .01, 1, 100), bwExact = 200 * (1 - fm), A = Math.abs((ZLr - Z0) / (ZLr + Z0)) / 2 ** N, bwF = 100 * (2 - 4 / Math.PI * Math.acos(.5 * (Gm / A) ** (1 / N)));
-    return q('A binomial multisection transformer', T`A $${N}$-section binomial quarter-wave transformer matches $Z_0 = 50\,\Omega$ to $Z_L = ${ZLr}\,\Omega$. Design the sections with the usual approximation $\ln\dfrac{Z_{n+1}}{Z_n} = 2^{-N}\binom Nn\ln\dfrac{Z_L}{Z_0}$, $n = 0, \ldots, N - 1$, starting from $Z_0$. Then analyse the design exactly by cascading the quarter-wave sections ($\beta\ell = \tfrac\pi2f/f_0$). Find the first and last section impedances, the exact fractional bandwidth over which $|\Gamma| \le ${Gm}$, the bandwidth predicted by $\dfrac{\Delta f}{f_0} = 2 - \dfrac4\pi\arccos\left[\tfrac12\left(\dfrac{\Gamma_m}{|A|}\right)^{1/N}\right]$ with $A = 2^{-N}\dfrac{Z_L - Z_0}{Z_L + Z_0}$, and $|\Gamma|$ at $0.8f_0$.`,
-        [T`$N = ${N}$ sections, $Z_0 = 50\,\Omega$, $Z_L = ${ZLr}\,\Omega$`, T`$\Gamma_m = ${Gm}$`, 'Exact analysis: cascade of ideal quarter-wave lines'],
+    return q('A binomial multisection transformer', T`A $${N}$-section binomial quarter-wave transformer matches $Z_0 = ${Z0}\,\Omega$ to $Z_L = ${ZLr}\,\Omega$. Design the sections with the usual approximation $\ln\dfrac{Z_{n+1}}{Z_n} = 2^{-N}\binom Nn\ln\dfrac{Z_L}{Z_0}$, $n = 0, \ldots, N - 1$, starting from $Z_0$. Then analyse the design exactly by cascading the quarter-wave sections ($\beta\ell = \tfrac\pi2f/f_0$). Find the first and last section impedances, the exact fractional bandwidth over which $|\Gamma| \le ${Gm}$, the bandwidth predicted by $\dfrac{\Delta f}{f_0} = 2 - \dfrac4\pi\arccos\left[\tfrac12\left(\dfrac{\Gamma_m}{|A|}\right)^{1/N}\right]$ with $A = 2^{-N}\dfrac{Z_L - Z_0}{Z_L + Z_0}$, and $|\Gamma|$ at $0.8f_0$.`,
+        [T`$N = ${N}$ sections, $Z_0 = ${Z0}\,\Omega$, $Z_L = ${ZLr}\,\Omega$`, T`$\Gamma_m = ${Gm}$`, 'Exact analysis: cascade of ideal quarter-wave lines'],
         [p(T`$Z_1$`, Zs[0], 'Ω'), p(T`$Z_${N}$`, Zs[N - 1], 'Ω'), p('Exact fractional bandwidth', bwExact, '%'), p('Formula bandwidth', bwF, '%'), p(T`$|\Gamma(0.8f_0)|$`, gam(.8))],
         [T`Each section multiplies the impedance by $\exp\!\left[2^{-N}\binom Nn\ln(Z_L/Z_0)\right]$.`, T`Start at the load: $Z_{\text{in}} = Z_n\dfrac{Z + jZ_n\tan\beta\ell}{Z_n + jZ\tan\beta\ell}$ for each section towards the source, then $\Gamma = \dfrac{Z_{\text{in}} - Z_0}{Z_{\text{in}} + Z_0}$.`, T`$|\Gamma|$ rises steadily away from $f_0$ and is symmetric about it: bisect for the lower edge $f_m$, and the bandwidth is $2(1 - f_m/f_0)$.`],
         [T`Sections: $${Zs.map((z, i) => `Z_${i + 1} = ${tf(z)}`).join(',\\ ')}\,\Omega$.`, T`Bisection: $|\Gamma| = ${Gm}$ at $f = ${tf(fm)}f_0$, so the exact bandwidth is $${tf(bwExact)}\%$.`, T`$|A| = ${tf(A)}$; the formula gives $${tf(bwF)}\%$.`, T`At $0.8f_0$: $|\Gamma| = ${tf(gam(.8))}$.`],
         'Binomial transformers give a maximally flat response; more sections widen the band, and the textbook bandwidth formula is close to the exact cascade.',
-        quarterWaveSections(N, ZLr),
+        quarterWaveSections(N, ZLr, Z0),
         'Transmission lines; complex arithmetic; root finding.');
 }

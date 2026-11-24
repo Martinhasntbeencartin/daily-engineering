@@ -99,21 +99,23 @@ const NUM = (() => {
     return {solve, matMul, matVec, eye, add, scale, expm, eigSym, polyRoots, bisect, simpson};
 })();
 const deg = r => r * 180 / Math.PI, rad = d => d * Math.PI / 180;
-/* Deterministic per-date variant selector shared by the new generators. */
-function dailyVariant(date, salt, n=3) {
-    const d = Math.floor(Date.parse(date + 'T00:00:00Z') / 86400000);
-    let s = (Math.imul(d, 2654435761) ^ Math.imul(salt + 1, 40503)) >>> 0;
-    s = (Math.imul(s ^ (s >>> 15), 2246822519) >>> 0);
-    s = (Math.imul(s ^ (s >>> 13), 3266489917) >>> 0);
-    return ((s ^ (s >>> 16)) >>> 0) % n;
-}
-/* A small seeded picker for generators that draw several independent values. */
-function seededPicker(date, salt) {
-    const d = Math.floor(Date.parse(date + 'T00:00:00Z') / 86400000);
-    let seed = (Math.imul(d, 2654435761) + Math.imul(salt, 97531)) >>> 0;
-    return a => {
-        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-        return a[Math.floor(seed / 4294967296 * a.length)];
-    };
-}
 const hashString = s => [...s].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0, 7);
+/* Evenly spaced choices from lo to hi (inclusive), rounded so they print cleanly. */
+const steps = (lo, hi, step) => Array.from({length: Math.round((hi - lo) / step) + 1}, (_, i) => +(lo + i * step).toFixed(10));
+/* Every combination of the lists, as arrays (filter it, then hand it to dayGrid as one list). */
+const product = (...lists) => lists.reduce((acc, l) => acc.flatMap(a => l.map(v => [...a, v])), [[]]);
+/* Values for one problem on one day. Each list holds the choices for one quantity; the day picks one combination
+   through a keyed shuffle of all of them (a bijection on [0, N) built by cycle-walking a permutation of 2^k), so no
+   combination repeats until all N have been used: N consecutive days always get N different problems. */
+function dayGrid(date, salt, ...lists) {
+    const N = lists.reduce((n, l) => n * l.length, 1), day = Math.floor(Date.parse(date + 'T00:00:00Z') / 86400000);
+    if (N > 2 ** 30) throw Error('dayGrid: too many combinations');
+    let bits = 1;
+    while (2 ** bits < N) bits++;
+    const mask = 2 ** bits - 1, key = salt >>> 0, half = Math.max(1, bits >> 1);
+    const k1 = ((Math.imul(key, 0x9E3779B1) | 1) & mask) || 1, k2 = ((Math.imul(key ^ 0x85EBCA6B, 0xC2B2AE35) | 1) & mask) || 1, k3 = Math.imul(key ^ 0x27D4EB2F, 0x165667B1) & mask;
+    const perm = x => { for (let r = 0; r < 4; r++) { x = (Math.imul(x, r & 1 ? k2 : k1) + k3) & mask; x = (x ^ (x >>> half)) & mask; } return x; };
+    let x = ((day % N) + N) % N;
+    do { x = perm(x); } while (x >= N);
+    return lists.map(l => { const v = l[x % l.length]; x = Math.floor(x / l.length); return v; });
+}

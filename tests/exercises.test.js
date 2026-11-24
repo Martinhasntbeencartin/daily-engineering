@@ -72,6 +72,21 @@ for (let d = 0; d < 120; d++) {
 for (const [k, s] of Object.entries(seen))
     if (s.size < 2) fail(`${k} never varies across 120 days`);
 
+/* ---- fresh every day: at Levels 2–4 a discipline never shows the same problem twice within 365 consecutive days ----
+   (the generators draw their values from a daily permutation, js/numerics.js dayGrid, so any 365-day window works) */
+{
+    const from = Date.UTC(2026, 10, 24);
+    for (const t of TOPICS) for (const level of ['level-2', 'level-3', 'level-4']) {
+        const firstSeen = new Map();
+        for (let d = 0; d < 365; d++) {
+            const date = new Date(from + d * 86400000).toISOString().slice(0, 10), e = makeExercise(t.id, date, level), key = [e.title, e.text, ...(e.givens || [])].join('|');
+            checks++;
+            if (firstSeen.has(key)) { fail(`${t.id}/${level}: the problem of ${date} already appeared on ${firstSeen.get(key)}`); break; }
+            firstSeen.set(key, date);
+        }
+    }
+}
+
 /* ---- levels: 1–4, each tier served by exactly one level, Level 4 really mixes Expert and Mastery ---- */
 checks++;
 if (LEVELS.map(l => l.tag).join() !== 'Level 1,Level 2,Level 3,Level 4') fail(`levels are ${LEVELS.map(l => l.tag).join()}`);

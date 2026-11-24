@@ -2,10 +2,12 @@
    Problem text uses $…$ (inline) and $$…$$ (display) and is rendered by KaTeX.
    Authoring tip: write strings with T`…` (String.raw) so backslashes survive. */
 const T = String.raw;
-/* Number → LaTeX, 5 significant figures, scientific notation as ×10^{n}. */
+/* Number → LaTeX, 5 significant figures, scientific notation as ×10^{n}: from ten million up (so 2.8075×10^{12},
+   not 2807500000000) and below one millionth. */
 function tf(n, sig=5) {
     if (!Number.isFinite(n)) return String(n);
-    const s = Number(n.toPrecision(sig)).toString();
+    const r = Number(n.toPrecision(sig));
+    const s = Math.abs(r) >= 1e7 ? r.toExponential(sig - 1).replace(/\.?0+e/, 'e') : r.toString();
     const m = s.match(/^(-?[\d.]+)e([+-]\d+)$/);
     return m ? `${m[1]}\\times10^{${Number(m[2])}}` : s;
 }

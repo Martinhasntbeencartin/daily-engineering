@@ -1,4 +1,4 @@
-function coaxLine(len, a, b, er) {
+function coaxLine(len, a, b, er, zl = 75) {
     const section = '<circle cx="120" cy="121" r="66" fill="#d5e0d8"/>' +
         '<circle cx="120" cy="121" r="57" fill="#fffdf7"/><circle cx="120" cy="121" r="14" fill="#bd764b"/>' +
         arrow(120, 121, 159, 80) + dt(133, 88, 'b') + wire('M107 124l-23 31H65') + dt(56, 162, 'a');
@@ -8,17 +8,17 @@ function coaxLine(len, a, b, er) {
     return drawing(section + dt(120, 221, `a = ${fmt(a * 1000)} mm · b = ${fmt(b * 1000)} mm`) + guide('M216 44v173') +
         cable + ring(250, 116, 5) + ring(250, 177, 5) +
         dt(263, 91, 'Input') + dt(398, 72, 'Outer shield') + dt(400, 171, 'εᵣ = ' + er) + element('R', 554, 116, 554, 177) +
-        note(581, 149, '75 + j25 Ω') + dt(607, 179, 'Load') +
+        note(581, 149, zl + ' + j25 Ω') + dt(607, 179, 'Load') +
         wire('M316 204v10m0 -5h170m0 -5v10') + dt(401, 241, 'ℓ = ' + len + ' m'),
-        'Coaxial line, inner radius a and shield inner radius b. The centre conductor and shield connect the input to a 75 + j25 ohm load over ' + len + ' m.');
+        'Coaxial line, inner radius a and shield inner radius b. The centre conductor and shield connect the input to a ' + zl + ' + j25 ohm load over ' + len + ' m.');
 }
-function lossyLine(len) {
+function lossyLine(len, zl = 75) {
     return drawing(ring(60, 85, 5) + ring(60, 220, 5) + element('R', 65, 85, 200, 85, 'R′ Δz') +
         element('L', 200, 85, 338, 85, 'L′ Δz') + wire('M338 85H445m60 0h75M65 220H445m60 0h75') +
         element('R', 338, 85, 338, 220) + dt(278, 160, '1/(G′ Δz)') + element('C', 445, 85, 445, 220, 'C′ Δz') +
         dot(338, 85) + dot(445, 85) + dt(477, 90, '⋯') + dt(477, 226, '⋯') +
         element('R', 580, 85, 580, 220, 'Zʟ') + dt(360, 270, 'Repeated RLGC sections over ℓ = ' + len + ' m') +
-        dt(580, 57, '75 − j25 Ω'), 'Differential lossy transmission-line section with series R and L, parallel conductance and capacitance, and terminating load.', 300);
+        dt(580, 57, zl + ' − j25 Ω'), 'Differential lossy transmission-line section with series R and L, parallel conductance and capacitance, and terminating load.', 300);
 }
 function feederDiagram(vll, zf, zl) {
     return drawing(element('AC', 124, 83, 124, 210) + dt(125, 43, 'Vₐₙ = ' + vll + '/√3 ∠0° V') +
@@ -28,14 +28,14 @@ function feederDiagram(vll, zf, zl) {
         dt(335, 240, 'Neutral return') + arrow(235, 123, 310, 123) + dt(275, 151, 'Iₐ'),
         'One phase of the balanced feeder. The phase source drives the feeder resistance and reactance in series with the phase load.');
 }
-function boostInput(po) {
-    return drawing(element('DC', 72, 80, 72, 216) + dt(72, 56, '24 V') +
-        element('R', 72, 80, 235, 80, '0.8 Ω') + element('C', 235, 80, 235, 216, 'Cᵢₙ') +
+function boostInput(po, vs = 24, rs = .8, vo = 48) {
+    return drawing(element('DC', 72, 80, 72, 216) + dt(72, 56, vs + ' V') +
+        element('R', 72, 80, 235, 80, rs + ' Ω') + element('C', 235, 80, 235, 216, 'Cᵢₙ') +
         element('L', 235, 80, 400, 80, 'L') + element('diode', 400, 80, 505, 80) + wire('M505 80H585') +
         wire('M400 80v48m0 38v50M400 166l-18 -35M72 216H585') +
         dot(235, 80) + dt(235, 56, 'Vᵢₙ') + dot(400, 80) + dt(430, 158, 'S') +
         element('C', 505, 80, 505, 216, 'Cₒ') + dot(505, 80) +
-        element('R', 585, 80, 585, 216, po + ' W') + dt(585, 57, '48 V') + ground(235, 216),
+        element('R', 585, 80, 585, 216, po + ' W') + dt(585, 57, vo + ' V') + ground(235, 216),
         'Boost converter supplied through a source resistance. Input and output capacitors share the return with the switch and regulated load.');
 }
 function tiaDiagram(rf) {
@@ -47,12 +47,12 @@ function tiaDiagram(rf) {
         dot(225, 148) + dot(536, 172) + dt(605, 155, 'Vₒᵤₜ'),
         'Photodiode current and input capacitance meet at the inverting node, with Rf and Cf in parallel from output to input.', 280);
 }
-function shuntAmplifier(vout) {
-    return drawing(arrow(60, 90, 110, 90) + element('R', 110, 90, 315, 90, '50 mΩ') +
+function shuntAmplifier(vout, gain = 20, r = .05, off = .01) {
+    return drawing(arrow(60, 90, 110, 90) + element('R', 110, 90, 315, 90, fmt(r * 1000) + ' mΩ') +
         wire('M315 90h45M129 90v112h267M287 90v68h109M396 133v96l96 -48zM492 181h100') +
         dot(129, 90) + dot(287, 90) + dt(413, 206, '+') + dt(413, 163, '−') +
-        dt(438, 187, '20') + dt(75, 72, 'I') + dt(590, 163, vout + ' V') +
-        dt(360, 264, 'Differential sensing · output offset 10 mV'),
+        dt(438, 187, String(gain)) + dt(75, 72, 'I') + dt(590, 163, vout + ' V') +
+        dt(360, 264, 'Differential sensing · output offset ' + fmt(off * 1000) + ' mV'),
         'Current crosses a shunt left to right. A differential amplifier senses both terminals and adds an output offset.', 288);
 }
 function stateFeedback(label) {
@@ -77,7 +77,7 @@ function calibrationDiagram(currents, voltages, uncertainties) {
         'Measured voltage versus reference current, with vertical bars spanning one standard uncertainty on each side.', 302);
 }
 
-function synchronizerDiagram(tau) {
+function synchronizerDiagram(tau, logicNs = 1.5) {
     let body = '';
     for (const x of [170, 464]) {
         body += wire(`M${x} 65h92v90h-92zM${x + 34} 155l12 -13 12 13`) +
@@ -87,7 +87,7 @@ function synchronizerDiagram(tau) {
         wire('M308 86h104v36H308z') + dt(360, 110, 'Logic') + arrow(412, 104, 464, 104) +
         arrow(556, 104, 641, 104) + wire('M100 202h410v-47M216 202v-47') + dot(216, 202) +
         dt(76, 84, 'Async in') + dt(636, 84, 'Sync out') + dt(82, 226, 'Clock') +
-        dt(360, 48, 'Delay between registers') + dt(360, 252, 'Compare 1.5 ns of logic delay with a direct Q-to-D wire · τ = ' + tau + ' ps'),
+        dt(360, 48, 'Delay between registers') + dt(360, 252, 'Compare ' + logicNs + ' ns of logic delay with a direct Q-to-D wire · τ = ' + tau + ' ps'),
         'Clocked D flip-flops with optional combinational delay on the Q-to-D path.', 280);
 }
 function crcDiagram(bytes, poly) {
