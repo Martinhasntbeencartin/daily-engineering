@@ -186,9 +186,8 @@ function makeMotorSensorExercise(topic, date, level) {
     if (!['motors', 'sensors'].includes(topic) || li < 1)
         throw Error('Unknown challenge selection');
     const salt = hashString(topic + level), grid = (...lists) => dayGrid(date, salt, ...lists), p = part;
-    const extra = {}; // explore / concept settings for the interactive figures (js/motion.js)
     const q = (title, text, givens, parts, hints, steps, idea, diagram, prerequisites) => ({
-        id: `${topic}-${level}`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source: {reading: DRIVES_READING[topic]}, ...extra
+        id: `${topic}-${level}`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source: {reading: DRIVES_READING[topic]}
     });
 
     if (topic === 'motors') {
