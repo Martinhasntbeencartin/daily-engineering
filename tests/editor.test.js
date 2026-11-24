@@ -330,24 +330,7 @@ server.listen(0, async () => {
             await mp.click('[data-walk-all]'); await mp.waitForTimeout(100);
             const w3 = await mp.evaluate(() => ({walk: !!document.querySelector('.walk'), dimmed: document.querySelectorAll('.steps .later, .steps .current').length, button: !!document.querySelector('[data-walk]')}));
             step(`${reducedMotion}: the walk-through shows one step at a time and returns to the full working`, w1.count === `Step 1 of ${w1.n}` && w1.later === w1.n - 1 && w2.count === `Step 2 of ${w1.n}` && w2.current === 1 && !w2.styled && !w3.walk && w3.dimmed === 0 && w3.button, JSON.stringify([w1, w2, w3]));
-            // Explore: dragging the array's steering knob changes the beam and its readouts.
-            const knob = await mp.$('.explore .knob');
-            await knob.scrollIntoViewIfNeeded(); await mp.waitForTimeout(150);
-            const before = await mp.textContent('.explore .readouts'), kb = await knob.boundingBox();
-            await mp.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2); await mp.mouse.down();
-            await mp.mouse.move(kb.x + kb.width / 2 + 90, kb.y + kb.height / 2, {steps: 10}); await mp.mouse.up(); await mp.waitForTimeout(600);
-            const after = await mp.textContent('.explore .readouts');
-            step(`${reducedMotion}: dragging the explore knob steers the array (readouts update)`, before !== after && /Steering θ₀-?\d/.test(after), after.replace(/\s+/g, ' ').slice(0, 80));
-            await knob.focus(); await mp.keyboard.press('ArrowLeft'); await mp.waitForTimeout(100);
-            step(`${reducedMotion}: the explore knob also moves with the arrow keys`, await mp.textContent('.explore .readouts') !== after);
             if (reducedMotion === 'no-preference') {
-                // Concept animation: nothing moves until Play is pressed.
-                await mp.goto(url + '#/power/level-2'); await mp.waitForSelector('#problem math-field');
-                await mp.click('#solution'); await mp.waitForSelector('.concept-play');
-                const x0 = await mp.getAttribute('.concept svg line.ac', 'x2'); await mp.waitForTimeout(400);
-                const still = await mp.getAttribute('.concept svg line.ac', 'x2');
-                await mp.click('.concept-play'); await mp.waitForTimeout(700);
-                step('a concept animation waits for Play, then the phasor turns', x0 === still && await mp.getAttribute('.concept svg line.ac', 'x2') !== x0 && await mp.isDisabled('.concept-play'));
                 // Category switch: the highlight glides to the new category, then the glider is removed.
                 await mp.goto(url + '#/circuits-electronics'); await mp.waitForTimeout(600);
                 await mp.click('.switch-opt:has-text("Comms")'); await mp.waitForTimeout(80);
@@ -372,68 +355,24 @@ server.listen(0, async () => {
             }
             await mp.close();
         }
-        // Every figure in every discipline: explore figures react to their controls, Play animations change the drawing,
-        // 3D views open (and Play where offered). Every discipline has at least one figure.
+        // Worked solutions are answers and working only: every discipline shows the answers, the steps and the key idea,
+        // with no interactive figures, animations or 3D views (and no 3D library is ever requested).
         {
-            const fp = await browser.newPage({viewport: {width: 1280, height: 900}}), seen = {explore: 0, concept: 0, view3d: 0}, problems = [], bare = [];
-            fp.on('pageerror', e => errors.push(`figures: ${e.message}`));
-            await fp.goto(url); await fp.evaluate(() => localStorage.setItem('daily-engineer-intro', 'done'));
-            for (const t of await fp.evaluate(() => TOPICS.map(x => x.id))) {
-                await fp.goto(url + `#/${t}/level-3`); await fp.waitForSelector('#problem math-field'); await fp.click('#solution'); await fp.waitForTimeout(250);
-                const counts = await fp.evaluate(() => ['explore', 'concept', 'view3d'].map(c => document.querySelectorAll(`#solution-content .${c}`).length));
-                if (!counts.some(Boolean)) bare.push(t);
-                for (let i = 0; i < counts[0]; i++) {
-                    const box = fp.locator('#solution-content .explore').nth(i), type = await box.getAttribute('data-type');
-                    await box.scrollIntoViewIfNeeded();
-                    const before = await box.locator('.readouts').textContent(), knob = box.locator('.knob:visible'), range = box.locator('input[type=range]'), btn = box.locator('.explore-controls button');
-                    if (await knob.count()) { const b = await knob.first().boundingBox(); await fp.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await fp.mouse.down(); await fp.mouse.move(b.x + b.width / 2 - 40, b.y + b.height / 2 - 20, {steps: 6}); await fp.mouse.up(); }
-                    else if (await range.count()) await range.first().evaluate(el => { el.value = String(Number(el.min) + (Number(el.max) - Number(el.min)) / 3); el.dispatchEvent(new Event('input')); });
-                    else await btn.first().click();
-                    await fp.waitForTimeout(type === 'logic' ? 2200 : 400);
-                    if (before === await box.locator('.readouts').textContent()) problems.push(`${t} ${type} did not react`);
-                    seen.explore++;
-                }
-                for (let i = 0; i < counts[1]; i++) {
-                    const box = fp.locator('#solution-content .concept').nth(i), type = await box.getAttribute('data-type'), before = await box.locator('svg').innerHTML();
-                    await box.locator('.concept-play').click(); await fp.waitForTimeout(900);
-                    if (before === await box.locator('svg').innerHTML()) problems.push(`${t} ${type} did not play`);
-                    seen.concept++;
-                }
-                for (let i = 0; i < counts[2]; i++) {
-                    const box = fp.locator('#solution-content .view3d').nth(i), type = await box.getAttribute('data-type');
-                    await box.locator('.view3d-open').click(); await box.locator('.view3d-stage canvas').waitFor({timeout: 20000});
-                    const play = box.locator('.view3d-controls button:has-text("Play")');
-                    if (await play.count()) { await play.click(); await fp.waitForTimeout(400); if (!await play.isDisabled()) problems.push(`${t} ${type} 3D Play did not start`); }
-                    if (!(await box.locator('.readouts').textContent()).trim()) problems.push(`${t} ${type} 3D view has no readouts`);
-                    seen.view3d++;
-                }
+            const sp = await browser.newPage({viewport: {width: 1280, height: 900}}), requested = [], issues = [];
+            sp.on('pageerror', e => errors.push(`solutions: ${e.message}`));
+            sp.on('request', r => { if (/three|scenes3d|explore-ee/.test(r.url())) requested.push(r.url()); });
+            await sp.goto(url); await sp.evaluate(() => localStorage.setItem('daily-engineer-intro', 'done'));
+            for (const t of await sp.evaluate(() => TOPICS.map(x => x.id))) for (const level of ['level-1', 'level-3']) {
+                await sp.goto(url + `#/${t}/${level}`); await sp.waitForSelector('#problem math-field'); await sp.click('#solution'); await sp.waitForTimeout(150);
+                const got = await sp.evaluate(() => {
+                    const box = document.getElementById('solution-content');
+                    return {answers: box.querySelectorAll('.answer-review li').length === exercise.parts.length && exercise.parts.length, steps: box.querySelectorAll('.steps li').length,
+                        idea: /Take this with you/.test(box.textContent), figures: box.querySelectorAll('.explore, .concept, .view3d, canvas, .view3d-open, .concept-play').length};
+                });
+                if (!got.answers || !got.steps || !got.idea || got.figures) issues.push(`${t}/${level} ${JSON.stringify(got)}`);
             }
-            step(`every discipline has figures, and all ${seen.explore} explore figures, ${seen.concept} Play animations and ${seen.view3d} 3D views respond`, !bare.length && !problems.length && seen.explore >= 9 && seen.concept >= 10 && seen.view3d >= 10, JSON.stringify({seen, bare, problems}));
-            // The 3D |H(s)| landscape follows the pole–zero explorer.
-            await fp.goto(url + '#/control/level-2'); await fp.waitForSelector('#problem math-field'); await fp.click('#solution'); await fp.waitForTimeout(200);
-            await fp.locator('.view3d-open').click(); await fp.locator('.view3d canvas').waitFor();
-            const h0 = await fp.locator('.view3d .readouts').textContent(), k = await fp.locator('.explore .knob-pole').first().boundingBox();
-            await fp.mouse.move(k.x + 11, k.y + 11); await fp.mouse.down(); await fp.mouse.move(k.x + 50, k.y - 15, {steps: 6}); await fp.mouse.up(); await fp.waitForTimeout(300);
-            step('the 3D |H(s)| landscape follows the poles dragged in the explorer', h0 !== await fp.locator('.view3d .readouts').textContent());
-            await fp.close();
-        }
-        // 3D views (three.js): nothing downloads until a view is opened; the antenna patterns; leaving frees WebGL.
-        {
-            const tp = await browser.newPage(), bundle = [];
-            tp.on('pageerror', e => errors.push(`3d: ${e.message}`));
-            tp.on('request', r => { if (r.url().includes('three-lite')) bundle.push(r.url()); });
-            await tp.goto(url + '#/linkbudget/level-4'); await tp.waitForSelector('#problem math-field');
-            await tp.click('#solution'); await tp.waitForSelector('.view3d-open');
-            const before = bundle.length;
-            await tp.click('.view3d-open'); await tp.waitForSelector('.view3d-stage canvas', {timeout: 20000}); await tp.waitForTimeout(200);
-            await tp.fill('.view3d-controls input >> nth=2', '40'); await tp.dispatchEvent('.view3d-controls input >> nth=2', 'input');
-            const pat = await tp.textContent('.view3d .readouts');
-            await tp.click('.view3d-views button:has-text("Short dipole")');
-            const dip = await tp.textContent('.view3d .readouts');
-            step('three.js downloads only when a 3D view is opened; the antenna view shows a steered array as a cone and the dipole as a doughnut', /cone 50° from the array axis/.test(pat) && /doughnut/.test(dip) && before === 0 && bundle.length === 1, pat.replace(/\s+/g, ' ').slice(0, 120));
-            await tp.goto(url + '#/'); await tp.waitForTimeout(200);
-            step('leaving a problem frees its 3D view', await tp.evaluate(() => document.querySelectorAll('canvas').length) === 0);
-            await tp.close();
+            step('every worked solution shows the answers, the working and the key idea, and no figures', !issues.length && !requested.length, [...issues, ...requested].join(' / '));
+            await sp.close();
         }
         if (errors.length) { failures++; console.log('FAIL page errors', errors); }
     } finally {

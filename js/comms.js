@@ -282,7 +282,6 @@ bank('modulation', 'advanced', [{
 
 bank('linkbudget', 'advanced', [{
     title: 'The directivity of the simplest antenna',
-    view3d: {type: 'pattern', mode: 'dipole'},
     diagram: sketch('Short dipole on a vertical axis with its doughnut-shaped sin-squared radiation pattern.',
         wire('M360 40V210') + `<path d="${Array.from({length: 181}, (_, i) => { const t = i * Math.PI / 180, r = 110 * Math.sin(t) ** 2; return (i ? 'L' : 'M') + (360 + r * Math.sin(t)).toFixed(1) + ' ' + (125 - r * Math.cos(t)).toFixed(1); }).join('')}${Array.from({length: 181}, (_, i) => { const t = i * Math.PI / 180, r = 110 * Math.sin(t) ** 2; return 'L' + (360 - r * Math.sin(t)).toFixed(1) + ' ' + (125 + r * Math.cos(t)).toFixed(1); }).join('')}" stroke="#b5532d"/>` + guide('M360 125L460 60'),
         [[360, 28, 'dipole axis'], [520, 130, 'sin²θ'], [400, 84, 'θ']]),
@@ -397,9 +396,8 @@ function makeCommsExercise(topic, date, level) {
     if (!TOPICS.some(t => t.id === topic && t.group === 'comms') || li < 1)
         throw Error('Unknown challenge selection');
     const salt = hashString(topic + level), grid = (...lists) => dayGrid(date, salt, ...lists), p = part;
-    const extra = {}; // explore / concept settings for the interactive figures (js/motion.js)
     const q = (title, text, givens, parts, hints, steps, idea, diagram, prerequisites) => ({
-        id: `${topic}-${level}`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source: {reading: COMMS_READING[topic]}, ...extra
+        id: `${topic}-${level}`, title, text, givens, parts, hints, steps, idea, diagram, prerequisites, source: {reading: COMMS_READING[topic]}
     });
 
     if (topic === 'infotheory') {
@@ -573,8 +571,6 @@ function makeCommsExercise(topic, date, level) {
         let psl = 0;
         for (let i = 0; i <= 8000; i++) { const u = -1 + i / 4000; if (Math.abs(u - u0) > nullU) psl = Math.max(psl, af(u)); }
         const gmax = 1 / dl - 1 >= 1 ? 90 : deg(Math.asin(1 / dl - 1));
-        extra.explore = {type: 'array', N, d: dl, theta0: th0};
-        extra.view3d = {type: 'pattern', mode: 'array', N, d: dl, theta0: th0};
         return q('Steering a uniform linear array', T`A uniform linear array has $N = ${N}$ isotropic elements spaced $d = ${dl}\lambda$ along a line, with equal amplitudes and a progressive phase that steers the main beam to $\theta_0 = ${th0}^\circ$ from broadside. With $u = \sin\theta$, the normalised power pattern is $\left|\dfrac{\sin(N\psi/2)}{N\sin(\psi/2)}\right|^2$ with $\psi = kd(u - u_0)$. Find the directivity by integrating the pattern over all directions, the half-power beamwidth, the peak sidelobe level, and the largest steering angle this spacing allows without grating lobes.`,
             [T`$N = ${N}$, $d = ${dl}\lambda$`, T`$\theta_0 = ${th0}^\circ$ from broadside`, 'Isotropic elements, uniform amplitudes'],
             [p('Directivity', dB(D), 'dBi', .005), p('Half-power beamwidth', hpbw, '°'), p('Peak sidelobe level', 10 * Math.log10(psl), 'dB', .01), p('Largest grating-lobe-free steering angle', gmax, '°')],
@@ -589,7 +585,6 @@ function makeCommsExercise(topic, date, level) {
     if (li === 1) {
         const [Z0, R, X, l] = grid([50, 75], [10, 20, 25, 30, 40, 60, 80, 100, 150, 200], [-75, -50, -25, 25, 50, 75], [.05, .1, .125, .15, .2, .3, .35, .4, .45]), ZL = cx(R, X);
         const G = cd(cs(ZL, cx(Z0)), ca(ZL, cx(Z0))), g = cabs(G), vswr = (1 + g) / (1 - g), Zin = czin(Z0, ZL, Math.tan(2 * Math.PI * l));
-        extra.concept = {gamma: [G.re, G.im]};
         return q('A mismatched load seen through a line', T`A lossless line of $Z_0 = ${Z0}\,\Omega$ is terminated in $Z_L = ${R} ${X < 0 ? '-' : '+'} j${Math.abs(X)}\,\Omega$. Find the magnitude and angle of the load reflection coefficient, the VSWR and the return loss. Then find the input impedance $${l}\lambda$ from the load.`,
             [T`$Z_0 = ${Z0}\,\Omega$`, T`$Z_L = ${R} ${X < 0 ? '-' : '+'} j${Math.abs(X)}\,\Omega$`, T`$\ell = ${l}\lambda$`],
             [p(T`$|\Gamma_L|$`, g), p(T`$\angle\Gamma_L$`, cphase(G), '°', .01, .1), p('VSWR', vswr), p('Return loss', -20 * Math.log10(g), 'dB'), p(T`$\operatorname{Re}Z_{\text{in}}$`, Zin.re, 'Ω', .01, .05), p(T`$\operatorname{Im}Z_{\text{in}}$`, Zin.im, 'Ω', .01, .05)],
@@ -607,7 +602,6 @@ function makeCommsExercise(topic, date, level) {
         const Bn = yin(d).im / Y0, ls = (Math.PI / 2 - Math.atan(Bn)) / (2 * Math.PI), gL = cabs(cd(cs(ZL, cx(Z0)), ca(ZL, cx(Z0))));
         const yTot = ca(yin(d, 1.1), cx(0, -Y0 / Math.tan(2 * Math.PI * ls * 1.1))), g11 = cabs(cd(cs(cx(Y0), yTot), ca(cx(Y0), yTot)));
         const GL = cd(cs(ZL, cx(Z0)), ca(ZL, cx(Z0)));
-        extra.concept = {gamma: [GL.re, GL.im]};
         return q('Matching with a single shunt stub', T`A load $Z_L = ${R} ${X < 0 ? '-' : '+'} j${Math.abs(X)}\,\Omega$ terminates a $50\,\Omega$ line. A short-circuited $50\,\Omega$ stub is to be connected in shunt at the nearest point where $\operatorname{Re}Y_{\text{in}} = Y_0$, and its length chosen to cancel the susceptance there. Find the distance from the load, the normalised susceptance $B/Y_0$ to be cancelled, and the shortest stub length, all in wavelengths. Find the VSWR on the line between the load and the stub, and $|\Gamma|$ at the input when the frequency rises by 10%.`,
             [T`$Z_L = ${R} ${X < 0 ? '-' : '+'} j${Math.abs(X)}\,\Omega$`, T`$Z_0 = 50\,\Omega$, short-circuited shunt stub`, 'Check at 1.1 f₀'],
             [p(T`$d/\lambda$`, d, '', .005, 5e-4), p(T`$B/Y_0$`, Bn, '', .01, .005), p(T`Stub length $\ell/\lambda$`, ls, '', .005, 5e-4), p('VSWR, load to stub', (1 + gL) / (1 - gL)), p(T`$|\Gamma|$ at $1.1f_0$`, g11)],
