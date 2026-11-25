@@ -34,15 +34,17 @@ const part = (label, answer, unit, tolerance=.01, abs=0) => ({label, answer, uni
 
 /* Extra problem types per topic and tier, filled in by js/types-*.js. makeTierExercise rotates each tier's original
    generator with its extra types, one type a day; Level 4's two tiers take turns day by day, so their types advance
-   every second day. Each type draws its own values from dayGrid, so no problem repeats within a year. */
+   every second day. Each type draws its values from dayGrid, indexed by how many times that type has appeared (not by
+   the calendar day), so every combination of its grid is used and none repeats within a year. */
 const EXTRA_TYPES = {};
 const addTypes = (topic, tier, ...makers) => ((EXTRA_TYPES[topic] ||= {})[tier] ||= []).push(...makers);
-function extraTypeFor(topic, date, tier) {
+/* Which type a (topic, tier) shows on a date, and that type's appearance number written as a date for dayGrid. */
+function typeSlot(topic, date, tier) {
     const list = EXTRA_TYPES[topic]?.[tier];
     if (!list?.length) return null;
     const day = Math.floor(Date.parse(date + 'T00:00:00Z') / 86400000), n = list.length + 1, every = tier === 'expert' || tier === 'mastery' ? 2 : 1;
-    const k = ((Math.floor(day / every) + hashString(topic + tier)) % n + n) % n;
-    return k ? list[k - 1] : null;
+    const s = Math.floor(day / every) + hashString(topic + tier) % n, k = (s % n + n) % n, count = Math.floor(s / n);
+    return {maker: k ? list[k - 1] : null, date: new Date(count * 86400000).toISOString().slice(0, 10)};
 }
 /* What every extra type shares: the day's values (grid, salted by the type) and the problem record. */
 function typeKit(topic, tier, name, date, reading) {
@@ -56,9 +58,11 @@ function makeTierExercise(topic, date, tier) {
         throw Error('Unknown challenge selection');
     if (tier === CURATED_TIER)
         return makeBankExercise(topic, date, tier);
-    const extra = extraTypeFor(topic, date, tier);
-    if (extra)
-        return extra(date, tier, topic);
+    const slot = typeSlot(topic, date, tier);
+    if (slot) {
+        if (slot.maker) return slot.maker(slot.date, tier, topic);
+        date = slot.date; // the original generator, also stepped once per appearance
+    }
     if (topic === 'motors' || topic === 'sensors')
         return makeMotorSensorExercise(topic, date, tier);
     if (TOPICS.find(t => t.id === topic).group === 'comms')

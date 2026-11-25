@@ -38,12 +38,13 @@ A static web app with a new electrical engineering problem every day, in the spi
   - **Level 1 (Insight)** is a rotation of 56 hand-picked problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
   - **Levels 2–4 (Advanced, Challenge, Expert)** are multi-part problems with fresh values every day. Level 4 alternates between graduate-level problems and research-grade work that needs numerical methods.
   - **No repeats within a year at Levels 2–4.** Each generator varies two to six of its quantities over a grid of hundreds to millions of combinations. It then walks that grid in a fixed shuffled order, one step per day (`dayGrid` in `js/numerics.js`, a keyed permutation), so any 365 consecutive days give 365 different problems. Each discipline and level has its own order. Grids are filtered so every problem stays physically sensible (for example the motor operating point stays inside the inverter's voltage, the ladder circuit always overshoots, the array never shows a grating lobe), and drawings show the day's values. `tests/exercises.test.js` checks a full year for every discipline and level.
-  - **Rotating problem types.** In Circuits & electronics (circuit analysis, electronics, digital logic, measurement), each of Levels 2, 3 and 4 rotates through four kinds of problem, one a day:
+  - **Rotating problem types.** In Circuits & electronics (circuit analysis, electronics, digital logic, measurement) and Signals & control (signals & systems, control systems, sensors & estimation), each of Levels 2, 3 and 4 rotates through four kinds of problem, one a day:
     - Level 2 and Level 3 each have four types.
     - Level 4 has two graduate and two research types; they take turns, because Level 4 alternates the two.
-    - The new types live in `js/types-circuits.js`, `js/types-electronics.js`, `js/types-digital.js` and `js/types-measurement.js`. Each registers with `addTypes`; `makeTierExercise` rotates it with the original generator (`EXTRA_TYPES` in `js/core.js`).
+    - The new types live in `js/types-circuits.js`, `js/types-electronics.js`, `js/types-digital.js`, `js/types-measurement.js`, `js/types-signals.js`, `js/types-control.js` and `js/types-sensors.js`. Each registers with `addTypes`; `makeTierExercise` rotates it with the original generator (`EXTRA_TYPES` and `typeSlot` in `js/core.js`).
+    - A type's values step once per appearance, not once per calendar day, so a type shown every fourth day still works through its whole grid before anything repeats (`typeSlot` hands each generator its appearance count, written as a date for `dayGrid`).
     - Every new type carries `verify()`, which recomputes its answers by an independent method (nodal instead of mesh analysis, simulation instead of a closed form, brute force, BigInt arithmetic, a different fitting method). The exercise test compares the two.
-    - The other groups still have one type per level (two at Level 4).
+    - Power & electromagnetics and Communications & RF still have one type per level (two at Level 4).
   - Internally the generators work on five difficulty *tiers* (`TIERS` in `js/core.js`); each public level maps to one or more tiers, so the levels can be regrouped without changing any problem.
 - **The full working once you finish.** Solving a problem, or using all five attempts, opens its worked solution: each answer (exact form and decimal) beside the one you gave, the approach, every step of the working and the key idea. It is answers and working only, with no extra graphs or animations. Your last answers are kept, so the comparison is still there when you come back (also in the Archive). Revealing the solution before finishing marks the problem as reviewed.
 - **Motion (anime.js 4.5.0, MIT, in `vendor/animejs/`; code in `js/motion.js`).**
@@ -145,6 +146,7 @@ Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, i
 | `js/motors-sensors.js` | Motors & drives and sensors & estimation: curated Level 1 and generated Levels 2–4 |
 | `js/comms.js` | Communications & RF: curated Level 1 and generated Levels 2–4 |
 | `js/types-circuits.js`, `js/types-electronics.js`, `js/types-digital.js`, `js/types-measurement.js` | Extra problem types for Levels 2–4 in Circuits & electronics, each with an independent `verify()` |
+| `js/types-signals.js`, `js/types-control.js`, `js/types-sensors.js` | Extra problem types for Levels 2–4 in Signals & control, each with an independent `verify()` |
 | `js/numerics.js` | Linear solve, matrix exponential, Jacobi eigenvalues, polynomial roots, bisection, Simpson; `dayGrid` (the daily shuffled walk through each generator's value grid), `product` and `steps` |
 | `js/diagrams.js` | SVG drawing helpers |
 | `js/motion.js` | Motion (anime.js): diagram drawing, cascades, counters, ticks, toast, glides; the step-by-step walk-through |
