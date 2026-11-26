@@ -5,7 +5,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..');
 const katex = require(path.join(root, 'vendor/katex/katex.min.js'));
-const files = ['diagrams', 'figures', 'network-figures', 'source-figures', 'mathtext', 'core', 'hard', 'numerics', 'expert', 'bank-figures', 'bank', 'motors-sensors', 'comms', 'types-circuits', 'types-electronics', 'types-digital', 'types-measurement', 'types-signals', 'types-control', 'types-sensors', 'types-power', 'types-motors', 'types-fields'];
+const files = ['diagrams', 'figures', 'network-figures', 'source-figures', 'mathtext', 'core', 'hard', 'numerics', 'expert', 'bank-figures', 'bank', 'motors-sensors', 'comms', 'types-circuits', 'types-electronics', 'types-digital', 'types-measurement', 'types-signals', 'types-control', 'types-sensors', 'types-power', 'types-motors', 'types-fields', 'types-infotheory', 'types-modulation', 'types-linkbudget', 'types-rfcircuits'];
 const ctx = vm.createContext({console, Math, Number, Date, Object, Array, String, JSON, Error});
 for (const f of files)
     vm.runInContext(fs.readFileSync(path.join(root, 'js', f + '.js'), 'utf8'), ctx, {filename: f + '.js'});
