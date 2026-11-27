@@ -5,6 +5,8 @@ const BANK = {};
 const ex = (label, value, latex, unit='') => ({label, answer: value, exact: latex, unit, tolerance: 5e-4, abs: 1e-9});
 const exInt = (label, value, unit='') => ({label, answer: value, exact: String(value), unit, tolerance: 0});
 const bank = (topic, level, problems) => { BANK[topic + ':' + level] = problems; };
+const bankMore = (topic, level, problems) => { BANK[topic + ':' + level].push(...problems); }; // later problems join the end of a pool
+const nx = (label, value, unit='', tolerance=1e-3) => ({label, answer: value, unit, tolerance, abs: 1e-9}); // a numeric answer with no closed form
 const PHI = (1 + Math.sqrt(5)) / 2;
 
 const rk4 = (f, y, t0, t1, n) => { const h = (t1 - t0) / n, out = [[t0, y]]; let t = t0; for (let i = 0; i < n; i++) { const k1 = f(t, y), k2 = f(t + h / 2, y.map((v, j) => v + h / 2 * k1[j])), k3 = f(t + h / 2, y.map((v, j) => v + h / 2 * k2[j])), k4 = f(t + h, y.map((v, j) => v + h * k3[j])); y = y.map((v, j) => v + h / 6 * (k1[j] + 2 * k2[j] + 2 * k3[j] + k4[j])); t += h; out.push([t, y]); } return out; };
@@ -364,10 +366,14 @@ bank('measurement', 'advanced', [{
     prereq: 'Noise figure; cascaded systems.'
 }]);
 
-/* Picks today’s curated problem for a (topic, level) slot. */
+/* Picks today’s curated problem for a (topic, level) slot. Each pool began with four problems; days before
+   BANK_POOL_FROM keep that original rotation, so the archive shows what was set on the day. From then on the
+   whole pool rotates, starting with the problems added later. */
+const BANK_POOL_FROM = '2026-11-28', BANK_FIRST = 4;
 function makeBankExercise(topic, date, level) {
     const list = BANK[topic + ':' + level];
     if (!list) throw Error('Unknown challenge selection');
-    const d = Math.floor(Date.parse(date + 'T00:00:00Z') / 86400000), i = ((d + hashString(topic + level)) % list.length + list.length) % list.length, e = list[i];
+    const day = s => Math.floor(Date.parse(s + 'T00:00:00Z') / 86400000), d = day(date), d0 = day(BANK_POOL_FROM), first = Math.min(BANK_FIRST, list.length);
+    const i = d < d0 ? ((d + hashString(topic + level)) % first + first) % first : (first + d - d0) % list.length, e = list[i];
     return {id: `${topic}-${level}-${i}`, givens: [], source: null, ...e, prerequisites: e.prereq, diagram: e.diagram || '', bankIndex: i};
 }

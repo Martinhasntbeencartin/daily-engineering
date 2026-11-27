@@ -207,6 +207,7 @@ main { max-width: 1244px; margin: 0 auto; padding: 0 32px 64px; }
 .diagram svg [fill="#fffdf7"] { fill: var(--bg); }
 .diagram svg [fill="#edf1e9"] { fill: #141418; }
 .diagram svg [fill="#d5e0d8"] { fill: #24242a; }
+.diagram svg [fill="#e9eee6"] { fill: #1d1d22; }
 .givens { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 14px; font-size: 14px; color: var(--soft); }
 .given { border: 1px solid var(--dim); border-radius: 4px; padding: 3px 10px; }
 .given .katex { font-size: 1.02em; }

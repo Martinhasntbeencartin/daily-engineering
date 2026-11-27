@@ -5,7 +5,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..');
 const katex = require(path.join(root, 'vendor/katex/katex.min.js'));
-const files = ['diagrams', 'figures', 'network-figures', 'source-figures', 'mathtext', 'core', 'hard', 'numerics', 'expert', 'bank-figures', 'bank', 'motors-sensors', 'comms', 'types-circuits', 'types-electronics', 'types-digital', 'types-measurement', 'types-signals', 'types-control', 'types-sensors', 'types-power', 'types-motors', 'types-fields', 'types-infotheory', 'types-modulation', 'types-linkbudget', 'types-rfcircuits'];
+const files = ['diagrams', 'figures', 'network-figures', 'source-figures', 'mathtext', 'core', 'hard', 'numerics', 'expert', 'bank-figures', 'bank', 'motors-sensors', 'comms', 'bank-more-ce', 'bank-more-sc', 'bank-more-pe', 'bank-more-comms', 'types-circuits', 'types-electronics', 'types-digital', 'types-measurement', 'types-signals', 'types-control', 'types-sensors', 'types-power', 'types-motors', 'types-fields', 'types-infotheory', 'types-modulation', 'types-linkbudget', 'types-rfcircuits'];
 const ctx = vm.createContext({console, Math, Number, Date, Object, Array, String, JSON, Error});
 for (const f of files)
     vm.runInContext(fs.readFileSync(path.join(root, 'js', f + '.js'), 'utf8'), ctx, {filename: f + '.js'});
@@ -115,19 +115,28 @@ for (const tier of TIERS) {
 /* ---- curated bank: size, exact forms evaluate to the answer, independent verification ---- */
 for (const t of TOPICS) for (const l of [run('CURATED_TIER')]) {
     const list = BANK[t.id + ':' + l] || [];
-    if (list.length < 4) fail(`bank ${t.id}:${l} has only ${list.length} problems`);
+    checks++;
+    if (list.length < 15) fail(`bank ${t.id}:${l} has only ${list.length} problems`);
+    const titles = list.map(e => e.title);
+    titles.forEach((x, i) => { if (titles.indexOf(x) !== i) fail(`bank ${t.id}:${l} repeats the title “${x}”`); });
     list.forEach((e, i) => {
         const where = `bank ${t.id}:${l}#${i} “${e.title}”`;
         texFields({...e, prerequisites: e.prereq}, where);
         e.parts.forEach((p, j) => {
+            if (!p.exact) { checks++; if (!(p.tolerance > 0)) fail(`${where} numeric part ${j} has no tolerance`); return; }
             const plain = p.exact.replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, '(($1)/($2))').replace(/\\sqrt\{([^{}]*)\}/g, 'sqrt($1)').replace(/\\sqrt(\d)/g, 'sqrt($1)').replace(/\\pi/g, 'pi').replace(/\\ln/g, 'ln').replace(/\\varphi/g, '((1+sqrt5)/2)').replace(/\\arctan/g, 'atan').replace(/\\arccos/g, 'acos').replace(/\\log_\{10\}/g, 'log').replace(/\\left|\\right|\\!|\\,/g, '').replace(/[{}]/g, m => m === '{' ? '(' : ')');
             let v = NaN;
             try { v = MathInput.read(plain).value; } catch {}
             if (Number.isFinite(v)) close(v, p.answer, 1e-9, `${where} exact form ${p.exact}`);
             else if (!/\\/.test(p.exact)) fail(`${where} exact form unreadable: ${p.exact}`);
         });
+        checks++;
+        if (!e.diagram) fail(`${where} has no diagram`);
+        if (i >= 4 && !e.verify) fail(`${where} has no verify()`);
         if (e.verify) {
             const got = e.verify();
+            checks++;
+            if (got.length !== e.parts.length) fail(`${where} verify returns ${got.length} values for ${e.parts.length} parts`);
             got.forEach((g, j) => close(g, e.parts[j].answer, 2e-3, `${where} verify part ${j}`));
         }
     });

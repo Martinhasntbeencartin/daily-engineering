@@ -35,7 +35,7 @@ A static web app with a new electrical engineering problem every day, in the spi
   - **Power & electromagnetics:** power systems, motors & drives (DC and brushless motors, field weakening), electromagnetism.
   - **Communications & RF:** information theory (entropy, Huffman, capacity, water-filling), modulation & coding (QAM, Hamming and convolutional codes, fading and diversity), antennas & link budgets (path loss, noise, two-ray, arrays), RF circuits & matching (transmission lines, stubs, amplifier stability, multisection transformers).
 - **Four levels.**
-  - **Level 1 (Insight)** is a rotation of 56 hand-picked problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
+  - **Level 1 (Insight)** is a rotation of 210 hand-picked problems, 15 per discipline. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$, a figure, and a `verify()` that reproduces the answer by an independent method. Each discipline began with four problems; dates before 28 November 2026 keep that original rotation, so the archive still shows what was set on the day (`BANK_POOL_FROM` in `js/bank.js`). From then on the whole pool cycles every 15 days, starting with the problems added later.
   - **Levels 2–4 (Advanced, Challenge, Expert)** are multi-part problems with fresh values every day. Level 4 alternates between graduate-level problems and research-grade work that needs numerical methods.
   - **No repeats within a year at Levels 2–4.** Each generator varies two to six of its quantities over a grid of hundreds to millions of combinations. It then walks that grid in a fixed shuffled order, one step per day (`dayGrid` in `js/numerics.js`, a keyed permutation), so any 365 consecutive days give 365 different problems. Each discipline and level has its own order. Grids are filtered so every problem stays physically sensible (for example the motor operating point stays inside the inverter's voltage, the ladder circuit always overshoots, the array never shows a grating lobe), and drawings show the day's values. `tests/exercises.test.js` checks a full year for every discipline and level.
   - **Rotating problem types.** In every discipline, each of Levels 2, 3 and 4 rotates through four kinds of problem, one a day. That covers Circuits & electronics (circuit analysis, electronics, digital logic, measurement), Signals & control (signals & systems, control systems, sensors & estimation), Power & electromagnetics (power systems, motors & drives, electromagnetism) and Communications & RF (information theory, modulation & coding, antennas & link budgets, RF circuits):
@@ -114,14 +114,14 @@ node tests/editor.test.js
 The suite checks:
 - Every topic × level, and every topic × tier, for 120 days: each exercise is complete and every answer is finite.
 - Every LaTeX fragment compiles with KaTeX in strict mode.
-- Every curated exact form evaluates to its stored answer, and each problem's `verify()` function independently reproduces that answer numerically.
+- Every discipline has at least 15 curated problems with distinct titles and a figure. Every curated exact form evaluates to its stored answer, and each problem's `verify()` function independently reproduces that answer numerically.
 - The answer parser has unit tests.
 - Generated Level 4 answers (Expert and Mastery tiers) are cross-checked: KCL residuals, the Riccati equation, the Kalata closed form, CRC long division, load-flow balance and the bridge zero.
 - Motors, sensors and communications answers are cross-checked by independent methods: a direct simulation of a motor start, both field-weakening limits, the least-squares gradient, Blahut–Arimoto, the water-filling budget, Viterbi by brute force, a second quadrature for fading, the closed-form array directivity, the stub match, and transducer gain = maximum available gain.
 
 ## Adding a curated problem
 
-Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, in `js/bank.js`, `js/motors-sensors.js` (motors & drives, sensors & estimation) or `js/comms.js` (communications & RF):
+Append an object to the topic’s Level 1 list with `bankMore(topic, 'advanced', [...])` in the matching `js/bank-more-*.js` file. Use `ex(label, value, latex, unit)` for an exact answer, `exInt` for an integer and `nx(label, value, unit)` for a numeric answer with no neat closed form:
 
 ```js
 {
@@ -140,6 +140,7 @@ Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, i
 | `js/core.js` | Topics, tiers, levels, router `makeExercise` / `makeTierExercise` |
 | `js/mathtext.js` | LaTeX helpers (`T`, `tf`, `tc`), the answer parser and the editor-LaTeX converter |
 | `js/bank.js` | Curated Level 1, and the picker for today's curated problem |
+| `js/bank-more-ce.js`, `js/bank-more-sc.js`, `js/bank-more-pe.js`, `js/bank-more-comms.js` | The added Level 1 problems for each group of disciplines, and small shared figure helpers |
 | `js/hard.js` | Levels 2–3 for circuits, electronics, signals, control, digital, electromagnetism, power and measurement; open-source credits; complex-number helpers |
 | `js/expert.js` | Level 4 for the same disciplines |
 | `js/motors-sensors.js` | Motors & drives and sensors & estimation: curated Level 1 and generated Levels 2–4 |
