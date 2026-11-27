@@ -142,6 +142,11 @@ for (const t of TOPICS) for (const l of [run('CURATED_TIER')]) {
     });
 }
 
+{ /* no curated title appears in two disciplines */
+    const all = TOPICS.flatMap(t => (BANK[t.id + ':' + run('CURATED_TIER')] || []).map(e => [e.title, t.id])), seen = new Map();
+    for (const [title, id] of all) { checks++; if (seen.has(title)) fail(`curated title “${title}” is in both ${seen.get(title)} and ${id}`); seen.set(title, id); }
+}
+
 /* ---- the answer parser ---- */
 for (const [src, want] of [['pi/4', Math.PI / 4], ['ln2', Math.LN2], ['(sqrt(5)-1)/2', (Math.sqrt(5) - 1) / 2], ['2^(2/5)', 2 ** .4], ['e^-pi', Math.exp(-Math.PI)], ['25ln10', 25 * Math.log(10)], ['2e-3', .002], ['3sqrt2', 3 * Math.SQRT2], ['√3/2', Math.sqrt(3) / 2], ['−1/6', -1 / 6], ['1/(2pi)', 1 / (2 * Math.PI)], ['5-2sqrt6', 5 - 2 * Math.sqrt(6)], ['-2^2', -4], ['0,5', .5], ['2·π', 2 * Math.PI], ['atan(1)*4', Math.PI], ['ln2/2', Math.LN2 / 2], ['log100', 2], ['log10(1000)', 3], ['log100/2', 1], ['sqrt2/2', Math.SQRT1_2], ['sqrt(2)/2', Math.SQRT1_2], ['3sqrt2/2', 3 * Math.SQRT1_2], ['√2/2', Math.SQRT1_2]])
     close(MathInput.read(src).value, want, 1e-12, `parser "${src}"`);
