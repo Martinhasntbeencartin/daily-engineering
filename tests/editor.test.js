@@ -218,6 +218,28 @@ server.listen(0, async () => {
         if (!movedOk) failures++;
         console.log(`${movedOk ? 'ok  ' : 'FAIL'} saved progress moved to new levels:`, JSON.stringify(moved));
         await page.evaluate(() => localStorage.clear());
+        // The whiteboard: opens on request, draws, undoes, keeps each problem's working, full screen, and W toggles it.
+        await page.evaluate(() => localStorage.clear());
+        await go('#/circuits/level-1'); await page.reload(); await page.waitForSelector('#board-open');
+        step('the whiteboard starts closed', await page.evaluate(() => document.getElementById('board').hidden && !document.getElementById('board-closed').hidden));
+        await page.click('#board-open'); await page.waitForTimeout(150);
+        const bb = await page.locator('#board-canvas').boundingBox();
+        for (const [y0, y1] of [[40, 90], [120, 140]]) { await page.mouse.move(bb.x + 40, bb.y + y0); await page.mouse.down(); await page.mouse.move(bb.x + 160, bb.y + y1, {steps: 8}); await page.mouse.up(); }
+        step('drawing on the whiteboard records strokes', await page.evaluate(() => board.strokes.length === 2 && board.strokes[0].p.length >= 4));
+        await page.click('#board-undo');
+        step('undo removes the last stroke', await page.evaluate(() => board.strokes.length === 1));
+        await page.reload(); await page.waitForSelector('#board-canvas');
+        step('the working is still there after a reload', await page.evaluate(() => !document.getElementById('board').hidden && board.strokes.length === 1));
+        await go('#/circuits/level-2');
+        step('each problem has its own board', await page.evaluate(() => board.strokes.length === 0 && board.id.endsWith(':circuits:level-2')));
+        await go('#/circuits/level-1');
+        await page.click('#board-full'); await page.waitForTimeout(100);
+        step('full screen covers the window', await page.evaluate(() => document.getElementById('board').classList.contains('full') && document.body.classList.contains('board-full')));
+        await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+        step('Esc leaves full screen without leaving the problem', await page.evaluate(() => !document.getElementById('board').classList.contains('full') && location.hash === '#/circuits/level-1'));
+        await page.keyboard.press('w'); await page.waitForTimeout(100);
+        step('W hides the whiteboard', await page.evaluate(() => document.getElementById('board').hidden));
+        await page.evaluate(() => localStorage.clear());
         // Finishing a problem opens the full worked solution: solving it, or using all five attempts.
         const panelState = () => page.evaluate(() => {
             const panel = document.getElementById('solution-content');

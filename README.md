@@ -17,10 +17,15 @@ A static web app with a new electrical engineering problem every day, in the spi
     - The problem, with the answer panel beside it ("Your answer", "4 attempts left"); it stays in view on wide screens.
     - Right under **Check answer**: **Show a hint**, which opens the hint in place, and **Reveal solution**.
     - Once you finish, the panel offers the next level and the next discipline not yet done today.
+    - **A whiteboard for your working** under the problem (`js/board.js`). Open it with the button or <kbd>W</kbd>.
+      - Tools: pen and eraser, five chalk colours, three pen sizes, undo and redo, clear (also undoable), **More room** to extend the board downwards, **Save image** (PNG) and **Full screen**, which shows the problem text and fills the window.
+      - Input: a mouse, a pen or one finger draws; two fingers scroll. Once a pen has touched the board, fingers only scroll, so a resting palm leaves no marks.
+      - Saving: each problem keeps its own board in this browser, stored as vectors (the 40 most recent boards), so it redraws sharply at any size. The board stays open from one problem to the next once you have opened it.
   - **Archive** is its own tab: a coin summary, a discipline picker, then today and the last 30 days with unlock buttons.
   - **Shortcuts** (when not typing in an answer box; listed under Help):
     - <kbd>1</kbd>–<kbd>4</kbd> switch level.
     - <kbd>H</kbd> shows a hint.
+    - <kbd>W</kbd> opens or hides the whiteboard; with it open, <kbd>P</kbd> pen, <kbd>E</kbd> eraser, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redo, and <kbd>Esc</kbd> leaves full screen.
     - <kbd>Enter</kbd> jumps to the answer box.
     - <kbd>Esc</kbd> goes back: problem, then category, then menu.
   - **Addresses:** every screen has one (`#/`, `#/circuits-electronics`, `#/comms`, `#/circuits/level-2`, `#/circuits/level-2/2026-11-20`, `#/archive`, `#/circuits/archive`, `#/progress`; a bare `#/circuits` opens its remembered level). The browser's Back button works, and links can be shared or bookmarked.
@@ -153,6 +158,7 @@ Append an object to the topic’s Level 1 list with `bankMore(topic, 'advanced',
 | `js/diagrams.js` | SVG drawing helpers |
 | `js/motion.js` | Motion (anime.js): diagram drawing, cascades, counters, ticks, toast, glides; the step-by-step walk-through |
 | `js/app.js` | Screens and hash routes, the answer editor, progress and attempts (localStorage), archive |
+| `js/board.js` | The whiteboard under each problem: drawing, tools, undo, full screen, PNG export, saved per problem |
 
 ## Licence note
 
