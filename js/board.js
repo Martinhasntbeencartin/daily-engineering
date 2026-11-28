@@ -1,6 +1,6 @@
 /* The whiteboard under each problem: freehand working with a pen, shapes (line, arrow, box, ellipse), text, an eraser
    that removes whole items, a first-time tour,
-   a select tool to move, resize, nudge, restyle, copy, paste, duplicate or delete what is already drawn (one item or several), colours, undo and redo, more room, full screen
+   a select tool to move, resize, nudge, restyle, copy, paste, duplicate, reorder or delete what is already drawn (one item or several), colours, undo and redo, more room, full screen
    and a PNG copy. Everything is stored as vectors in a space 1600 units
    wide, so the board redraws sharply at any size, and each problem keeps its own board in localStorage (the most recent
    BOARD.keep of them).
@@ -30,6 +30,8 @@ const BOARD_ICONS = {
     ellipse: '<ellipse cx="12" cy="12" rx="8.5" ry="6"/>',
     text: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>',
     erase: '<path d="M9 20h11"/><path d="M4.5 15.5l9.5-9.5 5 5-9 9H8.5z"/><path d="M9 11l5 5"/>',
+    front: '<rect x="4" y="4" width="11" height="11" rx="1.5" stroke-dasharray="2.2 2.2"/><rect x="9" y="9" width="11" height="11" rx="1.5" fill="currentColor"/>',
+    back: '<rect x="4" y="4" width="11" height="11" rx="1.5" fill="currentColor"/><rect x="9" y="9" width="11" height="11" rx="1.5" style="fill: var(--bg)"/>',
     copy: '<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
     duplicate: '<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M14 11v6M11 14h6"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
     paste: '<path d="M9 5H6.5A1.5 1.5 0 0 0 5 6.5v13A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 17.5 5H15"/><rect x="9" y="3" width="6" height="4" rx="1"/>',
@@ -100,7 +102,7 @@ function boardHTML(title, text) {
 <div class="board-group">${boardButton('board-undo', 'undo', 'Undo (Ctrl+Z)')}${boardButton('board-redo', 'redo', 'Redo (Ctrl+Shift+Z)')}${boardButton('board-paste', 'paste', 'Paste (Ctrl+V)')}${boardButton('board-clear', 'clear', 'Clear')}</div>
 <div class="board-group board-end">${boardButton('board-more', 'more', 'More room')}${boardButton('board-png', 'png', 'Save image')}${boardButton('board-full', 'full', 'Full screen')}${boardButton('board-tour', 'tour', 'Tour')}${boardButton('board-hide', 'hide', 'Hide (W)')}</div>
 </div>
-<div class="board-scroll" id="board-scroll"><canvas id="board-canvas" role="img" aria-label="Whiteboard for your working. Draw with a mouse, a pen or one finger; scroll with two fingers."></canvas><div class="board-marquee" id="board-marquee" hidden></div><div class="board-sel" id="board-sel" hidden></div>${'<div class="board-handle" hidden></div>'.repeat(4)}<div class="board-sel-bar" id="board-sel-bar" role="group" aria-label="Selection" hidden><button type="button" class="board-sel-btn" id="board-sel-copy" title="Copy (Ctrl+C)" aria-label="Copy">${boardIcon('copy')}</button><button type="button" class="board-sel-btn" id="board-sel-dup" title="Duplicate (Ctrl+D)" aria-label="Duplicate">${boardIcon('duplicate')}</button><button type="button" class="board-sel-btn board-sel-del" id="board-sel-del" title="Delete (Del)" aria-label="Delete the selected item">${boardIcon('hide')}</button></div></div>
+<div class="board-scroll" id="board-scroll"><canvas id="board-canvas" role="img" aria-label="Whiteboard for your working. Draw with a mouse, a pen or one finger; scroll with two fingers."></canvas><div class="board-marquee" id="board-marquee" hidden></div><div class="board-sel" id="board-sel" hidden></div>${'<div class="board-handle" hidden></div>'.repeat(4)}<div class="board-sel-bar" id="board-sel-bar" role="group" aria-label="Selection" hidden><button type="button" class="board-sel-btn" id="board-sel-copy" title="Copy (Ctrl+C)" aria-label="Copy">${boardIcon('copy')}</button><button type="button" class="board-sel-btn" id="board-sel-dup" title="Duplicate (Ctrl+D)" aria-label="Duplicate">${boardIcon('duplicate')}</button><button type="button" class="board-sel-btn" id="board-sel-front" title="Bring to front (])" aria-label="Bring to front">${boardIcon('front')}</button><button type="button" class="board-sel-btn" id="board-sel-back" title="Send to back ([)" aria-label="Send to back">${boardIcon('back')}</button><button type="button" class="board-sel-btn board-sel-del" id="board-sel-del" title="Delete (Del)" aria-label="Delete the selected item">${boardIcon('hide')}</button></div></div>
 <p class="board-note" id="board-note" aria-live="polite"></p>
 </div>
 </section>`;
@@ -211,6 +213,7 @@ function boardApply(action, reverse) {
     }
     else if (action.type === 'replace') list.forEach(e => { at[e.i] = reverse ? e.item : e.next; });
     else if (action.type === 'paste') { if (reverse) at.splice(at.length - action.items.length); else at.push(...action.items); }
+    else if (action.type === 'order') board.strokes = (reverse ? action.from : action.to).slice();
     const back = action.type === 'delete' && reverse ? list.map(e => e.item) : action.type === 'paste' && !reverse ? action.items : null;
     if (back && board.tool === 'select') board.sel = back.slice(); // what comes back (or is pasted) is selected
     else if (board.sel.length) { // undo and redo carry the selection with its items
@@ -351,6 +354,9 @@ function boardSelPlace(view = board?.sel) { // the frame, handles, delete button
     const above = t - 44, bw = bar.offsetWidth || 108; // copy, duplicate and delete sit above the frame, or below it at the top of the board
     Object.assign(bar.style, {left: Math.max(0, Math.min(W - bw, (l + r) / 2 - bw / 2)) + 'px', top: Math.max(0, Math.min(H - 32, above >= 0 ? above : b + 12)) + 'px'});
     del.setAttribute('aria-label', view.length > 1 ? `Delete the ${view.length} selected items` : 'Delete the selected item');
+    const n = board.sel.length, head = board.strokes.slice(0, n), tail = board.strokes.slice(-n);
+    document.getElementById('board-sel-front').disabled = board.sel.every(it => tail.includes(it));
+    document.getElementById('board-sel-back').disabled = board.sel.every(it => head.includes(it));
 }
 /* Items with one handle dragged by (dx, dy) board units. Corners scale everything from the opposite corner of the group:
    proportions are kept when there is text or a pen stroke among them (so writing is never squashed) or with Shift; the
@@ -472,6 +478,14 @@ function boardDuplicate() {
     const step = boardStep(), c = boardUnion(items, boardBox)[2];
     boardPlace(items, c + step <= BOARD.width ? step : -step, step);
 }
+function boardOrder(front) { // bring the selection to the front (drawn last) or send it to the back, keeping its own order, as one step
+    const mine = new Set(board.sel);
+    if (!mine.size) return;
+    const sel = board.strokes.filter(it => mine.has(it)), rest = board.strokes.filter(it => !mine.has(it)), to = front ? [...rest, ...sel] : [...sel, ...rest];
+    if (to.every((it, i) => it === board.strokes[i])) return; // already there
+    boardDo({type: 'order', from: board.strokes.slice(), to});
+    boardSay(front ? 'Brought to front' : 'Sent to back');
+}
 function boardRestyle(what) { // a colour or size chosen with something selected restyles all of it
     boardReplace(board.sel.map(s => [s, what === 'ink' ? {...s, c: board.ink} : s.k === 'text' ? {...s, s: boardTextSize()} : {...s, w: BOARD_SIZES[board.size][0]}]));
 }
@@ -554,7 +568,7 @@ const BOARD_TOUR = [
         keys: 'Hold Shift for straight lines, squares and circles. Keys: P, L, A, R, O and T.'},
     {at: () => document.getElementById('board-select'), title: 'Select and move',
         text: 'Tap or click something to select it, drag it to move it, or drag a corner to resize it. Drag across empty board to pick several, and double-click (or double-tap) text to edit it.',
-        keys: 'Key: V. Ctrl+C, Ctrl+V and Ctrl+D copy, paste and duplicate.'},
+        keys: 'Key: V. Ctrl+C, Ctrl+V and Ctrl+D copy, paste and duplicate; ] and [ bring to front and send to back.'},
     {at: () => document.getElementById('board-erase'), title: 'Eraser',
         text: 'Drag over anything to remove it whole. Changed your mind? Undo brings it back.', keys: 'Keys: E, and Ctrl+Z to undo.'},
     {at: () => document.getElementById('board-full'), title: 'Room to think',
@@ -860,6 +874,8 @@ function mountBoard(id) {
     document.querySelectorAll('#board [data-size]').forEach(b => { b.onclick = () => { board.size = +b.dataset.size; pick('size'); }; });
     document.getElementById('board-sel-del').onclick = boardDelete;
     document.getElementById('board-sel-copy').onclick = () => boardCopy();
+    document.getElementById('board-sel-front').onclick = () => boardOrder(true);
+    document.getElementById('board-sel-back').onclick = () => boardOrder(false);
     document.getElementById('board-sel-dup').onclick = boardDuplicate;
     document.getElementById('board-paste').onclick = () => boardPaste();
     document.getElementById('board-undo').onclick = boardUndo;
@@ -888,7 +904,8 @@ function mountBoard(id) {
    R box, O ellipse, T text, E eraser, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo and redo, Ctrl+V paste; with Select,
    Ctrl+A selects everything and Ctrl+C, Ctrl+X and Ctrl+D copy, cut and duplicate the selection; Enter edits a selected
    text. With something selected, Delete or
-   Backspace removes it, the arrow keys nudge it (Shift for bigger steps) and Esc lets go of it; otherwise Esc leaves
+   Backspace removes it, ] and [ bring it to the front or send it to the back, the arrow keys nudge it (Shift for bigger
+   steps) and Esc lets go of it; otherwise Esc leaves
    full screen first. */
 const BOARD_KEYS = Object.fromEntries(BOARD_TOOLS.map(([t, , key]) => [key, t]));
 document.addEventListener('keydown', e => {
@@ -911,6 +928,8 @@ document.addEventListener('keydown', e => {
         if (k === 'escape') { e.preventDefault(); e.stopImmediatePropagation(); boardSelect([]); return; }
         if (k === 'enter' && board.sel.length === 1 && board.sel[0].k === 'text' && !e.target.closest?.('button, a, summary')) { e.preventDefault(); e.stopImmediatePropagation(); boardTextOpen(0, 0, board.sel[0]); return; }
         if (k === 'delete' || k === 'backspace') { e.preventDefault(); boardDelete(); return; }
+        if (e.code === 'BracketRight' || k === ']') { e.preventDefault(); boardOrder(true); return; } // ] to the front, [ to the back
+        if (e.code === 'BracketLeft' || k === '[') { e.preventDefault(); boardOrder(false); return; }
         if (nudge) { e.preventDefault(); boardMoveTo(board.sel, ...nudge, true); return; }
     }
     if (k === 'escape' && board.full) { e.preventDefault(); e.stopImmediatePropagation(); boardFull(false); return; }

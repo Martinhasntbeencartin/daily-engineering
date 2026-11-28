@@ -299,6 +299,13 @@ server.listen(0, async () => {
         step('the eraser removes the whole box it crosses', await count() === c0 - 1 && await page.evaluate(() => !board.strokes.some(s => s.k === 'rect') && !board.strokes.some(s => s.c < 0) && board.undo.at(-1).type === 'delete'));
         await page.keyboard.press('Control+z');
         step('undo brings the erased box back', await count() === c0 && await page.evaluate(() => board.strokes.some(s => s.k === 'rect')));
+        // [ sends the selection to the back and ] brings it to the front, each one undo step
+        await page.keyboard.press('v'); await page.mouse.click(mb.x + 360, mb.y + 80);
+        await page.keyboard.press('[');
+        step('[ sends the selected box to the back', await page.evaluate(() => board.strokes[0].k === 'rect' && board.undo.at(-1).type === 'order'));
+        await page.keyboard.press(']');
+        step('] brings it to the front', await page.evaluate(() => board.strokes.at(-1).k === 'rect' && board.sel[0] === board.strokes.at(-1)));
+        await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z');
         await page.keyboard.press('p');
         await page.reload(); await page.waitForSelector('#board-canvas'); await page.waitForTimeout(150);
         step('shapes and text are still there after a reload', await page.evaluate(() => board.strokes.some(s => s.k === 'rect') && board.strokes.some(s => s.k === 'text')));
