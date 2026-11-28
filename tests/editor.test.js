@@ -276,6 +276,16 @@ server.listen(0, async () => {
         step('a selection box selects what lies wholly inside it', await page.evaluate(() => board.sel.length === 1 && board.sel[0].k === 'text'));
         await page.keyboard.down('Shift'); await page.mouse.click(mb.x + 320, mb.y + 80); await page.keyboard.up('Shift');
         step('Shift-click adds to the selection', await page.evaluate(() => board.sel.length === 2 && board.sel.some(s => s.k === 'rect')));
+        // copy, paste and duplicate: Ctrl+C keeps the board as it is; Ctrl+V and Ctrl+D add selected copies, each one undo step
+        const count = () => page.evaluate(() => board.strokes.length), c0 = await count();
+        await page.keyboard.press('Control+c');
+        step('Ctrl+C copies the selection without changing the board', await count() === c0 && await page.evaluate(() => JSON.parse(localStorage.getItem('daily-engineer-board-clip')).items.length === 2 && !document.getElementById('board-paste').disabled));
+        await page.mouse.move(2, 2); await page.keyboard.press('Control+v');
+        step('Ctrl+V pastes selected copies beside the originals', await count() === c0 + 2 && await page.evaluate(() => board.sel.length === 2 && board.sel.every(s => board.strokes.slice(-2).includes(s)) && board.undo.at(-1).type === 'paste'));
+        await page.keyboard.press('Control+d');
+        step('Ctrl+D duplicates the selection', await count() === c0 + 4);
+        await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z');
+        step('undo takes pastes and duplicates away', await count() === c0);
         await page.keyboard.press('p');
         await page.reload(); await page.waitForSelector('#board-canvas'); await page.waitForTimeout(150);
         step('shapes and text are still there after a reload', await page.evaluate(() => board.strokes.some(s => s.k === 'rect') && board.strokes.some(s => s.k === 'text')));

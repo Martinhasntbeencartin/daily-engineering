@@ -487,8 +487,11 @@ dialog::backdrop { background: rgba(0, 0, 0, .74); }
 .board-sel-item { position: absolute; z-index: 1; border: 1px dotted var(--accent); border-radius: 3px; pointer-events: none; opacity: .85; }
 .board-marquee { position: absolute; z-index: 1; border: 1px dashed var(--accent); background: var(--accent-wash); pointer-events: none; }
 @media (pointer: coarse) { .board-handle { width: 18px; height: 18px; margin: -9px 0 0 -9px; } }
-.board-sel-del { position: absolute; z-index: 2; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--accent); border-radius: 50%; background: var(--bg); color: var(--ink); cursor: pointer; }
-.board-sel-del svg { width: 16px; height: 16px; }
+.board-sel-bar { position: absolute; z-index: 2; display: flex; gap: 6px; }
+.board-sel-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--dim-2); border-radius: 50%; background: var(--bg); color: var(--ink); cursor: pointer; }
+.board-sel-btn:hover { border-color: var(--line); }
+.board-sel-btn.board-sel-del { border-color: var(--accent); }
+.board-sel-btn svg { width: 16px; height: 16px; }
 .board-text { position: absolute; z-index: 1; margin: 0; padding: 0; border: 0; outline: 1px dashed var(--accent); outline-offset: 4px; background: transparent; resize: none; overflow: hidden; white-space: pre; caret-color: currentColor; }
 .board-btn.icon { padding: 0 9px; }
 .board-btn.icon span { display: none; }

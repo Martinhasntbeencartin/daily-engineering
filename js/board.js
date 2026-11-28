@@ -1,11 +1,11 @@
 /* The whiteboard under each problem: freehand working with a pen, shapes (line, arrow, box, ellipse), text, an eraser,
-   a select tool to move, resize, nudge, restyle or delete what is already drawn (one item or several), colours, undo and redo, more room, full screen
+   a select tool to move, resize, nudge, restyle, copy, paste, duplicate or delete what is already drawn (one item or several), colours, undo and redo, more room, full screen
    and a PNG copy. Everything is stored as vectors in a space 1600 units
    wide, so the board redraws sharply at any size, and each problem keeps its own board in localStorage (the most recent
    BOARD.keep of them).
    Input: a mouse, a pen or one finger draws; two fingers scroll; once a pen has touched the board, fingers only scroll,
    so a resting palm leaves no marks. */
-const BOARD = {store: 'daily-engineer-boards', pref: 'daily-engineer-board-open', width: 1600, height: 1000, step: 600, maxHeight: 4000, keep: 40, eraser: 40, maxPixels: 16e6};
+const BOARD = {store: 'daily-engineer-boards', pref: 'daily-engineer-board-open', clip: 'daily-engineer-board-clip', width: 1600, height: 1000, step: 600, maxHeight: 4000, keep: 40, eraser: 40, maxPixels: 16e6};
 const BOARD_INKS = [['#ecebe6', 'Chalk'], ['#ff6b6b', 'Red'], ['#74e3b4', 'Green'], ['#ffc65c', 'Yellow'], ['#7cb7ff', 'Blue']];
 const BOARD_SIZES = [[3, 'Fine'], [6, 'Medium'], [12, 'Thick']];
 const BOARD_TEXT = [28, 40, 60]; // text height for each size, in board units
@@ -28,6 +28,9 @@ const BOARD_ICONS = {
     ellipse: '<ellipse cx="12" cy="12" rx="8.5" ry="6"/>',
     text: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>',
     erase: '<path d="M9 20h11"/><path d="M4.5 15.5l9.5-9.5 5 5-9 9H8.5z"/><path d="M9 11l5 5"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
+    duplicate: '<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M14 11v6M11 14h6"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
+    paste: '<path d="M9 5H6.5A1.5 1.5 0 0 0 5 6.5v13A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 17.5 5H15"/><rect x="9" y="3" width="6" height="4" rx="1"/>',
     undo: '<path d="M9 15L4 10l5-5"/><path d="M4 10h10.5a5.5 5.5 0 0 1 0 11H11"/>',
     redo: '<path d="M15 15l5-5-5-5"/><path d="M20 10H9.5a5.5 5.5 0 0 0 0 11H13"/>',
     clear: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
@@ -71,8 +74,14 @@ function boardPersist() {
 function boardNote() {
     const el = document.getElementById('board-note');
     if (!el) return;
-    el.textContent = board.warning || BOARD_HINTS[['text', 'select'].includes(board.tool) ? board.tool : BOARD_SHAPES.includes(board.tool) ? 'shape' : 'draw'];
+    el.textContent = board.warning || board.said || BOARD_HINTS[['text', 'select'].includes(board.tool) ? board.tool : BOARD_SHAPES.includes(board.tool) ? 'shape' : 'draw'];
     el.classList.toggle('warn', !!board.warning);
+}
+function boardSay(text) { // a short confirmation in the note under the board, read out by screen readers
+    const mine = board;
+    board.said = text; boardNote();
+    clearTimeout(board.sayTimer);
+    board.sayTimer = setTimeout(() => { if (board === mine) { board.said = ''; boardNote(); } }, 1800);
 }
 
 /* ---------- markup ---------- */
@@ -85,11 +94,11 @@ function boardHTML(title, text) {
 <div class="board-group" role="group" aria-label="Tool">${BOARD_TOOLS.map(([t, label, key]) => `<button type="button" class="board-btn${BOARD_SHAPES.includes(t) ? ' icon' : ''}" id="board-${t}" data-tool="${t}" title="${label} (${key.toUpperCase()})" aria-label="${label} (${key.toUpperCase()})" aria-pressed="${t === 'pen'}">${boardIcon(t)}<span>${label}</span></button>`).join('')}</div>
 <div class="board-group" role="group" aria-label="Ink colour">${BOARD_INKS.map(([c, n], i) => `<button type="button" class="board-ink" data-ink="${i}" style="--swatch:${c}" title="${n} ink" aria-label="${n} ink" aria-pressed="${!i}"></button>`).join('')}</div>
 <div class="board-group" role="group" aria-label="Size">${BOARD_SIZES.map(([w, n], i) => `<button type="button" class="board-size" data-size="${i}" style="--dot:${4 + 2.4 * i}px" title="${n}" aria-label="${n}" aria-pressed="${i === 1}"></button>`).join('')}</div>
-<div class="board-group">${boardButton('board-undo', 'undo', 'Undo (Ctrl+Z)')}${boardButton('board-redo', 'redo', 'Redo (Ctrl+Shift+Z)')}${boardButton('board-clear', 'clear', 'Clear')}</div>
+<div class="board-group">${boardButton('board-undo', 'undo', 'Undo (Ctrl+Z)')}${boardButton('board-redo', 'redo', 'Redo (Ctrl+Shift+Z)')}${boardButton('board-paste', 'paste', 'Paste (Ctrl+V)')}${boardButton('board-clear', 'clear', 'Clear')}</div>
 <div class="board-group board-end">${boardButton('board-more', 'more', 'More room')}${boardButton('board-png', 'png', 'Save image')}${boardButton('board-full', 'full', 'Full screen')}${boardButton('board-hide', 'hide', 'Hide (W)')}</div>
 </div>
-<div class="board-scroll" id="board-scroll"><canvas id="board-canvas" role="img" aria-label="Whiteboard for your working. Draw with a mouse, a pen or one finger; scroll with two fingers."></canvas><div class="board-marquee" id="board-marquee" hidden></div><div class="board-sel" id="board-sel" hidden></div>${'<div class="board-handle" hidden></div>'.repeat(4)}<button type="button" class="board-sel-del" id="board-sel-del" title="Delete (Del)" aria-label="Delete the selected item" hidden>${boardIcon('hide')}</button></div>
-<p class="board-note" id="board-note"></p>
+<div class="board-scroll" id="board-scroll"><canvas id="board-canvas" role="img" aria-label="Whiteboard for your working. Draw with a mouse, a pen or one finger; scroll with two fingers."></canvas><div class="board-marquee" id="board-marquee" hidden></div><div class="board-sel" id="board-sel" hidden></div>${'<div class="board-handle" hidden></div>'.repeat(4)}<div class="board-sel-bar" id="board-sel-bar" role="group" aria-label="Selection" hidden><button type="button" class="board-sel-btn" id="board-sel-copy" title="Copy (Ctrl+C)" aria-label="Copy">${boardIcon('copy')}</button><button type="button" class="board-sel-btn" id="board-sel-dup" title="Duplicate (Ctrl+D)" aria-label="Duplicate">${boardIcon('duplicate')}</button><button type="button" class="board-sel-btn board-sel-del" id="board-sel-del" title="Delete (Del)" aria-label="Delete the selected item">${boardIcon('hide')}</button></div></div>
+<p class="board-note" id="board-note" aria-live="polite"></p>
 </div>
 </section>`;
 }
@@ -197,7 +206,9 @@ function boardApply(action, reverse) {
         else for (let j = list.length - 1; j >= 0; j--) at.splice(list[j].i, 1);
     }
     else if (action.type === 'replace') list.forEach(e => { at[e.i] = reverse ? e.item : e.next; });
-    if (action.type === 'delete' && reverse && board.tool === 'select') board.sel = list.map(e => e.item); // what comes back is selected again
+    else if (action.type === 'paste') { if (reverse) at.splice(at.length - action.items.length); else at.push(...action.items); }
+    const back = action.type === 'delete' && reverse ? list.map(e => e.item) : action.type === 'paste' && !reverse ? action.items : null;
+    if (back && board.tool === 'select') board.sel = back.slice(); // what comes back (or is pasted) is selected
     else if (board.sel.length) { // undo and redo carry the selection with its items
         const swap = new Map((action.type === 'move' || action.type === 'replace') && board.tool === 'select' ? list.map(e => reverse ? [e.next, e.item] : [e.item, e.next]) : []);
         board.sel = board.sel.map(s => board.strokes.includes(s) ? s : swap.get(s)).filter(Boolean);
@@ -208,7 +219,7 @@ function boardUndo() { const a = board.undo.pop(); if (a) { board.redo.push(a); 
 function boardRedo() { const a = board.redo.pop(); if (a) { board.undo.push(a); boardApply(a, false); } }
 function boardButtons() {
     const set = (id, on) => { const el = document.getElementById(id); if (el) el.disabled = !on; };
-    set('board-undo', board.undo.length); set('board-redo', board.redo.length); set('board-clear', board.strokes.length); set('board-more', board.h < BOARD.maxHeight);
+    set('board-undo', board.undo.length); set('board-redo', board.redo.length); set('board-paste', boardClipGet()?.items?.length); set('board-clear', board.strokes.length); set('board-more', board.h < BOARD.maxHeight);
     document.querySelectorAll('#board [data-ink]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.ink === board.ink)));
     document.querySelectorAll('#board [data-size]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.size === board.size)));
     document.querySelectorAll('.board-bar [data-tool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === board.tool)));
@@ -317,7 +328,7 @@ function boardHandleAt(items, x, y, tol) { // the handle under a point in CSS px
 }
 const BOARD_RESIZE_CURSOR = {nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', end0: 'crosshair', end1: 'crosshair'};
 function boardSelPlace(view = board?.sel) { // the frame, handles, delete button and (for several) each item's outline follow the selection or its preview
-    const box = document.getElementById('board-sel'), del = document.getElementById('board-sel-del');
+    const box = document.getElementById('board-sel'), bar = document.getElementById('board-sel-bar'), del = document.getElementById('board-sel-del');
     if (!box || !board) return;
     const on = !!view?.length, grips = board.scroller.querySelectorAll('.board-handle'), many = on && view.length > 1 ? view : [], k = board.canvas.clientWidth / BOARD.width;
     const marks = [...board.scroller.querySelectorAll('.board-sel-item')];
@@ -326,14 +337,14 @@ function boardSelPlace(view = board?.sel) { // the frame, handles, delete button
         m.hidden = i >= many.length;
         if (i < many.length) { const [a, b, c, d] = boardBox(many[i]); Object.assign(m.style, {left: a * k - 3 + 'px', top: b * k - 3 + 'px', width: (c - a) * k + 6 + 'px', height: (d - b) * k + 6 + 'px'}); }
     });
-    box.hidden = del.hidden = !on;
+    box.hidden = bar.hidden = del.hidden = !on;
     grips.forEach(g => { g.hidden = !on; });
     if (!on) return;
     const [l, t, r, b] = boardFrame(view), W = board.canvas.clientWidth, H = board.canvas.clientHeight, hs = boardHandles(view);
     Object.assign(box.style, {left: l + 'px', top: t + 'px', width: r - l + 'px', height: b - t + 'px'});
     grips.forEach((g, i) => { g.hidden = !hs[i]; if (hs[i]) { g.style.left = hs[i][0] + 'px'; g.style.top = hs[i][1] + 'px'; g.classList.toggle('round', hs[i][2].startsWith('end')); } });
-    const above = t - 44; // the delete button sits above the frame, or below it at the top of the board
-    Object.assign(del.style, {left: Math.max(0, Math.min(W - 32, (l + r) / 2 - 16)) + 'px', top: Math.max(0, Math.min(H - 32, above >= 0 ? above : b + 12)) + 'px'});
+    const above = t - 44, bw = bar.offsetWidth || 108; // copy, duplicate and delete sit above the frame, or below it at the top of the board
+    Object.assign(bar.style, {left: Math.max(0, Math.min(W - bw, (l + r) / 2 - bw / 2)) + 'px', top: Math.max(0, Math.min(H - 32, above >= 0 ? above : b + 12)) + 'px'});
     del.setAttribute('aria-label', view.length > 1 ? `Delete the ${view.length} selected items` : 'Delete the selected item');
 }
 /* Items with one handle dragged by (dx, dy) board units. Corners scale everything from the opposite corner of the group:
@@ -401,6 +412,60 @@ function boardReplace(pairs) { // [[item, next], …] as one undoable step, each
     board.sel = board.sel.map(s => list.find(e => e.item === s)?.next || s);
     boardDo({type: 'replace', list});
     return true;
+}
+/* Copy, cut, paste and duplicate. The clipboard lives in localStorage, so it carries from one problem's board to another
+   and between tabs (or in memory when storage is unavailable). A paste lands centred on the mouse when it is over the
+   board; otherwise it is offset from where it was copied (once more for each paste), on the visible part of the board.
+   Pasted and duplicated items arrive selected, with the select tool, as one undoable step. */
+let boardClipMem = null, boardPasteN = 0;
+function boardClipGet() { try { return JSON.parse(localStorage.getItem(BOARD.clip)) || boardClipMem; } catch { return boardClipMem; } }
+function boardClipSet(clip) { boardClipMem = clip; try { localStorage.setItem(BOARD.clip, JSON.stringify(clip)); } catch { try { localStorage.removeItem(BOARD.clip); } catch {} } }
+const boardStep = () => Math.max(24, Math.round(16 * BOARD.width / (board.canvas.clientWidth || BOARD.width))); // about 16 CSS px, at least 24 units
+const boardCount = n => n === 1 ? '1 item' : `${n} items`;
+function boardCopy(cut = false) {
+    const items = boardEntries(board.sel.map(s => [s])).map(e => e.item);
+    if (!items.length) return;
+    boardClipSet({from: board.id, cut, items: JSON.parse(JSON.stringify(items))});
+    boardPasteN = 0;
+    if (cut) boardDelete(); else boardButtons();
+    boardSay(`${cut ? 'Cut' : 'Copied'} ${boardCount(items.length)}${cut ? '' : '. Paste with Ctrl+V or the Paste button.'}`);
+}
+function boardVisible() { // the part of the board on screen, top and bottom in board units
+    const r = board.canvas.getBoundingClientRect(), sr = board.scroller.getBoundingClientRect(), k = r.width / BOARD.width;
+    const top = Math.max(r.top, sr.top, 0), bottom = Math.min(r.bottom, sr.bottom, window.innerHeight);
+    return bottom > top ? [(top - r.top) / k, (bottom - r.top) / k] : [0, board.h];
+}
+function boardPlace(items, dx, dy) { // items shifted by (dx, dy), kept on the board, added and selected as one step
+    const [a, b, c] = boardUnion(items, boardBox);
+    dx = c - a > BOARD.width ? -a : Math.max(-a, Math.min(BOARD.width - c, Math.round(dx)));
+    dy = Math.max(-b, Math.round(dy));
+    const placed = items.map(s => boardRounded(boardShift(s, dx, dy)));
+    boardGrow(Math.max(...placed.map(s => boardBox(s)[3])));
+    if (board.tool !== 'select') boardTool('select');
+    board.sel = placed;
+    boardDo({type: 'paste', items: placed});
+}
+function boardPaste(at = null) {
+    const clip = boardClipGet();
+    if (!clip?.items?.length) return;
+    boardTextCommit();
+    const items = JSON.parse(JSON.stringify(clip.items)), [a, b, c, d] = boardUnion(items, boardBox), step = boardStep();
+    let dx, dy;
+    if (at) { dx = at[0] - (a + c) / 2; dy = at[1] - (b + d) / 2; }
+    else {
+        boardPasteN++;
+        dx = dy = step * (clip.from === board.id && !clip.cut ? boardPasteN : boardPasteN - 1); // after a cut, or on another board, the first paste keeps its place
+        const [top, bottom] = boardVisible();
+        if (b + dy < top || d + dy > bottom) dy = top + step - b; // bring it into view
+    }
+    boardPlace(items, dx, dy);
+    boardSay(`Pasted ${boardCount(items.length)}`);
+}
+function boardDuplicate() {
+    const items = boardEntries(board.sel.map(s => [s])).map(e => e.item);
+    if (!items.length) return;
+    const step = boardStep(), c = boardUnion(items, boardBox)[2];
+    boardPlace(items, c + step <= BOARD.width ? step : -step, step);
 }
 function boardRestyle(what) { // a colour or size chosen with something selected restyles all of it
     boardReplace(board.sel.map(s => [s, what === 'ink' ? {...s, c: board.ink} : s.k === 'text' ? {...s, s: boardTextSize()} : {...s, w: BOARD_SIZES[board.size][0]}]));
@@ -506,6 +571,7 @@ function boardSelectDown(x, y, e) {
     board.live = {...start, k: 'marquee', p: [x, y, x, y], add, on: false};
 }
 function boardMove(e) {
+    if (e.pointerType === 'mouse') board.hover = boardPoint(e);
     if (e.pointerType === 'touch' && board.touches.has(e.pointerId)) {
         board.touches.get(e.pointerId).y = e.clientY;
         if (board.panY !== null && (board.touches.size > 1 || board.penSeen)) {
@@ -619,12 +685,13 @@ function mountBoard(id) {
     if (board?.editor) boardTextCommit(); // text still being typed is kept when the page changes
     const saved = boardStore()[id], prev = board;
     board = {id, canvas, ctx: canvas.getContext('2d'), scroller: document.getElementById('board-scroll'), strokes: saved?.strokes || [], h: saved?.h || BOARD.height, undo: [], redo: [],
-        tool: prev && prev.tool !== 'erase' ? prev.tool : 'pen', ink: prev?.ink || 0, size: prev?.size ?? 1, live: null, base: null, editor: null, sel: [], warning: '',
+        tool: prev && prev.tool !== 'erase' ? prev.tool : 'pen', ink: prev?.ink || 0, size: prev?.size ?? 1, live: null, base: null, editor: null, sel: [], warning: '', said: '', hover: null,
         touches: new Map(), panY: null, penSeen: prev?.penSeen || false, full: false, scale: 1};
     canvas.addEventListener('pointerdown', boardDown);
     canvas.addEventListener('pointermove', boardMove);
     for (const t of ['pointerup', 'pointercancel']) canvas.addEventListener(t, boardUp);
     canvas.addEventListener('contextmenu', e => e.preventDefault());
+    canvas.addEventListener('pointerleave', () => { board.hover = null; });
     document.getElementById('board-open').onclick = () => boardOpen(true, true);
     document.getElementById('board-hide').onclick = () => boardOpen(false);
     document.querySelectorAll('.board-bar [data-tool]').forEach(b => { b.onclick = () => boardTool(b.dataset.tool); });
@@ -638,6 +705,9 @@ function mountBoard(id) {
     document.querySelectorAll('#board [data-ink]').forEach(b => { b.onclick = () => { board.ink = +b.dataset.ink; pick('ink'); }; });
     document.querySelectorAll('#board [data-size]').forEach(b => { b.onclick = () => { board.size = +b.dataset.size; pick('size'); }; });
     document.getElementById('board-sel-del').onclick = boardDelete;
+    document.getElementById('board-sel-copy').onclick = () => boardCopy();
+    document.getElementById('board-sel-dup').onclick = boardDuplicate;
+    document.getElementById('board-paste').onclick = () => boardPaste();
     document.getElementById('board-undo').onclick = boardUndo;
     document.getElementById('board-redo').onclick = boardRedo;
     document.getElementById('board-clear').onclick = () => { if (board.strokes.length) boardDo({type: 'clear', strokes: board.strokes.slice()}); };
@@ -657,8 +727,8 @@ function mountBoard(id) {
     if (open) boardResize();
 }
 /* Keys while not typing an answer or text: W opens or hides the board; with it open, V select, P pen, L line, A arrow,
-   R box, O ellipse, T text, E eraser, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo and redo; with Select, Ctrl+A selects
-   everything. With something selected, Delete or
+   R box, O ellipse, T text, E eraser, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo and redo, Ctrl+V paste; with Select,
+   Ctrl+A selects everything and Ctrl+C, Ctrl+X and Ctrl+D copy, cut and duplicate the selection. With something selected, Delete or
    Backspace removes it, the arrow keys nudge it (Shift for bigger steps) and Esc lets go of it; otherwise Esc leaves
    full screen first. */
 const BOARD_KEYS = Object.fromEntries(BOARD_TOOLS.map(([t, , key]) => [key, t]));
@@ -667,6 +737,12 @@ document.addEventListener('keydown', e => {
     if (e.target.closest?.('math-field, input, textarea, select')) return;
     const open = !document.getElementById('board').hidden, k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
     if (open && mod && !e.altKey && k === 'a' && board.tool === 'select') { e.preventDefault(); boardSelect(boardSelectable()); return; }
+    if (open && mod && !e.altKey && !e.shiftKey) { // copy, cut, paste and duplicate; page text that is selected is left to the browser
+        const pageText = !(window.getSelection?.()?.isCollapsed ?? true);
+        if ((k === 'c' || k === 'x') && board.sel.length && !pageText) { e.preventDefault(); boardCopy(k === 'x'); return; }
+        if (k === 'v' && boardClipGet()?.items?.length) { e.preventDefault(); boardPaste(board.hover); return; }
+        if (k === 'd' && board.sel.length) { e.preventDefault(); boardDuplicate(); return; }
+    }
     if (open && board.sel.length && !mod && !e.altKey) {
         const step = e.shiftKey ? 25 : 5, nudge = {arrowleft: [-step, 0], arrowright: [step, 0], arrowup: [0, -step], arrowdown: [0, step]}[k];
         if (k === 'escape') { e.preventDefault(); e.stopImmediatePropagation(); boardSelect([]); return; }
@@ -684,3 +760,4 @@ document.addEventListener('keydown', e => {
     if (mod && (k === 'z' || k === 'y')) { e.preventDefault(); (k === 'y' || e.shiftKey) ? boardRedo() : boardUndo(); }
 }, true);
 window.addEventListener('resize', () => boardResize());
+window.addEventListener('storage', e => { if (e.key === BOARD.clip && board && document.contains(board.canvas)) boardButtons(); }); // copied in another tab
