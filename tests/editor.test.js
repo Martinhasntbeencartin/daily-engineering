@@ -76,6 +76,7 @@ server.listen(0, async () => {
     // The main run freezes the clock; anime.js times itself with Date.now, so this page asks for reduced motion
     // (nothing animates and the logic is checked). The motion itself is checked further down on pages with a running clock.
     const url = `http://localhost:${server.address().port}/`, browser = await chromium.launch(), page = await browser.newPage({reducedMotion: 'reduce'}), errors = [];
+    await page.addInitScript(() => { try { localStorage.setItem('daily-engineer-board-tour', '1'); } catch {} }); // the whiteboard tour counts as seen, except where it is tested
     page.on('pageerror', e => errors.push(e.message));
     page.on('response', r => r.status() >= 400 && errors.push(`${r.status()} ${r.url()}`));
     let failures = 0;
@@ -247,7 +248,7 @@ server.listen(0, async () => {
         step('the text tool writes text with symbols', await page.evaluate(() => board.strokes.at(-1).k === 'text' && board.strokes.at(-1).t === 'X = ωL, R₁' && !document.querySelector('.board-text')));
         // select: V picks it, a click on the box selects it, dragging moves it as one undoable step, Delete removes it
         await page.keyboard.press('v'); await page.mouse.click(sb.x + 320, sb.y + 80);
-        step('the select tool picks the box', await page.evaluate(() => board.selected?.k === 'rect' && !document.getElementById('board-sel').hidden));
+        step('the select tool picks the box', await page.evaluate(() => board.sel[0]?.k === 'rect' && !document.getElementById('board-sel').hidden));
         await page.mouse.move(sb.x + 320, sb.y + 80); await page.mouse.down(); await page.mouse.move(sb.x + 420, sb.y + 120, {steps: 6}); await page.mouse.up();
         step('dragging moves it', await page.evaluate(k => { const s = board.strokes.at(-1); return s.k === 'rect' && Math.abs(Math.min(s.p[0], s.p[2]) - (200 + 100) / k) < 3; }, (await page.locator('#board-canvas').boundingBox()).width / 1600));
         await page.click('#board-undo');
@@ -262,10 +263,71 @@ server.listen(0, async () => {
         await page.keyboard.press('Control+z');
         step('undo takes the resize back', Math.abs(await wide() - w0) < 1);
         await page.keyboard.press('Delete');
-        step('Delete removes the selected item', await page.evaluate(() => !board.strokes.some(s => s.k === 'rect') && !board.selected));
-        await page.keyboard.press('Control+z'); await page.keyboard.press('p');
+        step('Delete removes the selected item', await page.evaluate(() => !board.strokes.some(s => s.k === 'rect') && !board.sel[0]));
+        await page.keyboard.press('Control+z');
+        // several at once: Ctrl+A, a selection box around what lies wholly inside it, and one nudge for the group
+        await page.keyboard.press('Control+a');
+        step('Ctrl+A selects everything on the board', await page.evaluate(() => board.sel.length >= 3 && board.sel.length === board.strokes.filter(s => s.c >= 0).length));
+        await page.keyboard.press('ArrowRight');
+        step('a nudge moves the whole selection as one step', await page.evaluate(() => board.undo.at(-1).type === 'move' && board.undo.at(-1).list.length === board.sel.length));
+        await page.keyboard.press('Control+z'); await page.keyboard.press('Escape');
+        await page.evaluate(() => document.getElementById('board-canvas').scrollIntoView({block: 'start'}));
+        const mb = await page.locator('#board-canvas').boundingBox();
+        await page.mouse.move(mb.x + 40, mb.y + 160); await page.mouse.down(); await page.mouse.move(mb.x + 340, mb.y + 250, {steps: 6}); await page.mouse.up();
+        step('a selection box selects what lies wholly inside it', await page.evaluate(() => board.sel.length === 1 && board.sel[0].k === 'text'));
+        await page.keyboard.down('Shift'); await page.mouse.click(mb.x + 320, mb.y + 80); await page.keyboard.up('Shift');
+        step('Shift-click adds to the selection', await page.evaluate(() => board.sel.length === 2 && board.sel.some(s => s.k === 'rect')));
+        // copy, paste and duplicate: Ctrl+C keeps the board as it is; Ctrl+V and Ctrl+D add selected copies, each one undo step
+        const count = () => page.evaluate(() => board.strokes.length), c0 = await count();
+        await page.keyboard.press('Control+c');
+        step('Ctrl+C copies the selection without changing the board', await count() === c0 && await page.evaluate(() => JSON.parse(localStorage.getItem('daily-engineer-board-clip')).items.length === 2 && !document.getElementById('board-paste').disabled));
+        await page.mouse.move(2, 2); await page.keyboard.press('Control+v');
+        step('Ctrl+V pastes selected copies beside the originals', await count() === c0 + 2 && await page.evaluate(() => board.sel.length === 2 && board.sel.every(s => board.strokes.slice(-2).includes(s)) && board.undo.at(-1).type === 'paste'));
+        await page.keyboard.press('Control+d');
+        step('Ctrl+D duplicates the selection', await count() === c0 + 4);
+        await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z');
+        step('undo takes pastes and duplicates away', await count() === c0);
+        // double-click text with Select to edit it in place; Enter keeps the edit as one undo step
+        await page.mouse.dblclick(mb.x + 80, mb.y + 190); // (nothing is selected here, so Esc would mean 'go back')
+        step('double-clicking text opens it for editing', await page.evaluate(() => document.activeElement?.classList.contains('board-text') && document.activeElement.value === 'X = ωL, R₁'));
+        await page.keyboard.type(' = 5'); await page.keyboard.press('Enter');
+        step('Enter keeps the edit in place', await count() === c0 && await page.evaluate(() => board.strokes.some(s => s.t === 'X = ωL, R₁ = 5') && board.undo.at(-1).type === 'replace'));
+        await page.keyboard.press('Control+z');
+        step('undo restores the text', await page.evaluate(() => board.strokes.some(s => s.t === 'X = ωL, R₁')));
+        // the eraser removes whole items it crosses, as one undo step, and leaves no marks of its own
+        await page.keyboard.press('e'); await page.mouse.move(mb.x + 360, mb.y + 60); await page.mouse.down(); await page.mouse.move(mb.x + 360, mb.y + 170, {steps: 8}); await page.mouse.up();
+        step('the eraser removes the whole box it crosses', await count() === c0 - 1 && await page.evaluate(() => !board.strokes.some(s => s.k === 'rect') && !board.strokes.some(s => s.c < 0) && board.undo.at(-1).type === 'delete'));
+        await page.keyboard.press('Control+z');
+        step('undo brings the erased box back', await count() === c0 && await page.evaluate(() => board.strokes.some(s => s.k === 'rect')));
+        // [ sends the selection to the back and ] brings it to the front, each one undo step
+        await page.keyboard.press('v'); await page.mouse.click(mb.x + 360, mb.y + 80);
+        await page.keyboard.press('[');
+        step('[ sends the selected box to the back', await page.evaluate(() => board.strokes[0].k === 'rect' && board.undo.at(-1).type === 'order'));
+        await page.keyboard.press(']');
+        step('] brings it to the front', await page.evaluate(() => board.strokes.at(-1).k === 'rect' && board.sel[0] === board.strokes.at(-1)));
+        await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z');
+        // the paper look: off-white with dark inks, remembered, and back to the chalkboard
+        await page.click('#board-paper');
+        step('Paper turns the board off-white with dark ink', await page.evaluate(() => board.paper && getComputedStyle(board.canvas).backgroundColor === 'rgb(251, 250, 246)' && boardInk(0) === '#1f2328' && document.getElementById('board-paper').getAttribute('aria-pressed') === 'true'));
+        await page.click('#board-paper');
+        step('and the Paper button switches back to the chalkboard', await page.evaluate(() => !board.paper && boardInk(0) === '#ecebe6' && localStorage.getItem('daily-engineer-board-paper') === '0'));
+        await page.keyboard.press('p');
         await page.reload(); await page.waitForSelector('#board-canvas'); await page.waitForTimeout(150);
         step('shapes and text are still there after a reload', await page.evaluate(() => board.strokes.some(s => s.k === 'rect') && board.strokes.some(s => s.k === 'text')));
+        // the first-time tour: once, when the board is first opened on request; steps through; Esc ends it; the Tour button replays it
+        await page.keyboard.press('w'); await page.waitForTimeout(100);
+        await page.evaluate(() => localStorage.removeItem('daily-engineer-board-tour'));
+        await page.click('#board-open'); await page.waitForTimeout(300);
+        step('the first time the board is opened, a short tour starts', await page.evaluate(() => /1 of 5/.test(document.querySelector('.board-tour')?.textContent || '') && document.activeElement?.dataset.tour === 'next'));
+        await page.click('.board-tour [data-tour="next"]');
+        step('Next steps through it, highlighting each part', await page.evaluate(() => /2 of 5/.test(document.querySelector('.board-tour').textContent) && document.querySelector('.board-tour-target')?.getAttribute('aria-label') === 'Tool'));
+        await page.keyboard.press('Escape');
+        step('Esc ends the tour and stays on the problem', await page.evaluate(() => !document.querySelector('.board-tour') && location.hash === '#/circuits/level-1'));
+        await page.keyboard.press('w'); await page.waitForTimeout(100); await page.click('#board-open'); await page.waitForTimeout(300);
+        step('the tour does not come back by itself', await page.evaluate(() => !document.querySelector('.board-tour')));
+        await page.click('#board-tour');
+        step('the Tour button shows it again', await page.evaluate(() => /1 of 5/.test(document.querySelector('.board-tour')?.textContent || '')));
+        await page.click('.board-tour [data-tour="skip"]');
         await page.keyboard.press('w'); await page.waitForTimeout(100);
         step('W hides the whiteboard', await page.evaluate(() => document.getElementById('board').hidden));
         await page.evaluate(() => localStorage.clear());
