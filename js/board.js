@@ -16,8 +16,8 @@ const BOARD_SHAPES = ['line', 'arrow', 'rect', 'ellipse'];
 const BOARD_HINTS = {
     draw: 'Draw with a mouse, a pen or one finger; scroll with two fingers. Saved in this browser.',
     shape: 'Drag to draw. Hold Shift for 45° lines, squares and circles.',
-    select: 'Click or tap to select; drag across empty board or Shift-click to select several. Drag to move; drag a handle to resize (Shift keeps proportions). Delete or × removes; arrow keys nudge; a colour or size restyles.',
-    text: 'Click or tap where the text goes. Enter finishes, Shift+Enter adds a line, Esc cancels. Type \\omega for ω, x^2 for x², R_1 for R₁.'
+    select: 'Click or tap to select; drag across empty board or Shift-click to select several. Drag to move, or a handle to resize (Shift keeps proportions); double-click text to edit it. Delete or × removes; arrow keys nudge; a colour or size restyles.',
+    text: 'Click or tap where the text goes, or on text to edit it. Enter finishes, Shift+Enter adds a line, Esc cancels. Type \\omega for ω, x^2 for x², R_1 for R₁.'
 };
 const BOARD_ICONS = {
     select: '<path d="M6 3.5v15l4-4 3 6.5 2.6-1.2-3-6.3H18z"/>',
@@ -153,7 +153,7 @@ function boardRedraw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(board.scale, 0, 0, board.scale, 0, 0);
     ctx.lineCap = ctx.lineJoin = 'round';
-    for (const s of board.strokes) boardPaint(ctx, s);
+    for (const s of board.strokes) if (s !== board.editor?.item) boardPaint(ctx, s); // text being edited shows only in its box
     if (board.live && 'c' in board.live) boardPaint(ctx, board.live);
 }
 function boardResize() {
@@ -475,15 +475,17 @@ function boardRestyle(what) { // a colour or size chosen with something selected
 /* Text is at least 16 CSS px on screen (more for the larger sizes), so it stays readable on a phone and iOS does not zoom
    into the box; on a narrow board that means more board units, so phone text looks larger on a wide screen, like handwriting. */
 const boardTextSize = () => Math.round(Math.max(BOARD_TEXT[board.size], (16 + 4 * board.size) * BOARD.width / (board.canvas.clientWidth || BOARD.width)));
-function boardTextOpen(x, y) {
+function boardTextOpen(x, y, item = null) { // a new text box at (x, y), or `item` (existing text) opened for editing in place
     boardTextCommit();
     const el = document.createElement('textarea');
     el.className = 'board-text';
     el.rows = 1; el.wrap = 'off'; el.spellcheck = false; el.autocapitalize = 'off';
-    el.setAttribute('aria-label', 'Text on the whiteboard. Enter finishes, Shift+Enter adds a line, Escape cancels.');
-    board.editor = {el, x, y, s: boardTextSize(), c: board.ink};
+    el.setAttribute('aria-label', `${item ? 'Editing text' : 'Text'} on the whiteboard. Enter finishes, Shift+Enter adds a line, Escape cancels.`);
+    board.editor = item ? {el, x: item.x, y: item.y, s: item.s, c: item.c, item} : {el, x, y, s: boardTextSize(), c: board.ink};
+    if (item) { el.value = item.t; boardSelect([]); boardRedraw(); }
     board.scroller.append(el);
     boardTextPlace();
+    if (item) el.selectionStart = el.selectionEnd = el.value.length;
     el.addEventListener('input', () => {
         const tail = el.value.length - el.selectionEnd, next = boardSymbols(el.value, false);
         if (next !== el.value) { el.value = next; el.selectionStart = el.selectionEnd = next.length - tail; }
@@ -500,7 +502,8 @@ function boardTextPlace() { // keep the box over its spot when the board changes
     const ed = board?.editor;
     if (!ed) return;
     const k = board.canvas.clientWidth / BOARD.width;
-    Object.assign(ed.el.style, {left: ed.x * k + 'px', top: ed.y * k + 'px', font: BOARD_FONT(ed.s * k), color: BOARD_INKS[ed.c][0], lineHeight: '1.25'});
+    // at least 16 px on screen, so iOS does not zoom in: small text written on a wide screen is shown larger while it is edited on a phone
+    Object.assign(ed.el.style, {left: ed.x * k + 'px', top: ed.y * k + 'px', font: BOARD_FONT(Math.max(16, ed.s * k)), color: BOARD_INKS[ed.c][0], lineHeight: '1.25'});
     boardTextFit();
 }
 function boardTextFit() {
@@ -515,9 +518,23 @@ function boardTextCommit() {
     board.editor = null;
     const t = boardSymbols(ed.el.value, true).replace(/\s+$/, '');
     ed.el.remove();
-    if (t.trim()) boardAdd({k: 'text', c: ed.c, s: ed.s, x: Math.round(ed.x), y: Math.round(ed.y), t});
+    if (!ed.item) { if (t.trim()) boardAdd({k: 'text', c: ed.c, s: ed.s, x: Math.round(ed.x), y: Math.round(ed.y), t}); return; }
+    const i = board.strokes.indexOf(ed.item); // edited text: replaced in place, or deleted when emptied, as one undoable step
+    if (i < 0) { boardRedraw(); return; }
+    board.sel = board.tool === 'select' ? [ed.item] : [];
+    if (!t.trim()) { board.sel = []; boardDo({type: 'delete', list: [{i, item: ed.item}]}); boardSay('Text deleted'); return; }
+    if (!boardReplace([[ed.item, {...ed.item, t, c: ed.c, s: ed.s}]])) { boardRedraw(); boardSelPlace(); }
 }
-function boardTextCancel() { const ed = board?.editor; if (ed) { board.editor = null; ed.el.remove(); } }
+function boardTextCancel() {
+    const ed = board?.editor;
+    if (!ed) return;
+    board.editor = null; ed.el.remove();
+    if (ed.item) { boardRedraw(); if (board.tool === 'select' && board.strokes.includes(ed.item)) boardSelect([ed.item]); }
+}
+function boardTextAt(x, y, tol) { // the topmost text under a point
+    for (let i = board.strokes.length - 1; i >= 0; i--) { const s = board.strokes[i]; if (s.k === 'text' && boardHit(s, x, y, tol)) return s; }
+    return null;
+}
 
 /* ---------- input ---------- */
 function boardPoint(e) { const r = board.canvas.getBoundingClientRect(); return [(e.clientX - r.left) * BOARD.width / r.width, (e.clientY - r.top) * BOARD.width / r.width]; }
@@ -564,7 +581,7 @@ function boardSelectDown(x, y, e) {
     if (hit) {
         const solo = !add && sel.length > 1 && sel.includes(hit) ? hit : null; // pressing one of several keeps them all for a drag; a plain click picks it alone
         if (!sel.includes(hit)) boardSelect(add ? [...sel, hit] : [hit]);
-        board.live = {...start, k: 'move', items: board.sel.slice(), dx: 0, dy: 0, solo};
+        board.live = {...start, k: 'move', items: board.sel.slice(), dx: 0, dy: 0, solo, target: add ? null : hit};
         return;
     }
     if (sel.length && !add && boardInFrame(sel, x * k, y * k)) { board.live = {...start, k: 'move', items: sel.slice(), dx: 0, dy: 0, solo: null}; return; }
@@ -646,7 +663,11 @@ function boardUp(e) {
     const dragged = !!board.base;
     board.live = null; board.base = null;
     if (e.type === 'pointercancel') { boardMarquee(null); boardRedraw(); boardSelPlace(); return; }
-    if (s.k === 'place') { boardTextOpen(s.p[0], s.p[1]); return; }
+    if (s.k === 'place') { // a click on existing text edits it; anywhere else starts new text
+        const t = boardTextAt(s.p[0], s.p[1], (e.pointerType === 'touch' ? 8 : 4) * BOARD.width / board.canvas.clientWidth);
+        boardTextOpen(s.p[0], s.p[1], t);
+        return;
+    }
     if (s.k === 'marquee') {
         boardMarquee(null);
         if (!s.on) { // a click on empty board
@@ -663,7 +684,13 @@ function boardUp(e) {
     if (s.k === 'move') {
         const dx = Math.round(s.dx), dy = Math.round(s.dy);
         if (dragged && (dx || dy)) boardMoveTo(s.items, dx, dy);
-        else { if (dragged) boardRedraw(); if (s.solo) boardSelect([s.solo]); else boardSelPlace(); }
+        else {
+            if (dragged) boardRedraw();
+            if (s.solo) boardSelect([s.solo]); else boardSelPlace();
+            const now = performance.now(), last = board.lastTap; // two clicks or taps on the same text open it for editing
+            if (s.target?.k === 'text' && last?.item === s.target && now - last.t < 450) { board.lastTap = null; boardTextOpen(0, 0, s.target); }
+            else board.lastTap = s.target ? {item: s.target, t: now} : null;
+        }
         return;
     }
     if (s.k === 'resize') {
@@ -685,7 +712,7 @@ function mountBoard(id) {
     if (board?.editor) boardTextCommit(); // text still being typed is kept when the page changes
     const saved = boardStore()[id], prev = board;
     board = {id, canvas, ctx: canvas.getContext('2d'), scroller: document.getElementById('board-scroll'), strokes: saved?.strokes || [], h: saved?.h || BOARD.height, undo: [], redo: [],
-        tool: prev && prev.tool !== 'erase' ? prev.tool : 'pen', ink: prev?.ink || 0, size: prev?.size ?? 1, live: null, base: null, editor: null, sel: [], warning: '', said: '', hover: null,
+        tool: prev && prev.tool !== 'erase' ? prev.tool : 'pen', ink: prev?.ink || 0, size: prev?.size ?? 1, live: null, base: null, editor: null, sel: [], warning: '', said: '', hover: null, lastTap: null,
         touches: new Map(), panY: null, penSeen: prev?.penSeen || false, full: false, scale: 1};
     canvas.addEventListener('pointerdown', boardDown);
     canvas.addEventListener('pointermove', boardMove);
@@ -728,7 +755,8 @@ function mountBoard(id) {
 }
 /* Keys while not typing an answer or text: W opens or hides the board; with it open, V select, P pen, L line, A arrow,
    R box, O ellipse, T text, E eraser, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo and redo, Ctrl+V paste; with Select,
-   Ctrl+A selects everything and Ctrl+C, Ctrl+X and Ctrl+D copy, cut and duplicate the selection. With something selected, Delete or
+   Ctrl+A selects everything and Ctrl+C, Ctrl+X and Ctrl+D copy, cut and duplicate the selection; Enter edits a selected
+   text. With something selected, Delete or
    Backspace removes it, the arrow keys nudge it (Shift for bigger steps) and Esc lets go of it; otherwise Esc leaves
    full screen first. */
 const BOARD_KEYS = Object.fromEntries(BOARD_TOOLS.map(([t, , key]) => [key, t]));
@@ -746,6 +774,7 @@ document.addEventListener('keydown', e => {
     if (open && board.sel.length && !mod && !e.altKey) {
         const step = e.shiftKey ? 25 : 5, nudge = {arrowleft: [-step, 0], arrowright: [step, 0], arrowup: [0, -step], arrowdown: [0, step]}[k];
         if (k === 'escape') { e.preventDefault(); e.stopImmediatePropagation(); boardSelect([]); return; }
+        if (k === 'enter' && board.sel.length === 1 && board.sel[0].k === 'text' && !e.target.closest?.('button, a, summary')) { e.preventDefault(); e.stopImmediatePropagation(); boardTextOpen(0, 0, board.sel[0]); return; }
         if (k === 'delete' || k === 'backspace') { e.preventDefault(); boardDelete(); return; }
         if (nudge) { e.preventDefault(); boardMoveTo(board.sel, ...nudge, true); return; }
     }
@@ -760,4 +789,5 @@ document.addEventListener('keydown', e => {
     if (mod && (k === 'z' || k === 'y')) { e.preventDefault(); (k === 'y' || e.shiftKey) ? boardRedo() : boardUndo(); }
 }, true);
 window.addEventListener('resize', () => boardResize());
+window.addEventListener('hashchange', () => { if (board?.editor) boardTextCommit(); }); // text being typed is kept on any page change (this runs before the app re-renders)
 window.addEventListener('storage', e => { if (e.key === BOARD.clip && board && document.contains(board.canvas)) boardButtons(); }); // copied in another tab

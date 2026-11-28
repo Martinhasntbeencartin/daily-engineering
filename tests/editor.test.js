@@ -286,6 +286,13 @@ server.listen(0, async () => {
         step('Ctrl+D duplicates the selection', await count() === c0 + 4);
         await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z');
         step('undo takes pastes and duplicates away', await count() === c0);
+        // double-click text with Select to edit it in place; Enter keeps the edit as one undo step
+        await page.mouse.dblclick(mb.x + 80, mb.y + 190); // (nothing is selected here, so Esc would mean 'go back')
+        step('double-clicking text opens it for editing', await page.evaluate(() => document.activeElement?.classList.contains('board-text') && document.activeElement.value === 'X = ωL, R₁'));
+        await page.keyboard.type(' = 5'); await page.keyboard.press('Enter');
+        step('Enter keeps the edit in place', await count() === c0 && await page.evaluate(() => board.strokes.some(s => s.t === 'X = ωL, R₁ = 5') && board.undo.at(-1).type === 'replace'));
+        await page.keyboard.press('Control+z');
+        step('undo restores the text', await page.evaluate(() => board.strokes.some(s => s.t === 'X = ωL, R₁')));
         await page.keyboard.press('p');
         await page.reload(); await page.waitForSelector('#board-canvas'); await page.waitForTimeout(150);
         step('shapes and text are still there after a reload', await page.evaluate(() => board.strokes.some(s => s.k === 'rect') && board.strokes.some(s => s.k === 'text')));
