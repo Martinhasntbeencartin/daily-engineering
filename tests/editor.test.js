@@ -76,6 +76,7 @@ server.listen(0, async () => {
     // The main run freezes the clock; anime.js times itself with Date.now, so this page asks for reduced motion
     // (nothing animates and the logic is checked). The motion itself is checked further down on pages with a running clock.
     const url = `http://localhost:${server.address().port}/`, browser = await chromium.launch(), page = await browser.newPage({reducedMotion: 'reduce'}), errors = [];
+    await page.addInitScript(() => { try { localStorage.setItem('daily-engineer-board-tour', '1'); } catch {} }); // the whiteboard tour counts as seen, except where it is tested
     page.on('pageerror', e => errors.push(e.message));
     page.on('response', r => r.status() >= 400 && errors.push(`${r.status()} ${r.url()}`));
     let failures = 0;
@@ -301,6 +302,20 @@ server.listen(0, async () => {
         await page.keyboard.press('p');
         await page.reload(); await page.waitForSelector('#board-canvas'); await page.waitForTimeout(150);
         step('shapes and text are still there after a reload', await page.evaluate(() => board.strokes.some(s => s.k === 'rect') && board.strokes.some(s => s.k === 'text')));
+        // the first-time tour: once, when the board is first opened on request; steps through; Esc ends it; the Tour button replays it
+        await page.keyboard.press('w'); await page.waitForTimeout(100);
+        await page.evaluate(() => localStorage.removeItem('daily-engineer-board-tour'));
+        await page.click('#board-open'); await page.waitForTimeout(300);
+        step('the first time the board is opened, a short tour starts', await page.evaluate(() => /1 of 5/.test(document.querySelector('.board-tour')?.textContent || '') && document.activeElement?.dataset.tour === 'next'));
+        await page.click('.board-tour [data-tour="next"]');
+        step('Next steps through it, highlighting each part', await page.evaluate(() => /2 of 5/.test(document.querySelector('.board-tour').textContent) && document.querySelector('.board-tour-target')?.getAttribute('aria-label') === 'Tool'));
+        await page.keyboard.press('Escape');
+        step('Esc ends the tour and stays on the problem', await page.evaluate(() => !document.querySelector('.board-tour') && location.hash === '#/circuits/level-1'));
+        await page.keyboard.press('w'); await page.waitForTimeout(100); await page.click('#board-open'); await page.waitForTimeout(300);
+        step('the tour does not come back by itself', await page.evaluate(() => !document.querySelector('.board-tour')));
+        await page.click('#board-tour');
+        step('the Tour button shows it again', await page.evaluate(() => /1 of 5/.test(document.querySelector('.board-tour')?.textContent || '')));
+        await page.click('.board-tour [data-tour="skip"]');
         await page.keyboard.press('w'); await page.waitForTimeout(100);
         step('W hides the whiteboard', await page.evaluate(() => document.getElementById('board').hidden));
         await page.evaluate(() => localStorage.clear());

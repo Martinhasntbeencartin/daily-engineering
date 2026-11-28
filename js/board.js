@@ -1,12 +1,12 @@
 /* The whiteboard under each problem: freehand working with a pen, shapes (line, arrow, box, ellipse), text, an eraser
-   that removes whole items,
+   that removes whole items, a first-time tour,
    a select tool to move, resize, nudge, restyle, copy, paste, duplicate or delete what is already drawn (one item or several), colours, undo and redo, more room, full screen
    and a PNG copy. Everything is stored as vectors in a space 1600 units
    wide, so the board redraws sharply at any size, and each problem keeps its own board in localStorage (the most recent
    BOARD.keep of them).
    Input: a mouse, a pen or one finger draws; two fingers scroll; once a pen has touched the board, fingers only scroll,
    so a resting palm leaves no marks. */
-const BOARD = {store: 'daily-engineer-boards', pref: 'daily-engineer-board-open', clip: 'daily-engineer-board-clip', width: 1600, height: 1000, step: 600, maxHeight: 4000, keep: 40, eraser: 10, maxPixels: 16e6} // eraser: its reach in CSS px (more for a finger);
+const BOARD = {store: 'daily-engineer-boards', pref: 'daily-engineer-board-open', clip: 'daily-engineer-board-clip', tour: 'daily-engineer-board-tour', width: 1600, height: 1000, step: 600, maxHeight: 4000, keep: 40, eraser: 10, maxPixels: 16e6} // eraser: its reach in CSS px (more for a finger);
 const BOARD_INKS = [['#ecebe6', 'Chalk'], ['#ff6b6b', 'Red'], ['#74e3b4', 'Green'], ['#ffc65c', 'Yellow'], ['#7cb7ff', 'Blue']];
 const BOARD_SIZES = [[3, 'Fine'], [6, 'Medium'], [12, 'Thick']];
 const BOARD_TEXT = [28, 40, 60]; // text height for each size, in board units
@@ -40,7 +40,8 @@ const BOARD_ICONS = {
     png: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
     full: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
     exit: '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
-    hide: '<path d="M6 6l12 12M18 6L6 18"/>'
+    hide: '<path d="M6 6l12 12M18 6L6 18"/>',
+    tour: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.4c-.6.3-1 .8-1 1.5v.6"/><path d="M12 16.9v.1"/>'
 };
 /* Quick notation for the text tool: \name for Greek letters and symbols, ^digits and _digits for super- and subscripts. */
 const BOARD_SYMBOLS = {alpha: 'α', beta: 'β', gamma: 'γ', Gamma: 'Γ', delta: 'δ', Delta: 'Δ', epsilon: 'ε', eta: 'η', theta: 'θ', lambda: 'λ', mu: 'µ', pi: 'π', rho: 'ρ', sigma: 'σ', Sigma: 'Σ', tau: 'τ', phi: 'φ', Phi: 'Φ', omega: 'ω', Omega: 'Ω',
@@ -97,7 +98,7 @@ function boardHTML(title, text) {
 <div class="board-group" role="group" aria-label="Ink colour">${BOARD_INKS.map(([c, n], i) => `<button type="button" class="board-ink" data-ink="${i}" style="--swatch:${c}" title="${n} ink" aria-label="${n} ink" aria-pressed="${!i}"></button>`).join('')}</div>
 <div class="board-group" role="group" aria-label="Size">${BOARD_SIZES.map(([w, n], i) => `<button type="button" class="board-size" data-size="${i}" style="--dot:${4 + 2.4 * i}px" title="${n}" aria-label="${n}" aria-pressed="${i === 1}"></button>`).join('')}</div>
 <div class="board-group">${boardButton('board-undo', 'undo', 'Undo (Ctrl+Z)')}${boardButton('board-redo', 'redo', 'Redo (Ctrl+Shift+Z)')}${boardButton('board-paste', 'paste', 'Paste (Ctrl+V)')}${boardButton('board-clear', 'clear', 'Clear')}</div>
-<div class="board-group board-end">${boardButton('board-more', 'more', 'More room')}${boardButton('board-png', 'png', 'Save image')}${boardButton('board-full', 'full', 'Full screen')}${boardButton('board-hide', 'hide', 'Hide (W)')}</div>
+<div class="board-group board-end">${boardButton('board-more', 'more', 'More room')}${boardButton('board-png', 'png', 'Save image')}${boardButton('board-full', 'full', 'Full screen')}${boardButton('board-tour', 'tour', 'Tour')}${boardButton('board-hide', 'hide', 'Hide (W)')}</div>
 </div>
 <div class="board-scroll" id="board-scroll"><canvas id="board-canvas" role="img" aria-label="Whiteboard for your working. Draw with a mouse, a pen or one finger; scroll with two fingers."></canvas><div class="board-marquee" id="board-marquee" hidden></div><div class="board-sel" id="board-sel" hidden></div>${'<div class="board-handle" hidden></div>'.repeat(4)}<div class="board-sel-bar" id="board-sel-bar" role="group" aria-label="Selection" hidden><button type="button" class="board-sel-btn" id="board-sel-copy" title="Copy (Ctrl+C)" aria-label="Copy">${boardIcon('copy')}</button><button type="button" class="board-sel-btn" id="board-sel-dup" title="Duplicate (Ctrl+D)" aria-label="Duplicate">${boardIcon('duplicate')}</button><button type="button" class="board-sel-btn board-sel-del" id="board-sel-del" title="Delete (Del)" aria-label="Delete the selected item">${boardIcon('hide')}</button></div></div>
 <p class="board-note" id="board-note" aria-live="polite"></p>
@@ -172,6 +173,7 @@ function boardResize() {
     boardRedraw();
     boardTextPlace();
     boardSelPlace();
+    boardTourPlace();
 }
 const simplify = (p, eps) => { // Ramer–Douglas–Peucker on a flat [x, y, x, y, …] list
     const n = p.length / 2;
@@ -231,13 +233,14 @@ function boardButtons() {
 }
 function boardTool(tool) { if (tool !== 'text') boardTextCommit(); if (tool !== 'select') boardSelect([]); board.tool = tool; boardButtons(); }
 function boardOpen(open, focus = false) {
-    if (!open) boardTextCommit();
+    if (!open) { boardTextCommit(); boardTourEnd(false); }
     document.getElementById('board').hidden = !open;
     document.getElementById('board-closed').hidden = open;
     try { localStorage.setItem(BOARD.pref, open ? '1' : '0'); } catch {}
     if (!open && board.full) boardFull(false);
     if (open) { boardResize(); if (focus) document.getElementById('board').scrollIntoView({block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'}); }
     (open ? document.getElementById(`board-${board.tool}`) : document.getElementById('board-open'))?.focus({preventScroll: !focus});
+    if (open && focus && !boardTourSeen()) requestAnimationFrame(() => { if (board && !document.getElementById('board').hidden) boardTourStart(); }); // the first time it is opened on request
 }
 function boardFull(on) {
     board.full = on;
@@ -538,6 +541,82 @@ function boardTextAt(x, y, tol) { // the topmost text under a point
     return null;
 }
 
+/* ---------- the first-time tour ---------- */
+/* Five short steps, each a callout pointing at a part of the board, shown the first time the board is opened on request
+   (remembered in this browser) and again from the Tour button, which carries a dot until the tour has been seen. The
+   callout is a non-modal dialog: the board stays usable, Back and Next (or the arrow keys) step through it, and Skip or
+   Esc ends it. Keyboard hints are left out on touch screens. */
+const BOARD_TOUR = [
+    {at: () => board.canvas, inside: true, title: 'Your working space',
+        text: 'Write with a mouse, a pen or one finger; scroll with two fingers. Everything is saved with this problem, in this browser.'},
+    {at: () => document.querySelector('#board .board-bar [aria-label="Tool"]'), title: 'Pen, shapes and text',
+        text: 'Draw freehand, lines, arrows, boxes and ellipses, or type text (\\omega gives ω, x^2 gives x²).',
+        keys: 'Hold Shift for straight lines, squares and circles. Keys: P, L, A, R, O and T.'},
+    {at: () => document.getElementById('board-select'), title: 'Select and move',
+        text: 'Tap or click something to select it, drag it to move it, or drag a corner to resize it. Drag across empty board to pick several, and double-click (or double-tap) text to edit it.',
+        keys: 'Key: V. Ctrl+C, Ctrl+V and Ctrl+D copy, paste and duplicate.'},
+    {at: () => document.getElementById('board-erase'), title: 'Eraser',
+        text: 'Drag over anything to remove it whole. Changed your mind? Undo brings it back.', keys: 'Keys: E, and Ctrl+Z to undo.'},
+    {at: () => document.getElementById('board-full'), title: 'Room to think',
+        text: 'Full screen gives you the whole window, with the problem on top. More room makes the board longer, and Save image downloads a copy. Tour shows these tips again.'}
+];
+let boardTour = null; // {step, el} while the tour is showing
+const boardTourSeen = () => { try { return localStorage.getItem(BOARD.tour) === '1'; } catch { return true; } };
+function boardTourStart() {
+    boardTourEnd(false);
+    try { localStorage.setItem(BOARD.tour, '1'); } catch {}
+    const btn = document.getElementById('board-tour');
+    if (btn) { btn.classList.remove('fresh'); btn.setAttribute('aria-label', 'Tour'); }
+    const el = document.createElement('div');
+    el.className = 'board-tour'; el.tabIndex = -1;
+    el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'false'); el.setAttribute('aria-labelledby', 'board-tour-title'); el.setAttribute('aria-describedby', 'board-tour-text');
+    el.addEventListener('click', e => {
+        const a = e.target.closest('[data-tour]')?.dataset.tour;
+        if (a === 'next') boardTourGo(boardTour.step + 1); else if (a === 'back') boardTourGo(boardTour.step - 1); else if (a === 'skip') boardTourEnd();
+    });
+    document.getElementById('board').append(el);
+    boardTour = {step: 0, el};
+    boardTourGo(0);
+}
+function boardTourGo(i) {
+    if (!boardTour) return;
+    if (i >= BOARD_TOUR.length) { boardTourEnd(); return; }
+    i = Math.max(0, i);
+    const st = BOARD_TOUR[i], n = BOARD_TOUR.length, last = i === n - 1, el = boardTour.el;
+    boardTour.step = i;
+    el.classList.toggle('inside', !!st.inside);
+    el.innerHTML = `<span class="board-tour-arrow" aria-hidden="true"></span><p class="board-tour-step">${i + 1} of ${n}</p><h3 id="board-tour-title">${st.title}</h3>`
+        + `<p id="board-tour-text">${st.text}${st.keys ? ` <span class="keys">${st.keys}</span>` : ''}</p><div class="board-tour-nav">`
+        + `${last ? '' : '<button type="button" class="board-tour-skip" data-tour="skip">Skip tour</button>'}${i ? '<button type="button" class="ghost" data-tour="back">Back</button>' : ''}`
+        + `<button type="button" class="board-tour-next" data-tour="next">${last ? 'Done' : 'Next'}</button></div>`;
+    document.querySelectorAll('.board-tour-target').forEach(t => t.classList.remove('board-tour-target'));
+    st.at()?.classList.add('board-tour-target');
+    boardTourPlace();
+    el.querySelector('[data-tour="next"]').focus({preventScroll: true});
+    el.scrollIntoView({block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+}
+function boardTourPlace() { // under its target, pointing at it; over the board, near the top of what is on screen
+    if (!boardTour) return;
+    const st = BOARD_TOUR[boardTour.step], target = st.at(), host = document.getElementById('board'), el = boardTour.el;
+    if (!target || !host || host.hidden) return;
+    const h = host.getBoundingClientRect(), t = target.getBoundingClientRect(), w = Math.min(330, h.width - 24);
+    el.style.width = w + 'px';
+    let left, top;
+    if (st.inside) { left = t.left - h.left + (t.width - w) / 2; top = Math.max(t.top, board.scroller.getBoundingClientRect().top, 0) - h.top + 24; }
+    else { left = t.left - h.left + t.width / 2 - w / 2; top = t.bottom - h.top + 12; }
+    left = Math.max(12, Math.min(h.width - w - 12, left));
+    Object.assign(el.style, {left: left + 'px', top: top + 'px'});
+    const arrow = el.querySelector('.board-tour-arrow');
+    if (arrow) arrow.style.left = Math.max(18, Math.min(w - 18, t.left - h.left + t.width / 2 - left)) + 'px';
+}
+function boardTourEnd(refocus = true) {
+    if (!boardTour) return;
+    boardTour.el.remove();
+    document.querySelectorAll('.board-tour-target').forEach(t => t.classList.remove('board-tour-target'));
+    boardTour = null;
+    if (refocus) document.getElementById(`board-${board.tool}`)?.focus({preventScroll: true});
+}
+
 /* ---------- erasing ---------- */
 /* The eraser removes whole items: every stroke, shape or text within its reach of the path, checked at short steps so a
    quick swipe misses nothing. What it has touched fades while the pointer is down and goes when it is let go; on touch a
@@ -789,6 +868,10 @@ function mountBoard(id) {
     document.getElementById('board-more').onclick = () => { if (board.h < BOARD.maxHeight) boardDo({type: 'room', from: board.h, to: Math.min(BOARD.maxHeight, board.h + BOARD.step)}); };
     document.getElementById('board-png').onclick = boardImage;
     document.getElementById('board-full').onclick = () => boardFull(!board.full);
+    boardTour = null; // a new page has no callout showing
+    const tourBtn = document.getElementById('board-tour');
+    tourBtn.onclick = () => boardTour ? boardTourEnd() : boardTourStart();
+    if (!boardTourSeen()) { tourBtn.classList.add('fresh'); tourBtn.setAttribute('aria-label', 'Tour (new)'); }
     document.body.classList.remove('board-full');
     prev?.observer?.disconnect?.();
     if (window.ResizeObserver) { board.observer = new ResizeObserver(() => boardResize()); board.observer.observe(board.scroller); }
@@ -812,6 +895,10 @@ document.addEventListener('keydown', e => {
     if (!board || !document.contains(board.canvas) || document.querySelector('dialog[open]')) return;
     if (e.target.closest?.('math-field, input, textarea, select')) return;
     const open = !document.getElementById('board').hidden, k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+    if (boardTour && !mod && !e.altKey) { // the tour: Esc ends it, the arrow keys step through it
+        if (k === 'escape') { e.preventDefault(); e.stopImmediatePropagation(); boardTourEnd(); return; }
+        if (k === 'arrowright' || k === 'arrowleft') { e.preventDefault(); boardTourGo(boardTour.step + (k === 'arrowright' ? 1 : -1)); return; }
+    }
     if (open && mod && !e.altKey && k === 'a' && board.tool === 'select') { e.preventDefault(); boardSelect(boardSelectable()); return; }
     if (open && mod && !e.altKey && !e.shiftKey) { // copy, cut, paste and duplicate; page text that is selected is left to the browser
         const pageText = !(window.getSelection?.()?.isCollapsed ?? true);
