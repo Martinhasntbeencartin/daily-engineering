@@ -17,10 +17,18 @@ A static web app with a new electrical engineering problem every day, in the spi
     - The problem, with the answer panel beside it ("Your answer", "4 attempts left"); it stays in view on wide screens.
     - Right under **Check answer**: **Show a hint**, which opens the hint in place, and **Reveal solution**.
     - Once you finish, the panel offers the next level and the next discipline not yet done today.
+    - **A whiteboard for your working** under the problem (`js/board.js`). Open it with the button or <kbd>W</kbd>.
+      - Tools: select, pen, line, arrow, box, ellipse, text and eraser, five chalk colours, three sizes, undo and redo, clear (also undoable), **More room** to extend the board downwards, **Save image** (PNG) and **Full screen**, which shows the problem text and fills the window.
+      - Shapes: drag to draw; hold <kbd>Shift</kbd> for 45° lines, squares and circles.
+      - Text: click or tap where it goes; <kbd>Enter</kbd> finishes, <kbd>Shift</kbd>+<kbd>Enter</kbd> adds a line, <kbd>Esc</kbd> cancels. Quick symbols as you type: `\omega` → ω (also the other Greek letters, `\sqrt`, `\deg`, `\pm`, `\approx`, `\to`, …), `x^2` → x², `R_1` → R₁. A colour or size chosen while typing applies to the text. On a phone, text is at least 16 px on screen.
+      - Select (<kbd>V</kbd>): click or tap a pen stroke, shape or text, then drag to move it (it stays on the board). Drag a **handle** to resize it: the corners scale it from the opposite corner (text and pen strokes keep their proportions; boxes and ellipses do with <kbd>Shift</kbd>), and a line or arrow has a handle on each end (<kbd>Shift</kbd> snaps to 45°). Nothing flips or shrinks below a minimum, and handles are larger on touch screens. <kbd>Delete</kbd> or the × button removes it, the arrow keys nudge it (<kbd>Shift</kbd> for bigger steps; a run of nudges is one undo step), a colour or size restyles it, and <kbd>Esc</kbd> lets go. Every move is undoable. A moved item comes to the front whole, so eraser marks made over it stay where they were.
+      - Input: a mouse, a pen or one finger draws; two fingers scroll. Once a pen has touched the board, fingers only scroll, so a resting palm leaves no marks.
+      - Saving: each problem keeps its own board in this browser, stored as vectors (the 40 most recent boards), so it redraws sharply at any size. The board stays open from one problem to the next once you have opened it.
   - **Archive** is its own tab: a coin summary, a discipline picker, then today and the last 30 days with unlock buttons.
   - **Shortcuts** (when not typing in an answer box; listed under Help):
     - <kbd>1</kbd>–<kbd>4</kbd> switch level.
     - <kbd>H</kbd> shows a hint.
+    - <kbd>W</kbd> opens or hides the whiteboard; with it open, <kbd>V</kbd> select, <kbd>P</kbd> pen, <kbd>L</kbd> line, <kbd>A</kbd> arrow, <kbd>R</kbd> box, <kbd>O</kbd> ellipse, <kbd>T</kbd> text, <kbd>E</kbd> eraser, <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redo, and <kbd>Esc</kbd> leaves full screen.
     - <kbd>Enter</kbd> jumps to the answer box.
     - <kbd>Esc</kbd> goes back: problem, then category, then menu.
   - **Addresses:** every screen has one (`#/`, `#/circuits-electronics`, `#/comms`, `#/circuits/level-2`, `#/circuits/level-2/2026-11-20`, `#/archive`, `#/circuits/archive`, `#/progress`; a bare `#/circuits` opens its remembered level). The browser's Back button works, and links can be shared or bookmarked.
@@ -35,16 +43,15 @@ A static web app with a new electrical engineering problem every day, in the spi
   - **Power & electromagnetics:** power systems, motors & drives (DC and brushless motors, field weakening), electromagnetism.
   - **Communications & RF:** information theory (entropy, Huffman, capacity, water-filling), modulation & coding (QAM, Hamming and convolutional codes, fading and diversity), antennas & link budgets (path loss, noise, two-ray, arrays), RF circuits & matching (transmission lines, stubs, amplifier stability, multisection transformers).
 - **Four levels.**
-  - **Level 1 (Insight)** is a rotation of 56 hand-picked problems. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$.
+  - **Level 1 (Insight)** is a rotation of 210 hand-picked problems, 15 per discipline. Each is a crisp question with one key insight and an exact answer, such as $\tfrac{1+\sqrt5}{2}$, $\ln 2$ or $\tfrac{\pi^2}{6}$, a figure, and a `verify()` that reproduces the answer by an independent method. Each discipline began with four problems; dates before 28 November 2026 keep that original rotation, so the archive still shows what was set on the day (`BANK_POOL_FROM` in `js/bank.js`). From then on the whole pool cycles every 15 days, starting with the problems added later.
   - **Levels 2–4 (Advanced, Challenge, Expert)** are multi-part problems with fresh values every day. Level 4 alternates between graduate-level problems and research-grade work that needs numerical methods.
   - **No repeats within a year at Levels 2–4.** Each generator varies two to six of its quantities over a grid of hundreds to millions of combinations. It then walks that grid in a fixed shuffled order, one step per day (`dayGrid` in `js/numerics.js`, a keyed permutation), so any 365 consecutive days give 365 different problems. Each discipline and level has its own order. Grids are filtered so every problem stays physically sensible (for example the motor operating point stays inside the inverter's voltage, the ladder circuit always overshoots, the array never shows a grating lobe), and drawings show the day's values. `tests/exercises.test.js` checks a full year for every discipline and level.
-  - **Rotating problem types.** In Circuits & electronics (circuit analysis, electronics, digital logic, measurement) and Signals & control (signals & systems, control systems, sensors & estimation), each of Levels 2, 3 and 4 rotates through four kinds of problem, one a day:
+  - **Rotating problem types.** In every discipline, each of Levels 2, 3 and 4 rotates through four kinds of problem, one a day. That covers Circuits & electronics (circuit analysis, electronics, digital logic, measurement), Signals & control (signals & systems, control systems, sensors & estimation), Power & electromagnetics (power systems, motors & drives, electromagnetism) and Communications & RF (information theory, modulation & coding, antennas & link budgets, RF circuits):
     - Level 2 and Level 3 each have four types.
     - Level 4 has two graduate and two research types; they take turns, because Level 4 alternates the two.
-    - The new types live in `js/types-circuits.js`, `js/types-electronics.js`, `js/types-digital.js`, `js/types-measurement.js`, `js/types-signals.js`, `js/types-control.js` and `js/types-sensors.js`. Each registers with `addTypes`; `makeTierExercise` rotates it with the original generator (`EXTRA_TYPES` and `typeSlot` in `js/core.js`).
+    - The new types live in `js/types-*.js`: circuits, electronics, digital, measurement, signals, control, sensors, power, motors, fields, infotheory, modulation, linkbudget and rfcircuits. Each registers with `addTypes`; `makeTierExercise` rotates it with the original generator (`EXTRA_TYPES` and `typeSlot` in `js/core.js`).
     - A type's values step once per appearance, not once per calendar day, so a type shown every fourth day still works through its whole grid before anything repeats (`typeSlot` hands each generator its appearance count, written as a date for `dayGrid`).
-    - Every new type carries `verify()`, which recomputes its answers by an independent method (nodal instead of mesh analysis, simulation instead of a closed form, brute force, BigInt arithmetic, a different fitting method). The exercise test compares the two.
-    - Power & electromagnetics and Communications & RF still have one type per level (two at Level 4).
+    - Every new type carries `verify()`, which recomputes its answers by an independent method (nodal instead of mesh analysis, simulation instead of a closed form, brute force, BigInt arithmetic, a different fitting method, Cauer synthesis, a two-tone simulation). The exercise test compares the two.
   - Internally the generators work on five difficulty *tiers* (`TIERS` in `js/core.js`); each public level maps to one or more tiers, so the levels can be regrouped without changing any problem.
 - **The full working once you finish.** Solving a problem, or using all five attempts, opens its worked solution: each answer (exact form and decimal) beside the one you gave, the approach, every step of the working and the key idea. It is answers and working only, with no extra graphs or animations. Your last answers are kept, so the comparison is still there when you come back (also in the Archive). Revealing the solution before finishing marks the problem as reviewed.
 - **Motion (anime.js 4.5.0, MIT, in `vendor/animejs/`; code in `js/motion.js`).**
@@ -115,14 +122,14 @@ node tests/editor.test.js
 The suite checks:
 - Every topic × level, and every topic × tier, for 120 days: each exercise is complete and every answer is finite.
 - Every LaTeX fragment compiles with KaTeX in strict mode.
-- Every curated exact form evaluates to its stored answer, and each problem's `verify()` function independently reproduces that answer numerically.
+- Every discipline has at least 15 curated problems with distinct titles and a figure. Every curated exact form evaluates to its stored answer, and each problem's `verify()` function independently reproduces that answer numerically.
 - The answer parser has unit tests.
 - Generated Level 4 answers (Expert and Mastery tiers) are cross-checked: KCL residuals, the Riccati equation, the Kalata closed form, CRC long division, load-flow balance and the bridge zero.
 - Motors, sensors and communications answers are cross-checked by independent methods: a direct simulation of a motor start, both field-weakening limits, the least-squares gradient, Blahut–Arimoto, the water-filling budget, Viterbi by brute force, a second quadrature for fading, the closed-form array directivity, the stub match, and transducer gain = maximum available gain.
 
 ## Adding a curated problem
 
-Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, in `js/bank.js`, `js/motors-sensors.js` (motors & drives, sensors & estimation) or `js/comms.js` (communications & RF):
+Append an object to the topic’s Level 1 list with `bankMore(topic, 'advanced', [...])` in the matching `js/bank-more-*.js` file. Use `ex(label, value, latex, unit)` for an exact answer, `exInt` for an integer and `nx(label, value, unit)` for a numeric answer with no neat closed form:
 
 ```js
 {
@@ -141,16 +148,20 @@ Add an object to the topic’s Level 1 list, `bank(topic, 'advanced', [...])`, i
 | `js/core.js` | Topics, tiers, levels, router `makeExercise` / `makeTierExercise` |
 | `js/mathtext.js` | LaTeX helpers (`T`, `tf`, `tc`), the answer parser and the editor-LaTeX converter |
 | `js/bank.js` | Curated Level 1, and the picker for today's curated problem |
+| `js/bank-more-ce.js`, `js/bank-more-sc.js`, `js/bank-more-pe.js`, `js/bank-more-comms.js` | The added Level 1 problems for each group of disciplines, and small shared figure helpers |
 | `js/hard.js` | Levels 2–3 for circuits, electronics, signals, control, digital, electromagnetism, power and measurement; open-source credits; complex-number helpers |
 | `js/expert.js` | Level 4 for the same disciplines |
 | `js/motors-sensors.js` | Motors & drives and sensors & estimation: curated Level 1 and generated Levels 2–4 |
 | `js/comms.js` | Communications & RF: curated Level 1 and generated Levels 2–4 |
 | `js/types-circuits.js`, `js/types-electronics.js`, `js/types-digital.js`, `js/types-measurement.js` | Extra problem types for Levels 2–4 in Circuits & electronics, each with an independent `verify()` |
 | `js/types-signals.js`, `js/types-control.js`, `js/types-sensors.js` | Extra problem types for Levels 2–4 in Signals & control, each with an independent `verify()` |
+| `js/types-power.js`, `js/types-motors.js`, `js/types-fields.js` | Extra problem types for Levels 2–4 in Power & electromagnetics, each with an independent `verify()` |
+| `js/types-infotheory.js`, `js/types-modulation.js`, `js/types-linkbudget.js`, `js/types-rfcircuits.js` | Extra problem types for Levels 2–4 in Communications & RF, each with an independent `verify()` |
 | `js/numerics.js` | Linear solve, matrix exponential, Jacobi eigenvalues, polynomial roots, bisection, Simpson; `dayGrid` (the daily shuffled walk through each generator's value grid), `product` and `steps` |
 | `js/diagrams.js` | SVG drawing helpers |
 | `js/motion.js` | Motion (anime.js): diagram drawing, cascades, counters, ticks, toast, glides; the step-by-step walk-through |
 | `js/app.js` | Screens and hash routes, the answer editor, progress and attempts (localStorage), archive |
+| `js/board.js` | The whiteboard under each problem: select, move and resize, pen, shapes, text, eraser, undo, full screen, PNG export, saved per problem |
 
 ## Licence note
 

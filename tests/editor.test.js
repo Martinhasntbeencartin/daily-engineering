@@ -218,6 +218,57 @@ server.listen(0, async () => {
         if (!movedOk) failures++;
         console.log(`${movedOk ? 'ok  ' : 'FAIL'} saved progress moved to new levels:`, JSON.stringify(moved));
         await page.evaluate(() => localStorage.clear());
+        // The whiteboard: opens on request, draws, undoes, keeps each problem's working, full screen, and W toggles it.
+        await page.evaluate(() => localStorage.clear());
+        await go('#/circuits/level-1'); await page.reload(); await page.waitForSelector('#board-open');
+        step('the whiteboard starts closed', await page.evaluate(() => document.getElementById('board').hidden && !document.getElementById('board-closed').hidden));
+        await page.click('#board-open'); await page.waitForTimeout(150);
+        const bb = await page.locator('#board-canvas').boundingBox();
+        for (const [y0, y1] of [[40, 90], [120, 140]]) { await page.mouse.move(bb.x + 40, bb.y + y0); await page.mouse.down(); await page.mouse.move(bb.x + 160, bb.y + y1, {steps: 8}); await page.mouse.up(); }
+        step('drawing on the whiteboard records strokes', await page.evaluate(() => board.strokes.length === 2 && board.strokes[0].p.length >= 4));
+        await page.click('#board-undo');
+        step('undo removes the last stroke', await page.evaluate(() => board.strokes.length === 1));
+        await page.reload(); await page.waitForSelector('#board-canvas');
+        step('the working is still there after a reload', await page.evaluate(() => !document.getElementById('board').hidden && board.strokes.length === 1));
+        await go('#/circuits/level-2');
+        step('each problem has its own board', await page.evaluate(() => board.strokes.length === 0 && board.id.endsWith(':circuits:level-2')));
+        await go('#/circuits/level-1');
+        await page.click('#board-full'); await page.waitForTimeout(100);
+        step('full screen covers the window', await page.evaluate(() => document.getElementById('board').classList.contains('full') && document.body.classList.contains('board-full')));
+        await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+        step('Esc leaves full screen without leaving the problem', await page.evaluate(() => !document.getElementById('board').classList.contains('full') && location.hash === '#/circuits/level-1'));
+        // shapes and text: R draws a box by dragging, T places text with quick symbols, and both are kept
+        await page.evaluate(() => document.getElementById('board-canvas').scrollIntoView({block: 'start'}));
+        const sb = await page.locator('#board-canvas').boundingBox();
+        await page.keyboard.press('r'); await page.mouse.move(sb.x + 200, sb.y + 40); await page.mouse.down(); await page.mouse.move(sb.x + 320, sb.y + 110, {steps: 6}); await page.mouse.up();
+        step('the box tool draws a box', await page.evaluate(() => board.strokes.at(-1).k === 'rect' && board.strokes.at(-1).p.length === 4));
+        await page.keyboard.press('t'); await page.mouse.click(sb.x + 60, sb.y + 180); await page.waitForTimeout(100);
+        await page.keyboard.type('X = \\omega L, R_1'); await page.keyboard.press('Enter');
+        step('the text tool writes text with symbols', await page.evaluate(() => board.strokes.at(-1).k === 'text' && board.strokes.at(-1).t === 'X = ωL, R₁' && !document.querySelector('.board-text')));
+        // select: V picks it, a click on the box selects it, dragging moves it as one undoable step, Delete removes it
+        await page.keyboard.press('v'); await page.mouse.click(sb.x + 320, sb.y + 80);
+        step('the select tool picks the box', await page.evaluate(() => board.selected?.k === 'rect' && !document.getElementById('board-sel').hidden));
+        await page.mouse.move(sb.x + 320, sb.y + 80); await page.mouse.down(); await page.mouse.move(sb.x + 420, sb.y + 120, {steps: 6}); await page.mouse.up();
+        step('dragging moves it', await page.evaluate(k => { const s = board.strokes.at(-1); return s.k === 'rect' && Math.abs(Math.min(s.p[0], s.p[2]) - (200 + 100) / k) < 3; }, (await page.locator('#board-canvas').boundingBox()).width / 1600));
+        await page.click('#board-undo');
+        step('undo moves it back', await page.evaluate(k => board.strokes.some(s => s.k === 'rect' && Math.abs(Math.min(s.p[0], s.p[2]) - 200 / k) < 3), sb.width / 1600));
+        await page.click('#board-redo');
+        const grips = await page.evaluate(() => [...document.querySelectorAll('.board-handle')].filter(h => !h.hidden).map(h => { const r = h.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
+        step('a selected box has four resize handles', grips.length === 4);
+        const wide = () => page.evaluate(() => { const s = board.strokes.find(s => s.k === 'rect'); return Math.abs(s.p[2] - s.p[0]); }), w0 = await wide();
+        await page.mouse.move(...grips[3]); await page.mouse.down(); await page.mouse.move(grips[3][0] + 60, grips[3][1] + 30, {steps: 6}); await page.mouse.up();
+        const kk = (await page.locator('#board-canvas').boundingBox()).width / 1600;
+        step('dragging a corner handle resizes the box', Math.abs(await wide() - w0 - 60 / kk) < 3);
+        await page.keyboard.press('Control+z');
+        step('undo takes the resize back', Math.abs(await wide() - w0) < 1);
+        await page.keyboard.press('Delete');
+        step('Delete removes the selected item', await page.evaluate(() => !board.strokes.some(s => s.k === 'rect') && !board.selected));
+        await page.keyboard.press('Control+z'); await page.keyboard.press('p');
+        await page.reload(); await page.waitForSelector('#board-canvas'); await page.waitForTimeout(150);
+        step('shapes and text are still there after a reload', await page.evaluate(() => board.strokes.some(s => s.k === 'rect') && board.strokes.some(s => s.k === 'text')));
+        await page.keyboard.press('w'); await page.waitForTimeout(100);
+        step('W hides the whiteboard', await page.evaluate(() => document.getElementById('board').hidden));
+        await page.evaluate(() => localStorage.clear());
         // Finishing a problem opens the full worked solution: solving it, or using all five attempts.
         const panelState = () => page.evaluate(() => {
             const panel = document.getElementById('solution-content');
@@ -286,10 +337,16 @@ server.listen(0, async () => {
         step('progress lists streaks, the reward ladder and the coin log', await page.locator('.progress-table.streaks').count() === 1 && await page.locator('.ladder li').count() === 8 && await page.locator('.coin-log li').count() === 2);
         await page.evaluate(() => localStorage.clear());
         // Motion, on fresh pages with a running clock: diagrams draw themselves, cards cascade, reduced motion stays still.
+        // Problems change daily, so use today's first problem whose diagram has dashed guides to check they survive drawing.
+        let dashed = '#/linkbudget/level-3';
+        for (const route of [dashed, ...await page.evaluate(() => TOPICS.flatMap(t => LEVELS.map(l => `#/${t.id}/${l.id}`)))]) {
+            await go(route);
+            if (await page.evaluate(() => /stroke-dasharray/.test(exercise.diagram || ''))) { dashed = route; break; }
+        }
         for (const reducedMotion of ['no-preference', 'reduce']) {
             const mp = await browser.newPage({reducedMotion});
             mp.on('pageerror', e => errors.push(`motion: ${e.message}`));
-            await mp.goto(url + '#/linkbudget/level-3'); await mp.waitForSelector('#problem .diagram svg');
+            await mp.goto(url + dashed); await mp.waitForSelector('#problem .diagram svg');
             const probe = () => mp.evaluate(() => {
                 const svg = document.querySelector('#challenge .diagram svg'), lines = [...svg.querySelectorAll('path, line, polyline, polygon, rect, circle, ellipse')];
                 return {loaded: typeof anime === 'object', drawing: lines.filter(el => el.hasAttribute('pathLength') || el.hasAttribute('draw')).length, hidden: [...svg.querySelectorAll('text')].filter(t => t.style.opacity !== '').length,

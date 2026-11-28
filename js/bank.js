@@ -5,6 +5,8 @@ const BANK = {};
 const ex = (label, value, latex, unit='') => ({label, answer: value, exact: latex, unit, tolerance: 5e-4, abs: 1e-9});
 const exInt = (label, value, unit='') => ({label, answer: value, exact: String(value), unit, tolerance: 0});
 const bank = (topic, level, problems) => { BANK[topic + ':' + level] = problems; };
+const bankMore = (topic, level, problems) => { BANK[topic + ':' + level].push(...problems); }; // later problems join the end of a pool
+const nx = (label, value, unit='', tolerance=1e-3) => ({label, answer: value, unit, tolerance, abs: 1e-9}); // a numeric answer with no closed form
 const PHI = (1 + Math.sqrt(5)) / 2;
 
 const rk4 = (f, y, t0, t1, n) => { const h = (t1 - t0) / n, out = [[t0, y]]; let t = t0; for (let i = 0; i < n; i++) { const k1 = f(t, y), k2 = f(t + h / 2, y.map((v, j) => v + h / 2 * k1[j])), k3 = f(t + h / 2, y.map((v, j) => v + h / 2 * k2[j])), k4 = f(t + h, y.map((v, j) => v + h * k3[j])); y = y.map((v, j) => v + h / 6 * (k1[j] + 2 * k2[j] + 2 * k3[j] + k4[j])); t += h; out.push([t, y]); } return out; };
@@ -334,15 +336,25 @@ bank('measurement', 'advanced', [{
     prereq: 'Least squares.',
     verify: () => { const x = [0, 1, 2], y = [0, 1, 3], n = 3, sx = 3, sy = 4, sxx = 5, sxy = 7, b = (n * sxy - sx * sy) / (n * sxx - sx * sx); return [b, (sy - b * sx) / n]; }
 }, {
-    title: 'The golden Kalman gain',
-    diagram: estimatorDiagram('Delay', 'Predicted x', 'Estimate x̂', 'Random walk · Q = R = 1'),
-    text: T`A scalar random walk $x_{k+1} = x_k + w_k$ is measured as $z_k = x_k + v_k$, with $\operatorname{Var} w = \operatorname{Var} v = 1$. Find the steady-state Kalman gain.`,
-    parts: [ex(T`$K$`, (Math.sqrt(5) - 1) / 2, T`\dfrac{\sqrt5-1}{2}`)],
-    hints: [T`The prior variance satisfies $P = \dfrac{P}{P+1} + 1$, i.e. $P^2 - P - 1 = 0$.`, T`$K = \dfrac{P}{P+1}$.`],
-    steps: [T`$P = \varphi = \dfrac{1+\sqrt5}{2}$.`, T`$K = \dfrac{\varphi}{\varphi + 1} = \dfrac{\varphi}{\varphi^2} = \dfrac1\varphi$.`, T`$K = \dfrac{\sqrt5-1}{2} \approx 0.618$.`],
-    idea: 'With equal process and measurement noise, the steady-state filter weighs the new measurement by 1/φ.',
-    prereq: 'Kalman filtering; Riccati recursion.',
-    verify: () => { let P = 1, K = 0; for (let i = 0; i < 200; i++) { const Pp = P + 1; K = Pp / (Pp + 1); P = (1 - K) * Pp; } return [K]; }
+    title: 'Mean or median?',
+    diagram: (() => { // sampling distributions of the two estimates for n = 100, σ = 1
+        const X = x => 360 + 700 * x, Y = y => 200 - 38 * y, g = sd => x => Math.exp(-x * x / (2 * sd * sd)) / (sd * Math.sqrt(2 * Math.PI)),
+            path = f => Array.from({length: 161}, (_, i) => { const x = -.4 + i * .005; return `${i ? 'L' : 'M'}${X(x).toFixed(1)} ${Y(f(x)).toFixed(1)}`; }).join('');
+        return drawing(wire('M80 200H640') + `<path d="${path(g(.1))}" stroke="#aa492a" stroke-width="3"/>` + guide(path(g(.1 * Math.sqrt(Math.PI / 2)))) +
+            note(404, 48, 'mean of 100') + note(472, 110, 'median of 100') + dt(360, 236, 'estimate of the true value (σ = 1)'), 'Sampling distributions of the mean and of the median of 100 Gaussian readings: the median’s is wider', 255);
+    })(),
+    text: T`You take $n = 100$ readings of a quantity, each with independent Gaussian noise of standard deviation $\sigma$, and estimate the true value either by their mean or by their median. For large $n$ the median's variance is $\dfrac{1}{4nf(m)^2}$, where $f(m)$ is the noise density at the median. Find the ratio of the median's variance to the mean's, and how many readings the median would need to be as precise as the mean of 100 (a non-integer answer is fine).`,
+    parts: [ex('Variance ratio', Math.PI / 2, T`\dfrac{\pi}{2}`), ex('Readings the median needs', 50 * Math.PI, T`50\pi`)],
+    hints: [T`The mean has variance $\sigma^2/n$.`, T`For Gaussian noise $f(m) = \dfrac{1}{\sigma\sqrt{2\pi}}$, so $\dfrac{1}{4nf(m)^2} = \dfrac{2\pi\sigma^2}{4n}$.`],
+    steps: [T`$\operatorname{Var}(\text{median}) \approx \dfrac{\pi\sigma^2}{2n}$, so the ratio is $\dfrac\pi2 \approx 1.57$.`, T`Matching $\sigma^2/100$ needs $n = 100\cdot\dfrac\pi2 = 50\pi \approx 157$ readings.`, T`The median's efficiency is $2/\pi \approx 64\,\%$ on clean Gaussian data, but one wild reading cannot drag it far.`],
+    idea: 'The median resists outliers but wastes a third of the information in clean Gaussian data: robustness costs efficiency, which is why robust estimators are tuned between the two.',
+    prereq: 'Variance of estimators; order statistics.',
+    verify: () => { // the median's exact sampling density for 20001 readings, f(x) ∝ F^k (1 − F)^k φ(x), integrated numerically
+        const k = 10000, n = 2 * k + 1, f = x => Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI), F = x => .5 + NUM.simpson(f, 0, x, 20), L = .08;
+        const lg = x => k * Math.log(F(x)) + k * Math.log(1 - F(x)) + Math.log(f(x)), c = lg(0), g = x => Math.exp(lg(x) - c);
+        const ratio = n * NUM.simpson(x => x * x * g(x), -L, L, 2000) / NUM.simpson(g, -L, L, 2000);
+        return [ratio, 100 * ratio];
+    }
 }, {
     title: 'kTC noise does not depend on R',
     diagram: rcDiagram('R', '1 pF', 'Noise', 'C'),
@@ -364,10 +376,14 @@ bank('measurement', 'advanced', [{
     prereq: 'Noise figure; cascaded systems.'
 }]);
 
-/* Picks today’s curated problem for a (topic, level) slot. */
+/* Picks today’s curated problem for a (topic, level) slot. Each pool began with four problems; days before
+   BANK_POOL_FROM keep that original rotation, so the archive shows what was set on the day. From then on the
+   whole pool rotates, starting with the problems added later. */
+const BANK_POOL_FROM = '2026-11-28', BANK_FIRST = 4;
 function makeBankExercise(topic, date, level) {
     const list = BANK[topic + ':' + level];
     if (!list) throw Error('Unknown challenge selection');
-    const d = Math.floor(Date.parse(date + 'T00:00:00Z') / 86400000), i = ((d + hashString(topic + level)) % list.length + list.length) % list.length, e = list[i];
+    const day = s => Math.floor(Date.parse(s + 'T00:00:00Z') / 86400000), d = day(date), d0 = day(BANK_POOL_FROM), first = Math.min(BANK_FIRST, list.length);
+    const i = d < d0 ? ((d + hashString(topic + level)) % first + first) % first : (first + d - d0) % list.length, e = list[i];
     return {id: `${topic}-${level}-${i}`, givens: [], source: null, ...e, prerequisites: e.prereq, diagram: e.diagram || '', bankIndex: i};
 }
