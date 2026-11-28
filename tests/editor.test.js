@@ -247,7 +247,7 @@ server.listen(0, async () => {
         step('the text tool writes text with symbols', await page.evaluate(() => board.strokes.at(-1).k === 'text' && board.strokes.at(-1).t === 'X = ωL, R₁' && !document.querySelector('.board-text')));
         // select: V picks it, a click on the box selects it, dragging moves it as one undoable step, Delete removes it
         await page.keyboard.press('v'); await page.mouse.click(sb.x + 320, sb.y + 80);
-        step('the select tool picks the box', await page.evaluate(() => board.selected?.k === 'rect' && !document.getElementById('board-sel').hidden));
+        step('the select tool picks the box', await page.evaluate(() => board.sel[0]?.k === 'rect' && !document.getElementById('board-sel').hidden));
         await page.mouse.move(sb.x + 320, sb.y + 80); await page.mouse.down(); await page.mouse.move(sb.x + 420, sb.y + 120, {steps: 6}); await page.mouse.up();
         step('dragging moves it', await page.evaluate(k => { const s = board.strokes.at(-1); return s.k === 'rect' && Math.abs(Math.min(s.p[0], s.p[2]) - (200 + 100) / k) < 3; }, (await page.locator('#board-canvas').boundingBox()).width / 1600));
         await page.click('#board-undo');
@@ -262,8 +262,21 @@ server.listen(0, async () => {
         await page.keyboard.press('Control+z');
         step('undo takes the resize back', Math.abs(await wide() - w0) < 1);
         await page.keyboard.press('Delete');
-        step('Delete removes the selected item', await page.evaluate(() => !board.strokes.some(s => s.k === 'rect') && !board.selected));
-        await page.keyboard.press('Control+z'); await page.keyboard.press('p');
+        step('Delete removes the selected item', await page.evaluate(() => !board.strokes.some(s => s.k === 'rect') && !board.sel[0]));
+        await page.keyboard.press('Control+z');
+        // several at once: Ctrl+A, a selection box around what lies wholly inside it, and one nudge for the group
+        await page.keyboard.press('Control+a');
+        step('Ctrl+A selects everything on the board', await page.evaluate(() => board.sel.length >= 3 && board.sel.length === board.strokes.filter(s => s.c >= 0).length));
+        await page.keyboard.press('ArrowRight');
+        step('a nudge moves the whole selection as one step', await page.evaluate(() => board.undo.at(-1).type === 'move' && board.undo.at(-1).list.length === board.sel.length));
+        await page.keyboard.press('Control+z'); await page.keyboard.press('Escape');
+        await page.evaluate(() => document.getElementById('board-canvas').scrollIntoView({block: 'start'}));
+        const mb = await page.locator('#board-canvas').boundingBox();
+        await page.mouse.move(mb.x + 40, mb.y + 160); await page.mouse.down(); await page.mouse.move(mb.x + 340, mb.y + 250, {steps: 6}); await page.mouse.up();
+        step('a selection box selects what lies wholly inside it', await page.evaluate(() => board.sel.length === 1 && board.sel[0].k === 'text'));
+        await page.keyboard.down('Shift'); await page.mouse.click(mb.x + 320, mb.y + 80); await page.keyboard.up('Shift');
+        step('Shift-click adds to the selection', await page.evaluate(() => board.sel.length === 2 && board.sel.some(s => s.k === 'rect')));
+        await page.keyboard.press('p');
         await page.reload(); await page.waitForSelector('#board-canvas'); await page.waitForTimeout(150);
         step('shapes and text are still there after a reload', await page.evaluate(() => board.strokes.some(s => s.k === 'rect') && board.strokes.some(s => s.k === 'text')));
         await page.keyboard.press('w'); await page.waitForTimeout(100);
