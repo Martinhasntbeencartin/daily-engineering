@@ -21,7 +21,7 @@ A static web app with a new electrical engineering problem every day, in the spi
       - Tools: select, pen, line, arrow, box, ellipse, text and eraser, five chalk colours, three sizes, undo and redo, clear (also undoable), **More room** to extend the board downwards, **Save image** (PNG) and **Full screen**, which shows the problem text and fills the window.
       - Shapes: drag to draw; hold <kbd>Shift</kbd> for 45° lines, squares and circles.
       - Text: click or tap where it goes; <kbd>Enter</kbd> finishes, <kbd>Shift</kbd>+<kbd>Enter</kbd> adds a line, <kbd>Esc</kbd> cancels. Quick symbols as you type: `\omega` → ω (also the other Greek letters, `\sqrt`, `\deg`, `\pm`, `\approx`, `\to`, …), `x^2` → x², `R_1` → R₁. A colour or size chosen while typing applies to the text. On a phone, text is at least 16 px on screen.
-      - Select (<kbd>V</kbd>): click or tap a pen stroke, shape or text, then drag to move it (it stays on the board). <kbd>Delete</kbd> or the × button removes it, the arrow keys nudge it (<kbd>Shift</kbd> for bigger steps; a run of nudges is one undo step), a colour or size restyles it, and <kbd>Esc</kbd> lets go. Every move is undoable. A moved item comes to the front whole, so eraser marks made over it stay where they were.
+      - Select (<kbd>V</kbd>): click or tap a pen stroke, shape or text, then drag to move it (it stays on the board). Drag a **handle** to resize it: the corners scale it from the opposite corner (text and pen strokes keep their proportions; boxes and ellipses do with <kbd>Shift</kbd>), and a line or arrow has a handle on each end (<kbd>Shift</kbd> snaps to 45°). Nothing flips or shrinks below a minimum, and handles are larger on touch screens. <kbd>Delete</kbd> or the × button removes it, the arrow keys nudge it (<kbd>Shift</kbd> for bigger steps; a run of nudges is one undo step), a colour or size restyles it, and <kbd>Esc</kbd> lets go. Every move is undoable. A moved item comes to the front whole, so eraser marks made over it stay where they were.
       - Input: a mouse, a pen or one finger draws; two fingers scroll. Once a pen has touched the board, fingers only scroll, so a resting palm leaves no marks.
       - Saving: each problem keeps its own board in this browser, stored as vectors (the 40 most recent boards), so it redraws sharply at any size. The board stays open from one problem to the next once you have opened it.
   - **Archive** is its own tab: a coin summary, a discipline picker, then today and the last 30 days with unlock buttons.
@@ -161,7 +161,7 @@ Append an object to the topic’s Level 1 list with `bankMore(topic, 'advanced',
 | `js/diagrams.js` | SVG drawing helpers |
 | `js/motion.js` | Motion (anime.js): diagram drawing, cascades, counters, ticks, toast, glides; the step-by-step walk-through |
 | `js/app.js` | Screens and hash routes, the answer editor, progress and attempts (localStorage), archive |
-| `js/board.js` | The whiteboard under each problem: select and move, pen, shapes, text, eraser, undo, full screen, PNG export, saved per problem |
+| `js/board.js` | The whiteboard under each problem: select, move and resize, pen, shapes, text, eraser, undo, full screen, PNG export, saved per problem |
 
 ## Licence note
 

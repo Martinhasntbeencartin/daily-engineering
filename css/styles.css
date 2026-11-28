@@ -482,6 +482,9 @@ dialog::backdrop { background: rgba(0, 0, 0, .74); }
 #board-canvas[data-tool="text"] { cursor: text; }
 #board-canvas[data-tool="select"] { cursor: default; }
 .board-sel { position: absolute; z-index: 1; border: 1.5px dashed var(--accent); border-radius: 4px; pointer-events: none; }
+.board-handle { position: absolute; z-index: 2; width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 1.5px solid var(--accent); border-radius: 2px; background: var(--bg); pointer-events: none; }
+.board-handle.round { border-radius: 50%; }
+@media (pointer: coarse) { .board-handle { width: 18px; height: 18px; margin: -9px 0 0 -9px; } }
 .board-sel-del { position: absolute; z-index: 2; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--accent); border-radius: 50%; background: var(--bg); color: var(--ink); cursor: pointer; }
 .board-sel-del svg { width: 16px; height: 16px; }
 .board-text { position: absolute; z-index: 1; margin: 0; padding: 0; border: 0; outline: 1px dashed var(--accent); outline-offset: 4px; background: transparent; resize: none; overflow: hidden; white-space: pre; caret-color: currentColor; }

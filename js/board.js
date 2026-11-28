@@ -1,5 +1,5 @@
 /* The whiteboard under each problem: freehand working with a pen, shapes (line, arrow, box, ellipse), text, an eraser,
-   a select tool to move, nudge, restyle or delete what is already drawn, colours, undo and redo, more room, full screen
+   a select tool to move, resize, nudge, restyle or delete what is already drawn, colours, undo and redo, more room, full screen
    and a PNG copy. Everything is stored as vectors in a space 1600 units
    wide, so the board redraws sharply at any size, and each problem keeps its own board in localStorage (the most recent
    BOARD.keep of them).
@@ -16,7 +16,7 @@ const BOARD_SHAPES = ['line', 'arrow', 'rect', 'ellipse'];
 const BOARD_HINTS = {
     draw: 'Draw with a mouse, a pen or one finger; scroll with two fingers. Saved in this browser.',
     shape: 'Drag to draw. Hold Shift for 45° lines, squares and circles.',
-    select: 'Click or tap a line, shape or text, then drag to move it. Delete or × removes it, arrow keys nudge it, a colour or size restyles it.',
+    select: 'Click or tap something to select it. Drag it to move it, or drag a handle to resize it (Shift keeps boxes in proportion). Delete or × removes it; arrow keys nudge it; a colour or size restyles it.',
     text: 'Click or tap where the text goes. Enter finishes, Shift+Enter adds a line, Esc cancels. Type \\omega for ω, x^2 for x², R_1 for R₁.'
 };
 const BOARD_ICONS = {
@@ -88,7 +88,7 @@ function boardHTML(title, text) {
 <div class="board-group">${boardButton('board-undo', 'undo', 'Undo (Ctrl+Z)')}${boardButton('board-redo', 'redo', 'Redo (Ctrl+Shift+Z)')}${boardButton('board-clear', 'clear', 'Clear')}</div>
 <div class="board-group board-end">${boardButton('board-more', 'more', 'More room')}${boardButton('board-png', 'png', 'Save image')}${boardButton('board-full', 'full', 'Full screen')}${boardButton('board-hide', 'hide', 'Hide (W)')}</div>
 </div>
-<div class="board-scroll" id="board-scroll"><canvas id="board-canvas" role="img" aria-label="Whiteboard for your working. Draw with a mouse, a pen or one finger; scroll with two fingers."></canvas><div class="board-sel" id="board-sel" hidden></div><button type="button" class="board-sel-del" id="board-sel-del" title="Delete (Del)" aria-label="Delete the selected item" hidden>${boardIcon('hide')}</button></div>
+<div class="board-scroll" id="board-scroll"><canvas id="board-canvas" role="img" aria-label="Whiteboard for your working. Draw with a mouse, a pen or one finger; scroll with two fingers."></canvas><div class="board-sel" id="board-sel" hidden></div>${'<div class="board-handle" hidden></div>'.repeat(4)}<button type="button" class="board-sel-del" id="board-sel-del" title="Delete (Del)" aria-label="Delete the selected item" hidden>${boardIcon('hide')}</button></div>
 <p class="board-note" id="board-note"></p>
 </div>
 </section>`;
@@ -279,15 +279,76 @@ function boardPick(x, y, tol) { // the topmost item under the pointer; failing t
     return null;
 }
 function boardSelect(s) { if (board.selected !== s) { board.selected = s; boardSelPlace(); } }
-function boardSelPlace(dx = 0, dy = 0) { // the dashed box and the delete button follow the selected item
-    const box = document.getElementById('board-sel'), del = document.getElementById('board-sel-del');
+function boardFrame(s) { // the dashed frame around an item in CSS px: its box plus a margin, at least 44 px across
+    const k = board.canvas.clientWidth / BOARD.width, [a, b, c, d] = boardBox(s), pad = 6;
+    const span = (lo, hi) => { const more = 44 - (hi - lo); return more > 0 ? [lo - more / 2, hi + more / 2] : [lo, hi]; };
+    const [l, r] = span(a * k - pad, c * k + pad), [t, bo] = span(b * k - pad, d * k + pad);
+    return [l, t, r, bo];
+}
+function boardHandles(s) { // [x, y, name] in CSS px: the two ends of a line or arrow, otherwise the frame's corners
+    const k = board.canvas.clientWidth / BOARD.width;
+    if (s.k === 'line' || s.k === 'arrow') return [[s.p[0] * k, s.p[1] * k, 'end0'], [s.p[2] * k, s.p[3] * k, 'end1']];
+    const [l, t, r, b] = boardFrame(s);
+    return [[l, t, 'nw'], [r, t, 'ne'], [l, b, 'sw'], [r, b, 'se']];
+}
+function boardHandleAt(s, x, y, tol) { // the handle under a point in CSS px, if any
+    let best = null, near = tol;
+    for (const [hx, hy, name] of boardHandles(s)) { const d = Math.hypot(x - hx, y - hy); if (d <= near) { near = d; best = name; } }
+    return best;
+}
+const BOARD_RESIZE_CURSOR = {nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', end0: 'crosshair', end1: 'crosshair'};
+function boardSelPlace(view = board?.selected) { // the dashed frame, handles and delete button follow the selected item (or its preview)
+    const box = document.getElementById('board-sel'), del = document.getElementById('board-sel-del'), grips = board?.scroller.querySelectorAll('.board-handle') || [];
     if (!box || !board) return;
-    const s = board.selected;
-    box.hidden = del.hidden = !s;
-    if (!s) return;
-    const k = board.canvas.clientWidth / BOARD.width, [a, b, c, d] = boardBox(s), pad = 6, W = board.canvas.clientWidth, H = board.canvas.clientHeight;
-    Object.assign(box.style, {left: (a + dx) * k - pad + 'px', top: (b + dy) * k - pad + 'px', width: (c - a) * k + 2 * pad + 'px', height: (d - b) * k + 2 * pad + 'px'});
-    Object.assign(del.style, {left: Math.max(0, Math.min(W - 32, (c + dx) * k + pad - 16)) + 'px', top: Math.max(0, Math.min(H - 32, (b + dy) * k - pad - 16)) + 'px'});
+    box.hidden = del.hidden = !view;
+    grips.forEach(g => { g.hidden = !view; });
+    if (!view) return;
+    const [l, t, r, b] = boardFrame(view), W = board.canvas.clientWidth, H = board.canvas.clientHeight, hs = boardHandles(view);
+    Object.assign(box.style, {left: l + 'px', top: t + 'px', width: r - l + 'px', height: b - t + 'px'});
+    grips.forEach((g, i) => { g.hidden = !hs[i]; if (hs[i]) { g.style.left = hs[i][0] + 'px'; g.style.top = hs[i][1] + 'px'; g.classList.toggle('round', hs[i][2].startsWith('end')); } });
+    const above = t - 44; // the delete button sits above the frame, or below it at the top of the board
+    Object.assign(del.style, {left: Math.max(0, Math.min(W - 32, (l + r) / 2 - 16)) + 'px', top: Math.max(0, Math.min(H - 32, above >= 0 ? above : b + 12)) + 'px'});
+}
+function boardGeom(s) { // the item's own extent in board units, without line widths: what a resize scales
+    if (s.k === 'text') return boardBox(s);
+    const xs = s.p.filter((_, i) => !(i % 2)), ys = s.p.filter((_, i) => i % 2);
+    return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+/* An item with one handle dragged by (dx, dy) board units. Corners scale from the opposite corner: text and pen strokes
+   keep their proportions, boxes and ellipses do with Shift; line and arrow ends move on their own (Shift: 45° steps).
+   Nothing flips or shrinks below 8 units, and the dragged corner stays on the board. */
+function boardResized(s, h, dx, dy, shift) {
+    if (h === 'end0' || h === 'end1') {
+        const i = h === 'end0' ? 0 : 2, o = 2 - i, p = s.p.slice();
+        let x = s.p[i] + dx, y = s.p[i + 1] + dy;
+        if (shift) { const a = Math.round(Math.atan2(y - p[o + 1], x - p[o]) / (Math.PI / 4)) * Math.PI / 4, r = Math.hypot(x - p[o], y - p[o + 1]); x = p[o] + r * Math.cos(a); y = p[o + 1] + r * Math.sin(a); }
+        p[i] = Math.max(0, Math.min(BOARD.width, x)); p[i + 1] = Math.max(0, y);
+        return {...s, p};
+    }
+    const [a, b, c, d] = boardGeom(s), west = h[1] === 'w', north = h[0] === 'n';
+    const ax = west ? c : a, ay = north ? d : b, w0 = (west ? a : c) - ax, h0 = (north ? b : d) - ay; // fixed corner, and the signed size to the dragged one
+    const lo = (len, min) => Math.abs(len) > 1 ? min / Math.abs(len) : 1, hi = (len, room) => Math.abs(len) > 1 ? room / Math.abs(len) : 1;
+    const minX = lo(w0, 8), minY = lo(h0, 8), maxX = hi(w0, w0 > 0 ? BOARD.width - ax : ax), maxY = north ? hi(h0, ay) : Infinity;
+    let sx = Math.abs(w0) > 1 ? (w0 + dx) / w0 : 1, sy = Math.abs(h0) > 1 ? (h0 + dy) / h0 : 1;
+    if (s.k === 'text' || !s.k || shift) { // one scale for both directions, following the drag along the diagonal
+        const u = Math.abs(w0) > 1 && Math.abs(h0) > 1 ? ((w0 + dx) * w0 + (h0 + dy) * h0) / (w0 * w0 + h0 * h0) : Math.abs(w0) > 1 ? sx : sy;
+        sx = sy = Math.max(Math.max(minX, minY, s.k === 'text' ? 10 / s.s : 0), Math.min(maxX, maxY, u));
+    } else { sx = Math.max(minX, Math.min(maxX, sx)); sy = Math.max(minY, Math.min(maxY, sy)); }
+    if (s.k === 'text') return {...s, s: s.s * sx, x: ax + (s.x - ax) * sx, y: ay + (s.y - ay) * sy};
+    return {...s, p: s.p.map((v, i) => i % 2 ? ay + (v - ay) * sy : ax + (v - ax) * sx)};
+}
+const boardRounded = s => s.k === 'text' ? {...s, x: Math.round(s.x), y: Math.round(s.y), s: Math.round(s.s * 10) / 10} : {...s, p: s.p.map(v => Math.round(v))};
+function boardPreview(item, except, dx = 0, dy = 0) { // draw one item over a snapshot of everything but `except`
+    const {ctx, canvas} = board;
+    if (!board.base) {
+        board.base = document.createElement('canvas'); board.base.width = canvas.width; board.base.height = canvas.height;
+        const bc = board.base.getContext('2d'); bc.setTransform(board.scale, 0, 0, board.scale, 0, 0); bc.lineCap = bc.lineJoin = 'round';
+        for (const it of board.strokes) if (it !== except) boardPaint(bc, it);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(board.base, 0, 0);
+    ctx.setTransform(board.scale, 0, 0, board.scale, dx * board.scale, dy * board.scale); ctx.lineCap = ctx.lineJoin = 'round';
+    boardPaint(ctx, item);
 }
 function boardDelete() {
     const s = board.selected, i = board.strokes.indexOf(s);
@@ -381,7 +442,11 @@ function boardDown(e) {
     const [x, y] = boardPoint(e), tool = board.tool;
     if (tool === 'text') { board.live = {k: 'place', p: [x, y], id: e.pointerId}; return; }
     if (tool === 'select') {
-        const hit = boardPick(x, y, (e.pointerType === 'touch' ? 16 : 8) * BOARD.width / board.canvas.clientWidth);
+        const k = board.canvas.clientWidth / BOARD.width, touchy = e.pointerType === 'touch', sel = board.selected;
+        const grip = sel && boardHandleAt(sel, x * k, y * k, touchy ? 20 : 10);
+        if (grip) { board.live = {k: 'resize', item: sel, h: grip, p: [x, y], next: null, id: e.pointerId}; return; }
+        let hit = boardPick(x, y, (touchy ? 16 : 8) / k);
+        if (!hit && sel) { const [l, t, r, b] = boardFrame(sel); if (x * k >= l && x * k <= r && y * k >= t && y * k <= b) hit = sel; } // inside the frame drags it, even off the ink
         boardSelect(hit);
         if (hit) board.live = {k: 'move', item: hit, p: [x, y], dx: 0, dy: 0, id: e.pointerId};
         return;
@@ -405,10 +470,22 @@ function boardMove(e) {
         }
     }
     const s = board.live;
-    if (!s && board.tool === 'select' && e.pointerType === 'mouse') { const [x, y] = boardPoint(e); board.canvas.style.cursor = boardPick(x, y, 8 * BOARD.width / board.canvas.clientWidth) ? 'move' : ''; }
+    if (!s && board.tool === 'select' && e.pointerType === 'mouse') { // the cursor shows what a press would do
+        const [x, y] = boardPoint(e), k = board.canvas.clientWidth / BOARD.width, sel = board.selected, grip = sel && boardHandleAt(sel, x * k, y * k, 10);
+        const inside = sel && (([l, t, r, b]) => x * k >= l && x * k <= r && y * k >= t && y * k <= b)(boardFrame(sel));
+        board.canvas.style.cursor = grip ? BOARD_RESIZE_CURSOR[grip] : inside || boardPick(x, y, 8 / k) ? 'move' : '';
+    }
     if (!s || e.pointerId !== s.id) return;
     e.preventDefault();
     if (s.k === 'place') return;
+    if (s.k === 'resize') {
+        const [x, y] = boardPoint(e);
+        if (!board.base && Math.hypot(x - s.p[0], y - s.p[1]) < 2) return;
+        s.next = boardResized(s.item, s.h, x - s.p[0], y - s.p[1], e.shiftKey);
+        boardPreview(s.next, s.item);
+        boardSelPlace(s.next);
+        return;
+    }
     if (s.k === 'move') { // the item follows the pointer, drawn over a snapshot of everything else
         const [x, y] = boardPoint(e), [a, b, c, d] = boardBox(s.item), view = board.canvas.clientHeight * BOARD.width / board.canvas.clientWidth;
         let dx = x - s.p[0], dy = y - s.p[1];
@@ -416,17 +493,8 @@ function boardMove(e) {
         dx = Math.max(Math.min(0, -a), Math.min(Math.max(0, BOARD.width - c), dx)); // keep it on the board
         dy = Math.max(Math.min(0, -b), Math.min(Math.max(0, view - d), dy));
         s.dx = dx; s.dy = dy;
-        const {ctx, canvas} = board;
-        if (!board.base) {
-            board.base = document.createElement('canvas'); board.base.width = canvas.width; board.base.height = canvas.height;
-            const bc = board.base.getContext('2d'); bc.setTransform(board.scale, 0, 0, board.scale, 0, 0); bc.lineCap = bc.lineJoin = 'round';
-            for (const it of board.strokes) if (it !== s.item) boardPaint(bc, it);
-        }
-        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over';
-        ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(board.base, 0, 0);
-        ctx.setTransform(board.scale, 0, 0, board.scale, dx * board.scale, dy * board.scale); ctx.lineCap = ctx.lineJoin = 'round';
-        boardPaint(ctx, s.item);
-        boardSelPlace(dx, dy);
+        boardPreview(s.item, s.item, dx, dy);
+        boardSelPlace(boardShift(s.item, dx, dy));
         return;
     }
     if (s.k) { // a shape follows the pointer; Shift snaps lines to 45° and makes squares and circles
@@ -464,6 +532,15 @@ function boardUp(e) {
     if (s.k === 'move') {
         const dx = Math.round(s.dx), dy = Math.round(s.dy);
         if (dragged && (dx || dy)) boardMoveTo(s.item, dx, dy); else if (dragged) { boardRedraw(); boardSelPlace(); }
+        return;
+    }
+    if (s.k === 'resize') {
+        const next = s.next && boardRounded(s.next);
+        if (!next || JSON.stringify(next) === JSON.stringify(s.item)) { boardRedraw(); boardSelPlace(); return; }
+        const low = boardBox(next)[3];
+        if (low > board.h && board.h < BOARD.maxHeight) board.h = Math.min(BOARD.maxHeight, Math.ceil(low / 50) * 50 + 100);
+        board.selected = next;
+        boardDo({type: 'replace', index: board.strokes.indexOf(s.item), item: s.item, next});
         return;
     }
     if (s.k) {

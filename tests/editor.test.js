@@ -252,7 +252,16 @@ server.listen(0, async () => {
         step('dragging moves it', await page.evaluate(k => { const s = board.strokes.at(-1); return s.k === 'rect' && Math.abs(Math.min(s.p[0], s.p[2]) - (200 + 100) / k) < 3; }, (await page.locator('#board-canvas').boundingBox()).width / 1600));
         await page.click('#board-undo');
         step('undo moves it back', await page.evaluate(k => board.strokes.some(s => s.k === 'rect' && Math.abs(Math.min(s.p[0], s.p[2]) - 200 / k) < 3), sb.width / 1600));
-        await page.click('#board-redo'); await page.keyboard.press('Delete');
+        await page.click('#board-redo');
+        const grips = await page.evaluate(() => [...document.querySelectorAll('.board-handle')].filter(h => !h.hidden).map(h => { const r = h.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
+        step('a selected box has four resize handles', grips.length === 4);
+        const wide = () => page.evaluate(() => { const s = board.strokes.find(s => s.k === 'rect'); return Math.abs(s.p[2] - s.p[0]); }), w0 = await wide();
+        await page.mouse.move(...grips[3]); await page.mouse.down(); await page.mouse.move(grips[3][0] + 60, grips[3][1] + 30, {steps: 6}); await page.mouse.up();
+        const kk = (await page.locator('#board-canvas').boundingBox()).width / 1600;
+        step('dragging a corner handle resizes the box', Math.abs(await wide() - w0 - 60 / kk) < 3);
+        await page.keyboard.press('Control+z');
+        step('undo takes the resize back', Math.abs(await wide() - w0) < 1);
+        await page.keyboard.press('Delete');
         step('Delete removes the selected item', await page.evaluate(() => !board.strokes.some(s => s.k === 'rect') && !board.selected));
         await page.keyboard.press('Control+z'); await page.keyboard.press('p');
         await page.reload(); await page.waitForSelector('#board-canvas'); await page.waitForTimeout(150);
