@@ -1,16 +1,22 @@
 /* The whiteboard under each problem: freehand working with a pen, shapes (line, arrow, box, ellipse), text, an eraser
-   that removes whole items, a first-time tour,
+   that removes whole items, a chalkboard or paper look, a first-time tour,
    a select tool to move, resize, nudge, restyle, copy, paste, duplicate, reorder or delete what is already drawn (one item or several), colours, undo and redo, more room, full screen
    and a PNG copy. Everything is stored as vectors in a space 1600 units
    wide, so the board redraws sharply at any size, and each problem keeps its own board in localStorage (the most recent
    BOARD.keep of them).
    Input: a mouse, a pen or one finger draws; two fingers scroll; once a pen has touched the board, fingers only scroll,
    so a resting palm leaves no marks. */
-const BOARD = {store: 'daily-engineer-boards', pref: 'daily-engineer-board-open', clip: 'daily-engineer-board-clip', tour: 'daily-engineer-board-tour', width: 1600, height: 1000, step: 600, maxHeight: 4000, keep: 40, eraser: 10, maxPixels: 16e6} // eraser: its reach in CSS px (more for a finger);
-const BOARD_INKS = [['#ecebe6', 'Chalk'], ['#ff6b6b', 'Red'], ['#74e3b4', 'Green'], ['#ffc65c', 'Yellow'], ['#7cb7ff', 'Blue']];
+const BOARD = {store: 'daily-engineer-boards', pref: 'daily-engineer-board-open', paper: 'daily-engineer-board-paper', clip: 'daily-engineer-board-clip', tour: 'daily-engineer-board-tour', width: 1600, height: 1000, step: 600, maxHeight: 4000, keep: 40, eraser: 10, maxPixels: 16e6} // eraser: its reach in CSS px (more for a finger);
+/* Each ink: [chalkboard colour, name, paper colour, name]. Items store the ink's number, so the same working redraws in either
+   look; on paper chalk becomes near-black and yellow becomes amber, and every paper ink has at least 4.5:1 contrast. */
+const BOARD_INKS = [['#ecebe6', 'Chalk', '#1f2328', 'Black'], ['#ff6b6b', 'Red', '#cf222e', 'Red'], ['#74e3b4', 'Green', '#1a7f37', 'Green'], ['#ffc65c', 'Yellow', '#b45309', 'Amber'], ['#7cb7ff', 'Blue', '#0969da', 'Blue']];
+const boardPaperPref = () => { try { return localStorage.getItem(BOARD.paper) === '1'; } catch { return false; } };
+const boardOnPaper = () => board ? board.paper : boardPaperPref();
+const boardInk = c => BOARD_INKS[c][boardOnPaper() ? 2 : 0];
+const boardInkName = c => BOARD_INKS[c][boardOnPaper() ? 3 : 1];
 const BOARD_SIZES = [[3, 'Fine'], [6, 'Medium'], [12, 'Thick']];
 const BOARD_TEXT = [28, 40, 60]; // text height for each size, in board units
-const BOARD_BG = '#0e1311';
+const BOARD_BG = '#0e1311', BOARD_PAPER = '#fbfaf6';
 const BOARD_FONT = size => `${size}px "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif`;
 const BOARD_TOOLS = [['select', 'Select', 'v'], ['pen', 'Pen', 'p'], ['line', 'Line', 'l'], ['arrow', 'Arrow', 'a'], ['rect', 'Box', 'r'], ['ellipse', 'Ellipse', 'o'], ['text', 'Text', 't'], ['erase', 'Eraser', 'e']];
 const BOARD_SHAPES = ['line', 'arrow', 'rect', 'ellipse'];
@@ -43,6 +49,7 @@ const BOARD_ICONS = {
     full: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
     exit: '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
     hide: '<path d="M6 6l12 12M18 6L6 18"/>',
+    paper: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>',
     tour: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.4c-.6.3-1 .8-1 1.5v.6"/><path d="M12 16.9v.1"/>'
 };
 /* Quick notation for the text tool: \name for Greek letters and symbols, ^digits and _digits for super- and subscripts. */
@@ -93,14 +100,14 @@ function boardSay(text) { // a short confirmation in the note under the board, r
 function boardHTML(title, text) {
     return `<section class="board-wrap" id="board-wrap" aria-label="Whiteboard">
 <div class="board-closed" id="board-closed"><button type="button" class="ghost" id="board-open">${boardIcon('pen')} Open the whiteboard</button><span>Work it out by hand. Your working is saved with this problem.</span></div>
-<div class="board frame" id="board" hidden>
+<div class="board frame${boardPaperPref() ? ' paper' : ''}" id="board" hidden>
 <details class="board-problem"><summary>${title}</summary><div class="problem-text">${text}</div></details>
 <div class="board-bar" role="toolbar" aria-label="Whiteboard tools">
 <div class="board-group" role="group" aria-label="Tool">${BOARD_TOOLS.map(([t, label, key]) => `<button type="button" class="board-btn${BOARD_SHAPES.includes(t) ? ' icon' : ''}" id="board-${t}" data-tool="${t}" title="${label} (${key.toUpperCase()})" aria-label="${label} (${key.toUpperCase()})" aria-pressed="${t === 'pen'}">${boardIcon(t)}<span>${label}</span></button>`).join('')}</div>
-<div class="board-group" role="group" aria-label="Ink colour">${BOARD_INKS.map(([c, n], i) => `<button type="button" class="board-ink" data-ink="${i}" style="--swatch:${c}" title="${n} ink" aria-label="${n} ink" aria-pressed="${!i}"></button>`).join('')}</div>
+<div class="board-group" role="group" aria-label="Ink colour">${BOARD_INKS.map((_, i) => `<button type="button" class="board-ink" data-ink="${i}" style="--swatch:${boardInk(i)}" title="${boardInkName(i)} ink" aria-label="${boardInkName(i)} ink" aria-pressed="${!i}"></button>`).join('')}</div>
 <div class="board-group" role="group" aria-label="Size">${BOARD_SIZES.map(([w, n], i) => `<button type="button" class="board-size" data-size="${i}" style="--dot:${4 + 2.4 * i}px" title="${n}" aria-label="${n}" aria-pressed="${i === 1}"></button>`).join('')}</div>
 <div class="board-group">${boardButton('board-undo', 'undo', 'Undo (Ctrl+Z)')}${boardButton('board-redo', 'redo', 'Redo (Ctrl+Shift+Z)')}${boardButton('board-paste', 'paste', 'Paste (Ctrl+V)')}${boardButton('board-clear', 'clear', 'Clear')}</div>
-<div class="board-group board-end">${boardButton('board-more', 'more', 'More room')}${boardButton('board-png', 'png', 'Save image')}${boardButton('board-full', 'full', 'Full screen')}${boardButton('board-tour', 'tour', 'Tour')}${boardButton('board-hide', 'hide', 'Hide (W)')}</div>
+<div class="board-group board-end">${boardButton('board-more', 'more', 'More room')}${boardButton('board-png', 'png', 'Save image')}${boardButton('board-full', 'full', 'Full screen')}${boardButton('board-paper', 'paper', 'Paper', ` aria-pressed="${boardPaperPref()}"`)}${boardButton('board-tour', 'tour', 'Tour')}${boardButton('board-hide', 'hide', 'Hide (W)')}</div>
 </div>
 <div class="board-scroll" id="board-scroll"><canvas id="board-canvas" role="img" aria-label="Whiteboard for your working. Draw with a mouse, a pen or one finger; scroll with two fingers."></canvas><div class="board-marquee" id="board-marquee" hidden></div><div class="board-sel" id="board-sel" hidden></div>${'<div class="board-handle" hidden></div>'.repeat(4)}<div class="board-sel-bar" id="board-sel-bar" role="group" aria-label="Selection" hidden><button type="button" class="board-sel-btn" id="board-sel-copy" title="Copy (Ctrl+C)" aria-label="Copy">${boardIcon('copy')}</button><button type="button" class="board-sel-btn" id="board-sel-dup" title="Duplicate (Ctrl+D)" aria-label="Duplicate">${boardIcon('duplicate')}</button><button type="button" class="board-sel-btn" id="board-sel-front" title="Bring to front (])" aria-label="Bring to front">${boardIcon('front')}</button><button type="button" class="board-sel-btn" id="board-sel-back" title="Send to back ([)" aria-label="Send to back">${boardIcon('back')}</button><button type="button" class="board-sel-btn board-sel-del" id="board-sel-del" title="Delete (Del)" aria-label="Delete the selected item">${boardIcon('hide')}</button></div></div>
 <p class="board-note" id="board-note" aria-live="polite"></p>
@@ -111,7 +118,7 @@ function boardHTML(title, text) {
 /* ---------- drawing ---------- */
 function boardPaint(ctx, s) { // one item, in board units
     ctx.globalCompositeOperation = s.c < 0 ? 'destination-out' : 'source-over';
-    ctx.strokeStyle = ctx.fillStyle = s.c < 0 ? '#000' : BOARD_INKS[s.c][0];
+    ctx.strokeStyle = ctx.fillStyle = s.c < 0 ? '#000' : boardInk(s.c);
     ctx.lineWidth = s.w;
     if (s.k === 'text') {
         // place the baseline where CSS puts it in a line 1.25 high, so the text lands exactly where it was typed
@@ -144,7 +151,7 @@ function boardPaint(ctx, s) { // one item, in board units
 function boardSegment(ctx, s) { // the newest piece of a freehand stroke being drawn, matching boardPaint
     const p = s.p, n = p.length / 2 - 1;
     ctx.globalCompositeOperation = s.c < 0 ? 'destination-out' : 'source-over';
-    ctx.strokeStyle = s.c < 0 ? '#000' : BOARD_INKS[s.c][0];
+    ctx.strokeStyle = s.c < 0 ? '#000' : boardInk(s.c);
     ctx.lineWidth = s.w;
     ctx.beginPath();
     if (n === 1) { ctx.moveTo(p[0], p[1]); ctx.lineTo((p[0] + p[2]) / 2, (p[1] + p[3]) / 2); }
@@ -227,7 +234,11 @@ function boardRedo() { const a = board.redo.pop(); if (a) { board.undo.push(a); 
 function boardButtons() {
     const set = (id, on) => { const el = document.getElementById(id); if (el) el.disabled = !on; };
     set('board-undo', board.undo.length); set('board-redo', board.redo.length); set('board-paste', boardClipGet()?.items?.length); set('board-clear', board.strokes.length); set('board-more', board.h < BOARD.maxHeight);
-    document.querySelectorAll('#board [data-ink]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.ink === board.ink)));
+    document.querySelectorAll('#board [data-ink]').forEach(b => {
+        const i = +b.dataset.ink;
+        b.setAttribute('aria-pressed', String(i === board.ink)); b.style.setProperty('--swatch', boardInk(i)); b.title = `${boardInkName(i)} ink`; b.setAttribute('aria-label', b.title);
+    });
+    document.getElementById('board-paper')?.setAttribute('aria-pressed', String(board.paper));
     document.querySelectorAll('#board [data-size]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.size === board.size)));
     document.querySelectorAll('.board-bar [data-tool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === board.tool)));
     board.canvas.dataset.tool = board.tool;
@@ -254,13 +265,20 @@ function boardFull(on) {
     btn.title = on ? 'Exit full screen (Esc)' : 'Full screen'; btn.setAttribute('aria-label', btn.title);
     requestAnimationFrame(boardResize);
 }
+function boardPaper(on) { // dark ink on white paper, or light chalk on the dark board; for every board in this browser
+    board.paper = on;
+    try { localStorage.setItem(BOARD.paper, on ? '1' : '0'); } catch {}
+    document.getElementById('board').classList.toggle('paper', on);
+    boardButtons(); boardRedraw(); boardTextPlace();
+    boardSay(on ? 'Paper: dark ink on white' : 'Chalkboard: light chalk on dark');
+}
 function boardImage() {
     boardTextCommit();
     const out = document.createElement('canvas'), ink = document.createElement('canvas');
     out.width = ink.width = BOARD.width; out.height = ink.height = board.h;
     const ic = ink.getContext('2d'); ic.lineCap = ic.lineJoin = 'round';
     board.strokes.forEach(s => boardPaint(ic, s));
-    const oc = out.getContext('2d'); oc.fillStyle = BOARD_BG; oc.fillRect(0, 0, out.width, out.height); oc.drawImage(ink, 0, 0);
+    const oc = out.getContext('2d'); oc.fillStyle = board.paper ? BOARD_PAPER : BOARD_BG; oc.fillRect(0, 0, out.width, out.height); oc.drawImage(ink, 0, 0);
     out.toBlob(blob => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `working-${board.id.replace(/:/g, '-')}.png`; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); });
 }
 
@@ -522,7 +540,7 @@ function boardTextPlace() { // keep the box over its spot when the board changes
     if (!ed) return;
     const k = board.canvas.clientWidth / BOARD.width;
     // at least 16 px on screen, so iOS does not zoom in: small text written on a wide screen is shown larger while it is edited on a phone
-    Object.assign(ed.el.style, {left: ed.x * k + 'px', top: ed.y * k + 'px', font: BOARD_FONT(Math.max(16, ed.s * k)), color: BOARD_INKS[ed.c][0], lineHeight: '1.25'});
+    Object.assign(ed.el.style, {left: ed.x * k + 'px', top: ed.y * k + 'px', font: BOARD_FONT(Math.max(16, ed.s * k)), color: boardInk(ed.c), lineHeight: '1.25'});
     boardTextFit();
 }
 function boardTextFit() {
@@ -572,7 +590,7 @@ const BOARD_TOUR = [
     {at: () => document.getElementById('board-erase'), title: 'Eraser',
         text: 'Drag over anything to remove it whole. Changed your mind? Undo brings it back.', keys: 'Keys: E, and Ctrl+Z to undo.'},
     {at: () => document.getElementById('board-full'), title: 'Room to think',
-        text: 'Full screen gives you the whole window, with the problem on top. More room makes the board longer, and Save image downloads a copy. Tour shows these tips again.'}
+        text: 'Full screen gives you the whole window, with the problem on top. More room makes the board longer, Paper switches to dark ink on white, and Save image downloads a copy. Tour shows these tips again.'}
 ];
 let boardTour = null; // {step, el} while the tour is showing
 const boardTourSeen = () => { try { return localStorage.getItem(BOARD.tour) === '1'; } catch { return true; } };
@@ -653,7 +671,7 @@ function boardEraseAlong(s, x, y) {
     ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(board.base, 0, 0);
     if (s.ring) { // a finger or pen has no cursor: show the eraser's reach
         ctx.setTransform(board.scale, 0, 0, board.scale, 0, 0);
-        ctx.strokeStyle = 'rgba(236, 235, 230, .55)'; ctx.lineWidth = 1.5 / board.scale * (window.devicePixelRatio || 1);
+        ctx.strokeStyle = board.paper ? 'rgba(31, 35, 40, .55)' : 'rgba(236, 235, 230, .55)'; ctx.lineWidth = 1.5 / board.scale * (window.devicePixelRatio || 1);
         ctx.beginPath(); ctx.arc(x, y, s.r, 0, 2 * Math.PI); ctx.stroke();
     }
 }
@@ -853,7 +871,7 @@ function mountBoard(id) {
     if (board?.editor) boardTextCommit(); // text still being typed is kept when the page changes
     const saved = boardStore()[id], prev = board;
     board = {id, canvas, ctx: canvas.getContext('2d'), scroller: document.getElementById('board-scroll'), strokes: saved?.strokes || [], h: saved?.h || BOARD.height, undo: [], redo: [],
-        tool: prev && prev.tool !== 'erase' ? prev.tool : 'pen', ink: prev?.ink || 0, size: prev?.size ?? 1, live: null, base: null, editor: null, sel: [], warning: '', said: '', hover: null, lastTap: null,
+        tool: prev && prev.tool !== 'erase' ? prev.tool : 'pen', ink: prev?.ink || 0, size: prev?.size ?? 1, live: null, base: null, editor: null, sel: [], paper: boardPaperPref(), warning: '', said: '', hover: null, lastTap: null,
         touches: new Map(), panY: null, penSeen: prev?.penSeen || false, full: false, scale: 1};
     canvas.addEventListener('pointerdown', boardDown);
     canvas.addEventListener('pointermove', boardMove);
@@ -884,6 +902,7 @@ function mountBoard(id) {
     document.getElementById('board-more').onclick = () => { if (board.h < BOARD.maxHeight) boardDo({type: 'room', from: board.h, to: Math.min(BOARD.maxHeight, board.h + BOARD.step)}); };
     document.getElementById('board-png').onclick = boardImage;
     document.getElementById('board-full').onclick = () => boardFull(!board.full);
+    document.getElementById('board-paper').onclick = () => boardPaper(!board.paper);
     boardTour = null; // a new page has no callout showing
     const tourBtn = document.getElementById('board-tour');
     tourBtn.onclick = () => boardTour ? boardTourEnd() : boardTourStart();

@@ -306,6 +306,11 @@ server.listen(0, async () => {
         await page.keyboard.press(']');
         step('] brings it to the front', await page.evaluate(() => board.strokes.at(-1).k === 'rect' && board.sel[0] === board.strokes.at(-1)));
         await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z');
+        // the paper look: off-white with dark inks, remembered, and back to the chalkboard
+        await page.click('#board-paper');
+        step('Paper turns the board off-white with dark ink', await page.evaluate(() => board.paper && getComputedStyle(board.canvas).backgroundColor === 'rgb(251, 250, 246)' && boardInk(0) === '#1f2328' && document.getElementById('board-paper').getAttribute('aria-pressed') === 'true'));
+        await page.click('#board-paper');
+        step('and the Paper button switches back to the chalkboard', await page.evaluate(() => !board.paper && boardInk(0) === '#ecebe6' && localStorage.getItem('daily-engineer-board-paper') === '0'));
         await page.keyboard.press('p');
         await page.reload(); await page.waitForSelector('#board-canvas'); await page.waitForTimeout(150);
         step('shapes and text are still there after a reload', await page.evaluate(() => board.strokes.some(s => s.k === 'rect') && board.strokes.some(s => s.k === 'text')));
