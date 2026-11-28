@@ -1,11 +1,12 @@
-/* The whiteboard under each problem: freehand working with a pen, shapes (line, arrow, box, ellipse), text, an eraser,
+/* The whiteboard under each problem: freehand working with a pen, shapes (line, arrow, box, ellipse), text, an eraser
+   that removes whole items,
    a select tool to move, resize, nudge, restyle, copy, paste, duplicate or delete what is already drawn (one item or several), colours, undo and redo, more room, full screen
    and a PNG copy. Everything is stored as vectors in a space 1600 units
    wide, so the board redraws sharply at any size, and each problem keeps its own board in localStorage (the most recent
    BOARD.keep of them).
    Input: a mouse, a pen or one finger draws; two fingers scroll; once a pen has touched the board, fingers only scroll,
    so a resting palm leaves no marks. */
-const BOARD = {store: 'daily-engineer-boards', pref: 'daily-engineer-board-open', clip: 'daily-engineer-board-clip', width: 1600, height: 1000, step: 600, maxHeight: 4000, keep: 40, eraser: 40, maxPixels: 16e6};
+const BOARD = {store: 'daily-engineer-boards', pref: 'daily-engineer-board-open', clip: 'daily-engineer-board-clip', width: 1600, height: 1000, step: 600, maxHeight: 4000, keep: 40, eraser: 10, maxPixels: 16e6} // eraser: its reach in CSS px (more for a finger);
 const BOARD_INKS = [['#ecebe6', 'Chalk'], ['#ff6b6b', 'Red'], ['#74e3b4', 'Green'], ['#ffc65c', 'Yellow'], ['#7cb7ff', 'Blue']];
 const BOARD_SIZES = [[3, 'Fine'], [6, 'Medium'], [12, 'Thick']];
 const BOARD_TEXT = [28, 40, 60]; // text height for each size, in board units
@@ -15,6 +16,7 @@ const BOARD_TOOLS = [['select', 'Select', 'v'], ['pen', 'Pen', 'p'], ['line', 'L
 const BOARD_SHAPES = ['line', 'arrow', 'rect', 'ellipse'];
 const BOARD_HINTS = {
     draw: 'Draw with a mouse, a pen or one finger; scroll with two fingers. Saved in this browser.',
+    erase: 'Drag over anything to rub it out: each stroke, shape or text it touches goes whole. Undo brings it back.',
     shape: 'Drag to draw. Hold Shift for 45° lines, squares and circles.',
     select: 'Click or tap to select; drag across empty board or Shift-click to select several. Drag to move, or a handle to resize (Shift keeps proportions); double-click text to edit it. Delete or × removes; arrow keys nudge; a colour or size restyles.',
     text: 'Click or tap where the text goes, or on text to edit it. Enter finishes, Shift+Enter adds a line, Esc cancels. Type \\omega for ω, x^2 for x², R_1 for R₁.'
@@ -74,7 +76,7 @@ function boardPersist() {
 function boardNote() {
     const el = document.getElementById('board-note');
     if (!el) return;
-    el.textContent = board.warning || board.said || BOARD_HINTS[['text', 'select'].includes(board.tool) ? board.tool : BOARD_SHAPES.includes(board.tool) ? 'shape' : 'draw'];
+    el.textContent = board.warning || board.said || BOARD_HINTS[['text', 'select', 'erase'].includes(board.tool) ? board.tool : BOARD_SHAPES.includes(board.tool) ? 'shape' : 'draw'];
     el.classList.toggle('warn', !!board.warning);
 }
 function boardSay(text) { // a short confirmation in the note under the board, read out by screen readers
@@ -536,6 +538,33 @@ function boardTextAt(x, y, tol) { // the topmost text under a point
     return null;
 }
 
+/* ---------- erasing ---------- */
+/* The eraser removes whole items: every stroke, shape or text within its reach of the path, checked at short steps so a
+   quick swipe misses nothing. What it has touched fades while the pointer is down and goes when it is let go; on touch a
+   ring shows its reach. Erase marks saved by the earlier pixel eraser still draw, so old boards look the same. */
+function boardEraseAlong(s, x, y) {
+    const [x0, y0] = s.p, steps = Math.max(1, Math.ceil(Math.hypot(x - x0, y - y0) / (s.r / 2)));
+    let more = false;
+    for (const it of board.strokes) {
+        if (it.c < 0 || s.hit.has(it)) continue;
+        for (let i = 0; i <= steps; i++) if (boardHit(it, x0 + (x - x0) * i / steps, y0 + (y - y0) * i / steps, s.r)) { s.hit.add(it); more = true; break; }
+    }
+    s.p = [x, y];
+    const {ctx, canvas} = board;
+    if (more || !board.base) { // redraw with the touched items faded, then keep that as the backdrop
+        board.base = document.createElement('canvas'); board.base.width = canvas.width; board.base.height = canvas.height;
+        const bc = board.base.getContext('2d'); bc.setTransform(board.scale, 0, 0, board.scale, 0, 0); bc.lineCap = bc.lineJoin = 'round';
+        for (const it of board.strokes) { bc.globalAlpha = s.hit.has(it) ? .18 : 1; boardPaint(bc, it); }
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(board.base, 0, 0);
+    if (s.ring) { // a finger or pen has no cursor: show the eraser's reach
+        ctx.setTransform(board.scale, 0, 0, board.scale, 0, 0);
+        ctx.strokeStyle = 'rgba(236, 235, 230, .55)'; ctx.lineWidth = 1.5 / board.scale * (window.devicePixelRatio || 1);
+        ctx.beginPath(); ctx.arc(x, y, s.r, 0, 2 * Math.PI); ctx.stroke();
+    }
+}
+
 /* ---------- input ---------- */
 function boardPoint(e) { const r = board.canvas.getBoundingClientRect(); return [(e.clientX - r.left) * BOARD.width / r.width, (e.clientY - r.top) * BOARD.width / r.width]; }
 const touchMid = () => { const ys = [...board.touches.values()].map(t => t.y); return ys.reduce((s, y) => s + y, 0) / ys.length; };
@@ -565,7 +594,13 @@ function boardDown(e) {
         board.base.getContext('2d').drawImage(board.canvas, 0, 0);
         return;
     }
-    board.live = {c: tool === 'erase' ? -1 : board.ink, w: tool === 'erase' ? BOARD.eraser : BOARD_SIZES[board.size][0], p: [x, y], id: e.pointerId};
+    if (tool === 'erase') {
+        const touchy = e.pointerType !== 'mouse';
+        board.live = {k: 'erase', p: [x, y], r: (touchy ? 16 : BOARD.eraser) * BOARD.width / board.canvas.clientWidth, hit: new Set(), ring: touchy, id: e.pointerId};
+        boardEraseAlong(board.live, x, y);
+        return;
+    }
+    board.live = {c: board.ink, w: BOARD_SIZES[board.size][0], p: [x, y], id: e.pointerId};
     boardRedraw();
 }
 /* A press with the select tool: on a handle it resizes the selection; on an item it selects it (Shift adds or removes it)
@@ -605,6 +640,11 @@ function boardMove(e) {
     if (!s || e.pointerId !== s.id) return;
     e.preventDefault();
     if (s.k === 'place') return;
+    if (s.k === 'erase') {
+        const merged = e.getCoalescedEvents?.();
+        for (const ev of merged?.length ? merged : [e]) { const [x, y] = boardPoint(ev); boardEraseAlong(s, x, y); }
+        return;
+    }
     if (s.k === 'marquee') {
         const [x, y] = boardPoint(e);
         s.p[2] = x; s.p[3] = y;
@@ -663,6 +703,14 @@ function boardUp(e) {
     const dragged = !!board.base;
     board.live = null; board.base = null;
     if (e.type === 'pointercancel') { boardMarquee(null); boardRedraw(); boardSelPlace(); return; }
+    if (s.k === 'erase') { // everything touched goes, as one undoable step
+        const list = boardEntries([...s.hit].map(it => [it]));
+        if (!list.length) { boardRedraw(); return; }
+        board.sel = board.sel.filter(it => !s.hit.has(it));
+        boardDo({type: 'delete', list});
+        boardSay(`Erased ${boardCount(list.length)}`);
+        return;
+    }
     if (s.k === 'place') { // a click on existing text edits it; anywhere else starts new text
         const t = boardTextAt(s.p[0], s.p[1], (e.pointerType === 'touch' ? 8 : 4) * BOARD.width / board.canvas.clientWidth);
         boardTextOpen(s.p[0], s.p[1], t);
@@ -783,7 +831,7 @@ document.addEventListener('keydown', e => {
     if (!open) return;
     if (!mod && !e.altKey && BOARD_KEYS[k]) { // the focus ring follows the tool picked by key
         e.preventDefault(); boardTool(BOARD_KEYS[k]);
-        if (document.activeElement?.closest?.('.board-bar [data-tool]')) document.getElementById(`board-${board.tool}`).focus();
+        if (document.activeElement?.closest?.('.board-bar [data-tool]')) document.getElementById(`board-${board.tool}`).focus({preventScroll: true}); // without jumping to the toolbar
         return;
     }
     if (mod && (k === 'z' || k === 'y')) { e.preventDefault(); (k === 'y' || e.shiftKey) ? boardRedo() : boardUndo(); }

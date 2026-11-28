@@ -293,6 +293,11 @@ server.listen(0, async () => {
         step('Enter keeps the edit in place', await count() === c0 && await page.evaluate(() => board.strokes.some(s => s.t === 'X = ωL, R₁ = 5') && board.undo.at(-1).type === 'replace'));
         await page.keyboard.press('Control+z');
         step('undo restores the text', await page.evaluate(() => board.strokes.some(s => s.t === 'X = ωL, R₁')));
+        // the eraser removes whole items it crosses, as one undo step, and leaves no marks of its own
+        await page.keyboard.press('e'); await page.mouse.move(mb.x + 360, mb.y + 60); await page.mouse.down(); await page.mouse.move(mb.x + 360, mb.y + 170, {steps: 8}); await page.mouse.up();
+        step('the eraser removes the whole box it crosses', await count() === c0 - 1 && await page.evaluate(() => !board.strokes.some(s => s.k === 'rect') && !board.strokes.some(s => s.c < 0) && board.undo.at(-1).type === 'delete'));
+        await page.keyboard.press('Control+z');
+        step('undo brings the erased box back', await count() === c0 && await page.evaluate(() => board.strokes.some(s => s.k === 'rect')));
         await page.keyboard.press('p');
         await page.reload(); await page.waitForSelector('#board-canvas'); await page.waitForTimeout(150);
         step('shapes and text are still there after a reload', await page.evaluate(() => board.strokes.some(s => s.k === 'rect') && board.strokes.some(s => s.k === 'text')));
