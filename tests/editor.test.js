@@ -237,6 +237,16 @@ server.listen(0, async () => {
         step('full screen covers the window', await page.evaluate(() => document.getElementById('board').classList.contains('full') && document.body.classList.contains('board-full')));
         await page.keyboard.press('Escape'); await page.waitForTimeout(100);
         step('Esc leaves full screen without leaving the problem', await page.evaluate(() => !document.getElementById('board').classList.contains('full') && location.hash === '#/circuits/level-1'));
+        // shapes and text: R draws a box by dragging, T places text with quick symbols, and both are kept
+        await page.evaluate(() => document.getElementById('board-canvas').scrollIntoView({block: 'start'}));
+        const sb = await page.locator('#board-canvas').boundingBox();
+        await page.keyboard.press('r'); await page.mouse.move(sb.x + 200, sb.y + 40); await page.mouse.down(); await page.mouse.move(sb.x + 320, sb.y + 110, {steps: 6}); await page.mouse.up();
+        step('the box tool draws a box', await page.evaluate(() => board.strokes.at(-1).k === 'rect' && board.strokes.at(-1).p.length === 4));
+        await page.keyboard.press('t'); await page.mouse.click(sb.x + 60, sb.y + 180); await page.waitForTimeout(100);
+        await page.keyboard.type('X = \\omega L, R_1'); await page.keyboard.press('Enter');
+        step('the text tool writes text with symbols', await page.evaluate(() => board.strokes.at(-1).k === 'text' && board.strokes.at(-1).t === 'X = ωL, R₁' && !document.querySelector('.board-text')));
+        await page.reload(); await page.waitForSelector('#board-canvas'); await page.waitForTimeout(150);
+        step('shapes and text are still there after a reload', await page.evaluate(() => board.strokes.some(s => s.k === 'rect') && board.strokes.some(s => s.k === 'text')));
         await page.keyboard.press('w'); await page.waitForTimeout(100);
         step('W hides the whiteboard', await page.evaluate(() => document.getElementById('board').hidden));
         await page.evaluate(() => localStorage.clear());
@@ -308,10 +318,16 @@ server.listen(0, async () => {
         step('progress lists streaks, the reward ladder and the coin log', await page.locator('.progress-table.streaks').count() === 1 && await page.locator('.ladder li').count() === 8 && await page.locator('.coin-log li').count() === 2);
         await page.evaluate(() => localStorage.clear());
         // Motion, on fresh pages with a running clock: diagrams draw themselves, cards cascade, reduced motion stays still.
+        // Problems change daily, so use today's first problem whose diagram has dashed guides to check they survive drawing.
+        let dashed = '#/linkbudget/level-3';
+        for (const route of [dashed, ...await page.evaluate(() => TOPICS.flatMap(t => LEVELS.map(l => `#/${t.id}/${l.id}`)))]) {
+            await go(route);
+            if (await page.evaluate(() => /stroke-dasharray/.test(exercise.diagram || ''))) { dashed = route; break; }
+        }
         for (const reducedMotion of ['no-preference', 'reduce']) {
             const mp = await browser.newPage({reducedMotion});
             mp.on('pageerror', e => errors.push(`motion: ${e.message}`));
-            await mp.goto(url + '#/linkbudget/level-3'); await mp.waitForSelector('#problem .diagram svg');
+            await mp.goto(url + dashed); await mp.waitForSelector('#problem .diagram svg');
             const probe = () => mp.evaluate(() => {
                 const svg = document.querySelector('#challenge .diagram svg'), lines = [...svg.querySelectorAll('path, line, polyline, polygon, rect, circle, ellipse')];
                 return {loaded: typeof anime === 'object', drawing: lines.filter(el => el.hasAttribute('pathLength') || el.hasAttribute('draw')).length, hidden: [...svg.querySelectorAll('text')].filter(t => t.style.opacity !== '').length,
