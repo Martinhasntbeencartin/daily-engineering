@@ -1,5 +1,6 @@
 /* The whiteboard under each problem: freehand working with a pen, shapes (line, arrow, box, ellipse), text, an eraser,
-   colours, undo and redo, more room, full screen and a PNG copy. Everything is stored as vectors in a space 1600 units
+   a select tool to move, nudge, restyle or delete what is already drawn, colours, undo and redo, more room, full screen
+   and a PNG copy. Everything is stored as vectors in a space 1600 units
    wide, so the board redraws sharply at any size, and each problem keeps its own board in localStorage (the most recent
    BOARD.keep of them).
    Input: a mouse, a pen or one finger draws; two fingers scroll; once a pen has touched the board, fingers only scroll,
@@ -10,14 +11,16 @@ const BOARD_SIZES = [[3, 'Fine'], [6, 'Medium'], [12, 'Thick']];
 const BOARD_TEXT = [28, 40, 60]; // text height for each size, in board units
 const BOARD_BG = '#0e1311';
 const BOARD_FONT = size => `${size}px "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif`;
-const BOARD_TOOLS = [['pen', 'Pen', 'p'], ['line', 'Line', 'l'], ['arrow', 'Arrow', 'a'], ['rect', 'Box', 'r'], ['ellipse', 'Ellipse', 'o'], ['text', 'Text', 't'], ['erase', 'Eraser', 'e']];
+const BOARD_TOOLS = [['select', 'Select', 'v'], ['pen', 'Pen', 'p'], ['line', 'Line', 'l'], ['arrow', 'Arrow', 'a'], ['rect', 'Box', 'r'], ['ellipse', 'Ellipse', 'o'], ['text', 'Text', 't'], ['erase', 'Eraser', 'e']];
 const BOARD_SHAPES = ['line', 'arrow', 'rect', 'ellipse'];
 const BOARD_HINTS = {
     draw: 'Draw with a mouse, a pen or one finger; scroll with two fingers. Saved in this browser.',
     shape: 'Drag to draw. Hold Shift for 45° lines, squares and circles.',
+    select: 'Click or tap a line, shape or text, then drag to move it. Delete or × removes it, arrow keys nudge it, a colour or size restyles it.',
     text: 'Click or tap where the text goes. Enter finishes, Shift+Enter adds a line, Esc cancels. Type \\omega for ω, x^2 for x², R_1 for R₁.'
 };
 const BOARD_ICONS = {
+    select: '<path d="M6 3.5v15l4-4 3 6.5 2.6-1.2-3-6.3H18z"/>',
     pen: '<path d="M4 20l4.5-1L19.5 8 16 4.5 5 15.5z"/><path d="M14 6.5l3.5 3.5"/>',
     line: '<path d="M5 19L19 5"/>',
     arrow: '<path d="M5 19L18 6"/><path d="M10 6h8v8"/>',
@@ -68,7 +71,7 @@ function boardPersist() {
 function boardNote() {
     const el = document.getElementById('board-note');
     if (!el) return;
-    el.textContent = board.warning || BOARD_HINTS[board.tool === 'text' ? 'text' : BOARD_SHAPES.includes(board.tool) ? 'shape' : 'draw'];
+    el.textContent = board.warning || BOARD_HINTS[['text', 'select'].includes(board.tool) ? board.tool : BOARD_SHAPES.includes(board.tool) ? 'shape' : 'draw'];
     el.classList.toggle('warn', !!board.warning);
 }
 
@@ -85,7 +88,7 @@ function boardHTML(title, text) {
 <div class="board-group">${boardButton('board-undo', 'undo', 'Undo (Ctrl+Z)')}${boardButton('board-redo', 'redo', 'Redo (Ctrl+Shift+Z)')}${boardButton('board-clear', 'clear', 'Clear')}</div>
 <div class="board-group board-end">${boardButton('board-more', 'more', 'More room')}${boardButton('board-png', 'png', 'Save image')}${boardButton('board-full', 'full', 'Full screen')}${boardButton('board-hide', 'hide', 'Hide (W)')}</div>
 </div>
-<div class="board-scroll" id="board-scroll"><canvas id="board-canvas" role="img" aria-label="Whiteboard for your working. Draw with a mouse, a pen or one finger; scroll with two fingers."></canvas></div>
+<div class="board-scroll" id="board-scroll"><canvas id="board-canvas" role="img" aria-label="Whiteboard for your working. Draw with a mouse, a pen or one finger; scroll with two fingers."></canvas><div class="board-sel" id="board-sel" hidden></div><button type="button" class="board-sel-del" id="board-sel-del" title="Delete (Del)" aria-label="Delete the selected item" hidden>${boardIcon('hide')}</button></div>
 <p class="board-note" id="board-note"></p>
 </div>
 </section>`;
@@ -142,7 +145,7 @@ function boardRedraw() {
     ctx.setTransform(board.scale, 0, 0, board.scale, 0, 0);
     ctx.lineCap = ctx.lineJoin = 'round';
     for (const s of board.strokes) boardPaint(ctx, s);
-    if (board.live && board.live.k !== 'place') boardPaint(ctx, board.live);
+    if (board.live && 'c' in board.live) boardPaint(ctx, board.live);
 }
 function boardResize() {
     if (!board || !document.contains(board.canvas)) return;
@@ -154,8 +157,10 @@ function boardResize() {
     board.canvas.width = Math.round(cssW * dpr);
     board.canvas.height = Math.round(cssH * dpr);
     board.scale = board.canvas.width / BOARD.width;
+    if (board.base) { board.live = null; board.base = null; } // a drag in progress: its snapshot no longer fits
     boardRedraw();
     boardTextPlace();
+    boardSelPlace();
 }
 const simplify = (p, eps) => { // Ramer–Douglas–Peucker on a flat [x, y, x, y, …] list
     const n = p.length / 2;
@@ -182,7 +187,17 @@ function boardApply(action, reverse) {
     if (action.type === 'add') { if (reverse) board.strokes.pop(); else board.strokes.push(action.stroke); }
     else if (action.type === 'clear') board.strokes = reverse ? action.strokes : [];
     else if (action.type === 'room') { board.h = reverse ? action.from : action.to; boardResize(); }
-    boardRedraw(); boardPersist(); boardButtons();
+    else if (action.type === 'move') { // a moved item comes to the front, whole
+        if (reverse) { board.strokes.pop(); board.strokes.splice(action.index, 0, action.item); }
+        else { board.strokes.splice(action.index, 1); board.strokes.push(action.moved); }
+    }
+    else if (action.type === 'delete') { if (reverse) board.strokes.splice(action.index, 0, action.item); else board.strokes.splice(action.index, 1); }
+    else if (action.type === 'replace') board.strokes[action.index] = reverse ? action.item : action.next;
+    if (board.selected && !board.strokes.includes(board.selected)) { // undo and redo carry the selection with the item
+        const pair = {move: [action.item, action.moved], replace: [action.item, action.next]}[action.type];
+        board.selected = pair && board.tool === 'select' && pair.includes(board.selected) ? pair[reverse ? 0 : 1] : null;
+    }
+    boardRedraw(); boardPersist(); boardButtons(); boardSelPlace();
 }
 function boardUndo() { const a = board.undo.pop(); if (a) { board.redo.push(a); boardApply(a, true); } }
 function boardRedo() { const a = board.redo.pop(); if (a) { board.undo.push(a); boardApply(a, false); } }
@@ -193,9 +208,10 @@ function boardButtons() {
     document.querySelectorAll('#board [data-size]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.size === board.size)));
     document.querySelectorAll('.board-bar [data-tool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === board.tool)));
     board.canvas.dataset.tool = board.tool;
+    board.canvas.style.cursor = '';
     boardNote();
 }
-function boardTool(tool) { if (tool !== 'text') boardTextCommit(); board.tool = tool; boardButtons(); }
+function boardTool(tool) { if (tool !== 'text') boardTextCommit(); if (tool !== 'select') boardSelect(null); board.tool = tool; boardButtons(); }
 function boardOpen(open, focus = false) {
     if (!open) boardTextCommit();
     document.getElementById('board').hidden = !open;
@@ -222,6 +238,82 @@ function boardImage() {
     board.strokes.forEach(s => boardPaint(ic, s));
     const oc = out.getContext('2d'); oc.fillStyle = BOARD_BG; oc.fillRect(0, 0, out.width, out.height); oc.drawImage(ink, 0, 0);
     out.toBlob(blob => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `working-${board.id.replace(/:/g, '-')}.png`; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); });
+}
+
+/* ---------- selecting and moving ---------- */
+const boardMeasure = document.createElement('canvas').getContext('2d');
+function boardBox(s) { // bounding box [left, top, right, bottom] in board units
+    if (s.k === 'text') {
+        boardMeasure.font = BOARD_FONT(s.s);
+        const lines = s.t.split('\n');
+        return [s.x, s.y, s.x + Math.max(...lines.map(l => boardMeasure.measureText(l).width)), s.y + lines.length * s.s * 1.25];
+    }
+    const xs = s.p.filter((_, i) => !(i % 2)), ys = s.p.filter((_, i) => i % 2), pad = s.k === 'arrow' ? .45 * Math.max(18, 4.5 * s.w) : s.w / 2;
+    return [Math.min(...xs) - pad, Math.min(...ys) - pad, Math.max(...xs) + pad, Math.max(...ys) + pad];
+}
+const boardShift = (s, dx, dy) => s.k === 'text' ? {...s, x: s.x + dx, y: s.y + dy} : {...s, p: s.p.map((v, i) => v + (i % 2 ? dy : dx))};
+const segDist = (x, y, ax, ay, bx, by) => {
+    const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy, t = l ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l)) : 0;
+    return Math.hypot(x - ax - t * dx, y - ay - t * dy);
+};
+function boardHit(s, x, y, tol) { // near the ink of one item (text: inside its box)
+    if (s.c < 0) return false;
+    if (s.k === 'text') { const [a, b, c, d] = boardBox(s); return x >= a - tol && x <= c + tol && y >= b - tol && y <= d + tol; }
+    const r = tol + s.w / 2, p = s.p;
+    if (s.k === 'rect') { const [x0, y0, x1, y1] = p; return [[x0, y0, x1, y0], [x1, y0, x1, y1], [x1, y1, x0, y1], [x0, y1, x0, y0]].some(q => segDist(x, y, ...q) <= r); }
+    if (s.k === 'ellipse') {
+        const rx = Math.abs(p[2] - p[0]) / 2 || .5, ry = Math.abs(p[3] - p[1]) / 2 || .5;
+        return Math.abs(Math.hypot((x - (p[0] + p[2]) / 2) / rx, (y - (p[1] + p[3]) / 2) / ry) - 1) * Math.min(rx, ry) <= r;
+    }
+    if (p.length === 2) return Math.hypot(x - p[0], y - p[1]) <= r;
+    for (let i = 0; i + 3 < p.length; i += 2) if (segDist(x, y, p[i], p[i + 1], p[i + 2], p[i + 3]) <= r) return true;
+    return false;
+}
+function boardPick(x, y, tol) { // the topmost item under the pointer; failing that, the topmost box or ellipse around it
+    const list = board.strokes;
+    for (let i = list.length - 1; i >= 0; i--) if (boardHit(list[i], x, y, tol)) return list[i];
+    for (let i = list.length - 1; i >= 0; i--) {
+        const s = list[i];
+        if (s.k === 'rect' || s.k === 'ellipse') { const [a, b, c, d] = boardBox(s); if (x > a && x < c && y > b && y < d) return s; }
+    }
+    return null;
+}
+function boardSelect(s) { if (board.selected !== s) { board.selected = s; boardSelPlace(); } }
+function boardSelPlace(dx = 0, dy = 0) { // the dashed box and the delete button follow the selected item
+    const box = document.getElementById('board-sel'), del = document.getElementById('board-sel-del');
+    if (!box || !board) return;
+    const s = board.selected;
+    box.hidden = del.hidden = !s;
+    if (!s) return;
+    const k = board.canvas.clientWidth / BOARD.width, [a, b, c, d] = boardBox(s), pad = 6, W = board.canvas.clientWidth, H = board.canvas.clientHeight;
+    Object.assign(box.style, {left: (a + dx) * k - pad + 'px', top: (b + dy) * k - pad + 'px', width: (c - a) * k + 2 * pad + 'px', height: (d - b) * k + 2 * pad + 'px'});
+    Object.assign(del.style, {left: Math.max(0, Math.min(W - 32, (c + dx) * k + pad - 16)) + 'px', top: Math.max(0, Math.min(H - 32, (b + dy) * k - pad - 16)) + 'px'});
+}
+function boardDelete() {
+    const s = board.selected, i = board.strokes.indexOf(s);
+    if (i < 0) return;
+    board.selected = null;
+    boardDo({type: 'delete', index: i, item: s});
+}
+function boardMoveTo(s, dx, dy, nudge = false) { // one undoable move; arrow-key nudges in a row merge into one step
+    const top = board.undo[board.undo.length - 1];
+    if (nudge && top?.nudge && top.moved === s && board.strokes[board.strokes.length - 1] === s) {
+        Object.assign(s, boardShift(s, dx, dy)); board.redo = [];
+        boardRedraw(); boardPersist(); boardButtons(); boardSelPlace();
+        return;
+    }
+    const moved = boardShift(s, dx, dy), low = boardBox(moved)[3];
+    if (low > board.h && board.h < BOARD.maxHeight) board.h = Math.min(BOARD.maxHeight, Math.ceil(low / 50) * 50 + 100);
+    board.selected = moved;
+    boardDo({type: 'move', nudge, index: board.strokes.indexOf(s), item: s, moved});
+}
+function boardRestyle(what) { // a colour or size chosen with something selected restyles it
+    const s = board.selected;
+    if (!s) return;
+    const next = what === 'ink' ? {...s, c: board.ink} : s.k === 'text' ? {...s, s: boardTextSize()} : {...s, w: BOARD_SIZES[board.size][0]};
+    if (JSON.stringify(next) === JSON.stringify(s)) return;
+    board.selected = next;
+    boardDo({type: 'replace', index: board.strokes.indexOf(s), item: s, next});
 }
 
 /* ---------- text ---------- */
@@ -288,6 +380,12 @@ function boardDown(e) {
     try { board.canvas.setPointerCapture(e.pointerId); } catch {}
     const [x, y] = boardPoint(e), tool = board.tool;
     if (tool === 'text') { board.live = {k: 'place', p: [x, y], id: e.pointerId}; return; }
+    if (tool === 'select') {
+        const hit = boardPick(x, y, (e.pointerType === 'touch' ? 16 : 8) * BOARD.width / board.canvas.clientWidth);
+        boardSelect(hit);
+        if (hit) board.live = {k: 'move', item: hit, p: [x, y], dx: 0, dy: 0, id: e.pointerId};
+        return;
+    }
     if (BOARD_SHAPES.includes(tool)) {
         board.live = {k: tool, c: board.ink, w: BOARD_SIZES[board.size][0], p: [x, y, x, y], id: e.pointerId};
         board.base = document.createElement('canvas'); board.base.width = board.canvas.width; board.base.height = board.canvas.height;
@@ -307,9 +405,30 @@ function boardMove(e) {
         }
     }
     const s = board.live;
+    if (!s && board.tool === 'select' && e.pointerType === 'mouse') { const [x, y] = boardPoint(e); board.canvas.style.cursor = boardPick(x, y, 8 * BOARD.width / board.canvas.clientWidth) ? 'move' : ''; }
     if (!s || e.pointerId !== s.id) return;
     e.preventDefault();
     if (s.k === 'place') return;
+    if (s.k === 'move') { // the item follows the pointer, drawn over a snapshot of everything else
+        const [x, y] = boardPoint(e), [a, b, c, d] = boardBox(s.item), view = board.canvas.clientHeight * BOARD.width / board.canvas.clientWidth;
+        let dx = x - s.p[0], dy = y - s.p[1];
+        if (!board.base && Math.hypot(dx, dy) < 3) return; // a click, not yet a drag
+        dx = Math.max(Math.min(0, -a), Math.min(Math.max(0, BOARD.width - c), dx)); // keep it on the board
+        dy = Math.max(Math.min(0, -b), Math.min(Math.max(0, view - d), dy));
+        s.dx = dx; s.dy = dy;
+        const {ctx, canvas} = board;
+        if (!board.base) {
+            board.base = document.createElement('canvas'); board.base.width = canvas.width; board.base.height = canvas.height;
+            const bc = board.base.getContext('2d'); bc.setTransform(board.scale, 0, 0, board.scale, 0, 0); bc.lineCap = bc.lineJoin = 'round';
+            for (const it of board.strokes) if (it !== s.item) boardPaint(bc, it);
+        }
+        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over';
+        ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(board.base, 0, 0);
+        ctx.setTransform(board.scale, 0, 0, board.scale, dx * board.scale, dy * board.scale); ctx.lineCap = ctx.lineJoin = 'round';
+        boardPaint(ctx, s.item);
+        boardSelPlace(dx, dy);
+        return;
+    }
     if (s.k) { // a shape follows the pointer; Shift snaps lines to 45° and makes squares and circles
         let [x, y] = boardPoint(e), dx = x - s.p[0], dy = y - s.p[1];
         if (e.shiftKey) {
@@ -338,9 +457,15 @@ function boardUp(e) {
     if (e.pointerType === 'touch') { board.touches.delete(e.pointerId); board.panY = board.touches.size && (board.touches.size > 1 || board.penSeen) ? touchMid() : null; }
     const s = board.live;
     if (!s || e.pointerId !== s.id) return;
+    const dragged = !!board.base;
     board.live = null; board.base = null;
-    if (e.type === 'pointercancel') { boardRedraw(); return; }
+    if (e.type === 'pointercancel') { boardRedraw(); boardSelPlace(); return; }
     if (s.k === 'place') { boardTextOpen(s.p[0], s.p[1]); return; }
+    if (s.k === 'move') {
+        const dx = Math.round(s.dx), dy = Math.round(s.dy);
+        if (dragged && (dx || dy)) boardMoveTo(s.item, dx, dy); else if (dragged) { boardRedraw(); boardSelPlace(); }
+        return;
+    }
     if (s.k) {
         if (Math.hypot(s.p[2] - s.p[0], s.p[3] - s.p[1]) < 4) { boardRedraw(); return; } // a click, not a shape
         boardAdd({k: s.k, c: s.c, w: s.w, p: s.p.map(v => Math.round(v))});
@@ -356,7 +481,7 @@ function mountBoard(id) {
     if (board?.editor) boardTextCommit(); // text still being typed is kept when the page changes
     const saved = boardStore()[id], prev = board;
     board = {id, canvas, ctx: canvas.getContext('2d'), scroller: document.getElementById('board-scroll'), strokes: saved?.strokes || [], h: saved?.h || BOARD.height, undo: [], redo: [],
-        tool: prev && prev.tool !== 'erase' ? prev.tool : 'pen', ink: prev?.ink || 0, size: prev?.size ?? 1, live: null, base: null, editor: null, warning: '',
+        tool: prev && prev.tool !== 'erase' ? prev.tool : 'pen', ink: prev?.ink || 0, size: prev?.size ?? 1, live: null, base: null, editor: null, selected: null, warning: '',
         touches: new Map(), panY: null, penSeen: prev?.penSeen || false, full: false, scale: 1};
     canvas.addEventListener('pointerdown', boardDown);
     canvas.addEventListener('pointermove', boardMove);
@@ -365,14 +490,16 @@ function mountBoard(id) {
     document.getElementById('board-open').onclick = () => boardOpen(true, true);
     document.getElementById('board-hide').onclick = () => boardOpen(false);
     document.querySelectorAll('.board-bar [data-tool]').forEach(b => { b.onclick = () => boardTool(b.dataset.tool); });
-    const pick = () => { // a colour or size applies to the text being typed too, without leaving it
+    const pick = what => { // a colour or size applies to the text being typed, or to the selected item, too
         const ed = board.editor;
         if (ed) { ed.c = board.ink; ed.s = boardTextSize(); boardTextPlace(); ed.el.focus({preventScroll: true}); }
+        if (board.tool === 'select') boardRestyle(what);
         if (board.tool === 'erase') boardTool('pen'); else boardButtons();
     };
     document.querySelectorAll('#board [data-ink], #board [data-size]').forEach(b => { b.onmousedown = e => { if (board.editor) e.preventDefault(); }; });
-    document.querySelectorAll('#board [data-ink]').forEach(b => { b.onclick = () => { board.ink = +b.dataset.ink; pick(); }; });
-    document.querySelectorAll('#board [data-size]').forEach(b => { b.onclick = () => { board.size = +b.dataset.size; pick(); }; });
+    document.querySelectorAll('#board [data-ink]').forEach(b => { b.onclick = () => { board.ink = +b.dataset.ink; pick('ink'); }; });
+    document.querySelectorAll('#board [data-size]').forEach(b => { b.onclick = () => { board.size = +b.dataset.size; pick('size'); }; });
+    document.getElementById('board-sel-del').onclick = boardDelete;
     document.getElementById('board-undo').onclick = boardUndo;
     document.getElementById('board-redo').onclick = boardRedo;
     document.getElementById('board-clear').onclick = () => { if (board.strokes.length) boardDo({type: 'clear', strokes: board.strokes.slice()}); };
@@ -391,17 +518,29 @@ function mountBoard(id) {
     document.getElementById('board-closed').hidden = open;
     if (open) boardResize();
 }
-/* Keys while not typing an answer or text: W opens or hides the board; with it open, P pen, L line, A arrow, R box,
-   O ellipse, T text, E eraser, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo and redo; Esc leaves full screen first. */
+/* Keys while not typing an answer or text: W opens or hides the board; with it open, V select, P pen, L line, A arrow,
+   R box, O ellipse, T text, E eraser, Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) undo and redo. With something selected, Delete or
+   Backspace removes it, the arrow keys nudge it (Shift for bigger steps) and Esc lets go of it; otherwise Esc leaves
+   full screen first. */
 const BOARD_KEYS = Object.fromEntries(BOARD_TOOLS.map(([t, , key]) => [key, t]));
 document.addEventListener('keydown', e => {
     if (!board || !document.contains(board.canvas) || document.querySelector('dialog[open]')) return;
     if (e.target.closest?.('math-field, input, textarea, select')) return;
     const open = !document.getElementById('board').hidden, k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+    if (open && board.selected && !mod && !e.altKey) {
+        const step = e.shiftKey ? 25 : 5, nudge = {arrowleft: [-step, 0], arrowright: [step, 0], arrowup: [0, -step], arrowdown: [0, step]}[k];
+        if (k === 'escape') { e.preventDefault(); e.stopImmediatePropagation(); boardSelect(null); return; }
+        if (k === 'delete' || k === 'backspace') { e.preventDefault(); boardDelete(); return; }
+        if (nudge) { e.preventDefault(); boardMoveTo(board.selected, ...nudge, true); return; }
+    }
     if (k === 'escape' && board.full) { e.preventDefault(); e.stopImmediatePropagation(); boardFull(false); return; }
     if (!mod && !e.altKey && k === 'w') { e.preventDefault(); boardOpen(!open, !open); return; }
     if (!open) return;
-    if (!mod && !e.altKey && BOARD_KEYS[k]) { e.preventDefault(); boardTool(BOARD_KEYS[k]); return; }
+    if (!mod && !e.altKey && BOARD_KEYS[k]) { // the focus ring follows the tool picked by key
+        e.preventDefault(); boardTool(BOARD_KEYS[k]);
+        if (document.activeElement?.closest?.('.board-bar [data-tool]')) document.getElementById(`board-${board.tool}`).focus();
+        return;
+    }
     if (mod && (k === 'z' || k === 'y')) { e.preventDefault(); (k === 'y' || e.shiftKey) ? boardRedo() : boardUndo(); }
 }, true);
 window.addEventListener('resize', () => boardResize());
